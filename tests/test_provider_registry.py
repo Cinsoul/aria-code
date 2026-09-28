@@ -25,7 +25,11 @@ if _CLI_DIR not in sys.path:
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from conftest import make_providers_file
 
-import providers.llm.registry as _reg
+# Must be the *same* module object the names below are imported from. The
+# package is importable under two roots (`providers.…` via src/aria_code and
+# `aria_code.providers.…` via src), which are distinct module objects — patching
+# one while the function under test reads the other silently does nothing.
+import aria_code.providers.llm.registry as _reg
 from aria_code.providers.llm.registry import (
     _DEFAULT_FALLBACK_CHAIN,
     _PROVIDER_CLASSES,
