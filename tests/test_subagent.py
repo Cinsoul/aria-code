@@ -18,7 +18,12 @@ from aria_code.runtime.task_ledger import TaskLedger
 @pytest.fixture(autouse=True)
 def clear_tasks():
     """Clear the task registry and runner between tests."""
-    import runtime.subagent as _sa
+    # Same module object the names at the top of this file come from:
+    # `runtime.subagent` (via src/aria_code) and `aria_code.runtime.subagent`
+    # (via src) are distinct modules with separate _RUNNER/_LEDGER globals, so
+    # this fixture was isolating a module nobody called and the tests ran
+    # against the real on-disk task ledger.
+    import aria_code.runtime.subagent as _sa
     _TASKS.clear()
     _orig_runner = _sa._RUNNER
     _orig_ledger = _sa._LEDGER
@@ -171,7 +176,7 @@ class TestTaskCancel:
 class TestTaskPersistence:
     def test_ledger_round_trip_and_running_recovery(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARIA_TASK_LEDGER_PATH", str(tmp_path / "tasks.json"))
-        import runtime.subagent as subagent
+        import aria_code.runtime.subagent as subagent
         subagent._LEDGER = TaskLedger(tmp_path / "tasks.json")
         task = SubagentTask(task_id="recover1", prompt="inspect", status="running")
         subagent._TASKS[task.task_id] = task

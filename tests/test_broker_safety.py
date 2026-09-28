@@ -19,8 +19,11 @@ from aria_code.brokers.trading import (
 
 
 def _patch_trade_paths(monkeypatch, tmp_path: Path):
-    import brokers.paper_broker as paper_mod
-    import brokers.trading as trading_mod
+    # Patch targets must be the module the names under test were imported from:
+    # `brokers.…` (via src/aria_code) and `aria_code.brokers.…` (via src) are
+    # distinct module objects, so patching the bare one changed nothing.
+    import aria_code.brokers.paper_broker as paper_mod
+    import aria_code.brokers.trading as trading_mod
     monkeypatch.setattr(paper_mod, "PAPER_LEDGER_PATH", tmp_path / "paper_ledger.json")
     monkeypatch.setattr(trading_mod, "TRADE_PREVIEWS_PATH", tmp_path / "trade_previews.json")
     monkeypatch.setattr(trading_mod, "TRADE_AUDIT_PATH", tmp_path / "trade_audit.jsonl")
