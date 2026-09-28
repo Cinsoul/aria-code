@@ -61,7 +61,11 @@ def test_ollama_stream_resolver_supports_direct_script_entrypoint(monkeypatch):
 
     sentinel = lambda: None
     fake_main = types.SimpleNamespace(stream_ollama=sentinel)
+    # Both module identities of the CLI have to go: the resolver prefers a
+    # loaded aria_cli under either name, and this test is about the remaining
+    # case — direct script execution, where it is registered as __main__.
     monkeypatch.delitem(sys.modules, "aria_cli", raising=False)
+    monkeypatch.delitem(sys.modules, "aria_code.aria_cli", raising=False)
     monkeypatch.setitem(sys.modules, "__main__", fake_main)
 
     assert provider_base._resolve_ollama_stream() is sentinel
