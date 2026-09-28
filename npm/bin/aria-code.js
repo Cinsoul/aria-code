@@ -16,7 +16,7 @@
 const { spawnSync } = require("child_process");
 const fs   = require("fs");
 const path = require("path");
-const { resolveAriaPaths } = require("../lib/paths");
+const { resolveAriaPaths, resolveAriaCliPath, ariaCliPythonPath } = require("../lib/paths");
 
 const PLATFORM = process.platform;
 const PATHS = resolveAriaPaths();
@@ -74,17 +74,27 @@ function findPython(info) {
 
 function findAriaCli(info) {
   const installDir = info && info.installDir ? info.installDir : PATHS.installDir;
-  const candidates = [
-    path.join(PATHS.installDir, "aria_cli.py"),
-    info && info.ariaCli,
-    path.join(installDir, "aria_cli.py"),
-    path.join(PATHS.legacyInstallDir, "aria_cli.py"),
+
+  // Each root is probed for both layouts (src/aria_code/aria_cli.py first, then
+  // the pre-migration root copy) — see resolveAriaCliPath in ../lib/paths.
+  const roots = [
+    PATHS.installDir,
+    installDir,
+    PATHS.legacyInstallDir,
     // bundled alongside this script (dev/test only)
-    path.join(__dirname, "..", "..", "aria_cli.py"),
+    path.join(__dirname, "..", ".."),
   ].filter(Boolean);
 
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+  const fromResolvedHome = resolveAriaCliPath(PATHS.installDir);
+  if (fromResolvedHome) return fromResolvedHome;
+
+  // Metadata from an older postinstall still names the pre-src-layout path;
+  // trust it only when that file is really there.
+  if (info && info.ariaCli && fs.existsSync(info.ariaCli)) return info.ariaCli;
+
+  for (const root of roots) {
+    const found = resolveAriaCliPath(root);
+    if (found) return found;
   }
   return null;
 }
@@ -134,7 +144,7 @@ const result = spawnSync(python, [ariaCli, ...args], {
     ...process.env,
     // Ensure the venv's site-packages are used
     VIRTUAL_ENV: info && info.venvDir ? info.venvDir : undefined,
-    PYTHONPATH:  path.dirname(ariaCli),
+    PYTHONPATH:  ariaCliPythonPath(ariaCli),
   },
   windowsHide: true,
 });
