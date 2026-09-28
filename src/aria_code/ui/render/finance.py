@@ -1060,7 +1060,6 @@ def render_econ_calendar(r: dict, *, console=None, has_rich: bool = True) -> Non
                 else "[yellow]MED[/yellow]" if str(imp).upper() in ("MEDIUM","2","★★")
                 else f"[dim]{imp}[/dim]"
             )
-            console.print
             t.add_row(
                 str(ev.get("time","") or ev.get("date",""))[:12],
                 str(ev.get("event","") or ev.get("title",""))[:45],

@@ -51,9 +51,8 @@ class StripeRevenueAgent(BaseAgent):
         charges = data.get("charges", data.get("transactions", []))
         subscriptions = data.get("subscriptions", [])
 
-        import sys
-        if "/Users/mac/Desktop/Arthera" not in sys.path:
-            sys.path.insert(0, "/Users/mac/Desktop/Arthera")
+        from aria_code.packages.aria_tools.financial._paths import ensure_arthera_root
+        ensure_arthera_root()
 
         # Try to use Arthera StripeAnalyticsService
         try:

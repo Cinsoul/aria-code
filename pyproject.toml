@@ -69,7 +69,7 @@ cn = ["akshare>=1.14.68"]          # China A-share / HK market data (large dep t
 crypto = ["ccxt>=4.4.0"]           # crypto exchanges (large dep tree)
 
 # ── Feature add-ons ────────────────────────────────────────────────────────────
-charts = ["mplfinance>=0.12.9"]    # candlestick charts in /report /chart
+charts = ["mplfinance>=0.12.10b0"]    # candlestick charts in /report /chart
 data = ["duckdb>=0.10.3"]          # in-process SQL: /data sql "SELECT …"
 files = [                          # /file load + /file analyze document parsing
     "pdfplumber>=0.11.0",
@@ -139,7 +139,7 @@ dev = [
 full = [
     "akshare>=1.14.68",
     "ccxt>=4.4.0",
-    "mplfinance>=0.12.9",
+    "mplfinance>=0.12.10b0",
     "duckdb>=0.10.3",
     "pdfplumber>=0.11.0",
     "pypdf>=4.3.0",
@@ -155,7 +155,7 @@ full = [
 all = [
     "akshare>=1.14.68",
     "ccxt>=4.4.0",
-    "mplfinance>=0.12.9",
+    "mplfinance>=0.12.10b0",
     "duckdb>=0.10.3",
     "pdfplumber>=0.11.0",
     "pypdf>=4.3.0",

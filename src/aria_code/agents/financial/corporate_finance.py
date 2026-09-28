@@ -52,9 +52,8 @@ class CorporateFinanceAgent(BaseAgent):
         balance_raw = data.get("balance_sheet", {})
         cashflow_raw = data.get("cashflow", {})
 
-        import sys
-        if "/Users/mac/Desktop/Arthera" not in sys.path:
-            sys.path.insert(0, "/Users/mac/Desktop/Arthera")
+        from aria_code.packages.aria_tools.financial._paths import ensure_arthera_root
+        ensure_arthera_root()
 
         # Try to use Arthera CorporateFinanceService
         try:

@@ -17,7 +17,10 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import pandas as pd
 
 import numpy as np
 
@@ -532,7 +535,7 @@ def delta_hedge_ratio(
 
 def iv_surface(
     S: float,
-    calls: "pd.DataFrame",    # columns: expiry(年), strike, price  # noqa: F821
+    calls: "pd.DataFrame",    # columns: expiry(年), strike, price
     r: float = 0.05,
     q: float = 0.0,
 ) -> VolSurface:

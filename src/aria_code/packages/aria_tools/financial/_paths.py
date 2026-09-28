@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 from aria_code.packages.aria_core.paths import aria_home
 
-__all__ = ["find_skill_script", "missing_script_message", "ensure_arthera_sdk"]
+__all__ = ["find_skill_script", "missing_script_message", "ensure_arthera_sdk", "ensure_arthera_root"]
 
 
 def _skill_roots() -> list[Path]:
@@ -98,6 +98,32 @@ def ensure_arthera_sdk() -> bool:
                 path_str = str(candidate)
                 if path_str not in sys.path:
                     sys.path.append(path_str)
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def ensure_arthera_root() -> bool:
+    """把 Arthera 仓库根目录加进 sys.path，让 ``packages.*`` 可导入。返回是否找到。
+
+    跟 ``ensure_arthera_sdk`` 同样的理由：Arthera 是私有仓库，公开仓库不该假设
+    它在某个写死的绝对路径上。这里认的是 ``ARTHERA_ROOT``（doctor.py 与
+    backtest_cmds.py 已经在用的同一个变量），外加一个同级 checkout 的兜底。
+    """
+    candidates: list[Path] = []
+    for var in ("ARTHERA_ROOT", "ARTHERA_PATH"):
+        configured = os.getenv(var, "")
+        if configured.strip():
+            candidates.append(Path(configured).expanduser())
+    candidates.append(Path(__file__).resolve().parents[4].parent / "Arthera")
+
+    for candidate in candidates:
+        try:
+            if candidate.is_dir():
+                path_str = str(candidate)
+                if path_str not in sys.path:
+                    sys.path.insert(0, path_str)
                 return True
         except OSError:
             continue

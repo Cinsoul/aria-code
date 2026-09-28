@@ -216,7 +216,7 @@ def build_intent_route(message: str) -> IntentRoute:
                 is_visual_market_artifact_request,
             )
         except ImportError:
-            from intent_classifier import (
+            from intent_classifier import (  # type: ignore[no-redef]
                 INTENT_ANALYSIS,
                 INTENT_CODING,
                 INTENT_FINANCE,
