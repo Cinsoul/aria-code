@@ -50,7 +50,10 @@ async def test_timeout_without_prefetched_evidence_remains_failed():
 
 @pytest.mark.asyncio
 async def test_all_failed_agents_skip_slow_llm_synthesis(monkeypatch):
-    import agents.team as team_module
+    # AgentTeam is imported from aria_code.agents.team at the top of this file;
+    # patching get_registry on the bare copy left the real registry in place, so
+    # the fake agents were 'unknown' and the run never reached the fallback.
+    import aria_code.agents.team as team_module
 
     synthesis_calls = []
 
