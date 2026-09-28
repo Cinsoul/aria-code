@@ -112,7 +112,7 @@ try:
 except ImportError:
     RunStore = None
 
-    class RunStatus:  # pragma: no cover - fallback until runtime/run_state.py lands
+    class RunStatus:  # type: ignore[no-redef]  # pragma: no cover - fallback until runtime/run_state.py lands
         PLANNING = RUNNING = WAITING_APPROVAL = VERIFYING = "unavailable"
         SUCCEEDED = FAILED = CANCELLED = INTERRUPTED = "unavailable"
 from aria_code.runtime.tool_policy import check_tool_policy
@@ -1203,7 +1203,7 @@ try:
     logger.info("Registered %d subagent tools", len(SUBAGENT_TOOLS))
 except Exception as _exc:
     logger.debug("Subagent tools init error: %s", _exc)
-    SUBAGENT_SCHEMAS: list = []
+    SUBAGENT_SCHEMAS = []
 
 # ── Register LSP diagnostics tool ─────────────────────────────────────────────
 try:
@@ -1212,7 +1212,7 @@ try:
     logger.info("Registered %d LSP tools", len(LSP_TOOLS))
 except Exception as _exc:
     logger.debug("LSP tools init error: %s", _exc)
-    LSP_SCHEMAS: list = []
+    LSP_SCHEMAS = []
 
 # ── Register computer-use tools (browser automation + desktop control) ──────
 _HAS_COMPUTER_USE = False
@@ -1222,7 +1222,7 @@ try:
     _HAS_COMPUTER_USE = True
     logger.info("Registered %d computer-use tools", len(COMPUTER_USE_TOOLS))
 except ImportError:
-    _CU_SCHEMAS: list = []
+    _CU_SCHEMAS = []
 
 # Pre-initialize so finance/plugin registrations can append schemas to it.
 # The bulk static schemas are extended below; this empty list must exist first.
@@ -1313,7 +1313,7 @@ try:
     try:
         from aria_code.tools.extended_tools import register_extended_tools as _reg_ext
     except ImportError:
-        from tools.extended_tools import register_extended_tools as _reg_ext
+        from tools.extended_tools import register_extended_tools as _reg_ext  # type: ignore[no-redef]
     _reg_ext(LOCAL_TOOLS)
     logger.info("Registered extended enterprise tools (Slack, Feishu, TradingView, QuickBooks, Shopify, Snowflake)")
 except Exception as _exc:
@@ -1323,7 +1323,7 @@ try:
     try:
         from aria_code.tools.code_audit_tools import register_code_audit_tools as _reg_audit
     except ImportError:
-        from tools.code_audit_tools import register_code_audit_tools as _reg_audit
+        from tools.code_audit_tools import register_code_audit_tools as _reg_audit  # type: ignore[no-redef]
     _reg_audit(LOCAL_TOOLS)
     logger.info("Registered code audit & diff tools")
 except Exception as _exc:
@@ -3087,12 +3087,6 @@ def _error_hint(error: str, context: str = "") -> str:
     return _eh(error, context)
 
 
-class _null_ctx:
-    """No-op context manager used when HAS_RICH is False and we can't use console.status."""
-    def __enter__(self): return self
-    def __exit__(self, *_): pass
-
-
 def _print_error(msg: str, context: str = ""):
     from ui.render.output import print_error as _pe
     _pe(msg, context, console=console, has_rich=HAS_RICH, rich_box=rich_box)
@@ -3686,10 +3680,6 @@ class SlashCommands(
 
     def __init__(self, terminal: 'ArtheraTerminal'):
         self.terminal = terminal
-
-    @property
-    def context(self):
-        return self.terminal.context
         self.commands = {
             # ── Session ───────────────────────────────────────────────────────
             "/help":      (self.cmd_help,     "Show commands and examples"),
@@ -4188,6 +4178,11 @@ class SlashCommands(
 
 
 
+
+    @property
+    def context(self):
+        """Delegate to the terminal's AriaContext (mixins call self.context)."""
+        return self.terminal.context
 
 
 

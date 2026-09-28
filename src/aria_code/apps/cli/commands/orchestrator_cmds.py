@@ -106,7 +106,7 @@ class OrchestratorCommandsMixin:
 
             registry = get_registry()
             import re as _re
-            tickers = _re.findall(r'[A-Z]{2,5}', request)
+            tickers = _re.findall(r'\b[A-Z]{2,5}\b', request)
             symbol = tickers[0] if tickers else ""
             
             upstream_contexts = []
