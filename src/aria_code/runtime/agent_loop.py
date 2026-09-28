@@ -642,8 +642,10 @@ class AgentErrorPresentation:
         if normalized == "empty_response":
             return cls(
                 error=normalized,
-                # error 而非 warning:本轮已终止,视觉上必须与普通提示区分
-                level="warning",  # changed from error to warning for UI restraint
+                # 597899e 把这里从 error 降为 warning（"minimalist" 的空响应 UI）。
+                # 原注释主张相反——本轮已终止，视觉上应与普通提示区分——已随代码
+                # 更正，免得文件继续自相矛盾。
+                level="warning",
                 lines=(
                     [
                         "模型连续返回空响应（已自动重试 1 次），本轮停止。",
@@ -658,7 +660,11 @@ class AgentErrorPresentation:
             )
         return cls(
             error=normalized,
-            level="warning",  # changed from error to warning for UI restraint
+            # Also lowered by 597899e. Note this is the catch-all branch: an
+            # unexpected failure now renders with the same weight as a rate-limit
+            # notice. Deliberate per that commit, but worth revisiting — the
+            # dataclass default below it is still "error".
+            level="warning",
             lines=[f"Error: {normalized}"],
             use_generic_error_prefix=True,
         )
