@@ -38,7 +38,7 @@ _BROKER_CLASSES: Dict[str, Type[BrokerBase]] = {}
 
 def _register_all() -> None:
     """延迟注册所有内置适配器（避免 import 循环）。"""
-    global _BROKER_CLASSES
+    # No `global` needed: _BROKER_CLASSES is only read and mutated in place.
     if _BROKER_CLASSES:
         return
     _map: Dict[str, tuple] = {

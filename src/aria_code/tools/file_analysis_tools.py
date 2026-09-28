@@ -59,7 +59,7 @@ def refresh_optional_parsers() -> Dict[str, bool]:
     cached failed imports for the lifetime of the process.  That made a
     successful install look ineffective until Aria was restarted.
     """
-    global _pdfplumber, _pypdf, _docx_mod, _openpyxl, _pd, _bs4, _PIL
+    # Rebinding happens through globals() below, which needs no `global`.
     importlib.invalidate_caches()
     module_names = {
         "_pdfplumber": "pdfplumber",

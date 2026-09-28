@@ -1,5 +1,23 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# Installs dependencies, lints, and runs the suite across the supported
+# Python versions.
+#
+# Started from GitHub's python-package template. Four things had to change for
+# it to say anything true about this repo — as generated it failed on every
+# push regardless of the code:
+#
+#  1. The matrix included 3.9, which pyproject's `requires-python = ">=3.10"`
+#     excludes. pip refuses to install the package there at all.
+#  2. The blocking flake8 step (--select=E9,F63,F7,F82) reported 124 undefined
+#     names in three modules that resolve them at runtime: aria_cli.py rebinds
+#     their function __globals__ to its own namespace via
+#     _rebind_module_function_globals / the stream_ollama rebind site. Static
+#     analysis cannot see that, so those three files are excluded from the
+#     blocking pass and still covered by the non-blocking one below. Every
+#     other module is checked normally — that gate caught real NameErrors.
+#  3. Bare `pytest` also collects tests/e2e and test_provider_integration,
+#     which need a live LLM and network. Matches ci.yml's invocation now.
+#  4. Without ARIA_OFFLINE=1, symbol routing fetches the market universe over
+#     the network with no timeout — see the same note in ci.yml.
 
 name: Python package
 
@@ -16,25 +34,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+        cache: pip
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
+        python -m pip install flake8 pytest pytest-asyncio pytest-timeout
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Stop the build on syntax errors or undefined names. The three
+        # rebound modules are excluded — see the note at the top of this file.
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
+          --extend-exclude=src/aria_code/apps/cli/providers/llm/ollama_stream.py,src/aria_code/apps/cli/football_reports.py,src/aria_code/apps/cli/broker_render.py
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
+      env:
+        ARIA_OFFLINE: "1"
       run: |
-        pytest
+        pytest -k "not e2e and not provider_integration" --timeout=60
