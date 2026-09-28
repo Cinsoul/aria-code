@@ -75,7 +75,13 @@ def _resolve_ollama_stream():
     # (``python aria_cli.py`` and the npm launcher) registers it as
     # ``__main__``. Both own the rebound function whose globals include the
     # CLI tool registry and cache helpers.
-    for module_name in ("aria_cli", "__main__"):
+    #
+    # ``aria_code.aria_cli`` is the same file reached through the package root
+    # rather than as a bare top-level module — the import the SDK and daemon
+    # use. Without it here they fell through to the raw extracted function,
+    # whose globals lack the borrowed CLI helpers, and the first cache-eligible
+    # turn died with ``NameError: name '_cache_key' is not defined``.
+    for module_name in ("aria_cli", "aria_code.aria_cli", "__main__"):
         module = sys.modules.get(module_name)
         rebound = getattr(module, "stream_ollama", None) if module else None
         if callable(rebound):
