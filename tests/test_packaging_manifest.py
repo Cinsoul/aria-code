@@ -55,8 +55,14 @@ def _tracked_top_level_packages() -> set[str]:
 
 
 def _declared_py_modules() -> set[str]:
+    # The src-layout migration emptied the repo root, so pyproject no longer
+    # carries a py-modules list — the guard's own docstring named that as the
+    # endgame ("5.0 的 src-layout：一个包，py-modules 从 57 条降到 0 条").
+    # Absent means nothing is declared, not that the check cannot run: the
+    # assertion below still fires if a root module reappears and gets imported.
     body = re.search(r"py-modules = \[(.*?)\n\]", _pyproject_text(), re.S)
-    assert body, "pyproject.toml 缺少 [tool.setuptools].py-modules"
+    if not body:
+        return set()
     return set(re.findall(r'"([^"]+)"', body.group(1)))
 
 

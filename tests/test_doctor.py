@@ -1,3 +1,5 @@
+import pathlib
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python < 3.11
@@ -163,13 +165,19 @@ def test_summarize_provider_health_builds_structured_snapshot():
     assert payload["providers"] == ["yfinance", "finnhub"]
 
 
-def test_pyproject_includes_top_level_modules():
+def test_pyproject_packages_the_whole_aria_code_tree():
+    """These modules must ship. They used to be root-level entries in py-modules;
+    since the src-layout migration they live in src/aria_code and are covered by
+    the packages.find include list instead."""
     with open("pyproject.toml", "rb") as handle:
         data = tomllib.load(handle)
 
-    modules = set(data["tool"]["setuptools"]["py-modules"])
+    include = set(data["tool"]["setuptools"]["packages"]["find"]["include"])
+    assert "aria_code*" in include
 
-    assert {"aria_cli", "doctor", "data_service", "artifacts", "report_generator"} <= modules
+    package_root = pathlib.Path("src") / "aria_code"
+    for module in ("aria_cli", "doctor", "data_service", "artifacts", "report_generator"):
+        assert (package_root / f"{module}.py").exists(), f"{module}.py missing from {package_root}"
 
 
 def test_python_drift_ok_when_versions_match_and_home_exists():
