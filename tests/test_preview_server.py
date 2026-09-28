@@ -10,7 +10,10 @@ import asyncio
 
 import pytest
 
-from aria_code import preview_server
+# artifacts.py does `from preview_server import get_active_session, ...`, so
+# the hook under test registers against that module object. Importing the
+# aria_code.* copy here started a session the hook could never see.
+import preview_server
 
 
 @pytest.fixture(autouse=True)

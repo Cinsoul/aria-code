@@ -286,7 +286,12 @@ exclude = '''
 
 # ── Pytest ─────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-pythonpath = [".", "src"]
+# src/aria_code is an import root in its own right: the package imports itself
+# by bare names (`from runtime import ...`, `from ui.render.output import ...`)
+# and apps/cli/tools/*.py put it on sys.path at import time. Declaring it here
+# makes collection deterministic instead of depending on which test module
+# happened to trigger that side effect first.
+pythonpath = [".", "src", "src/aria_code"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]

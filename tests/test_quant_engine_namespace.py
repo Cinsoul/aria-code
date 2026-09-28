@@ -35,7 +35,7 @@ def _module_file(dotted: str) -> Path:
 @pytest.mark.parametrize("sub", _SUBPACKAGES)
 def test_subpackage_declares_namespace_extension(sub):
     """每一层都得自己声明——父层的拼接不会向下传递。"""
-    init = REPO_ROOT / "packages" / "quant_engine" / sub / "__init__.py"
+    init = REPO_ROOT / "src" / "aria_code" / "packages" / "quant_engine" / sub / "__init__.py"
     text = init.read_text(encoding="utf-8")
     assert "_extend_namespace(__path__" in text, (
         f"{sub}/__init__.py 没有扩展 __path__；Arthera 侧该子包的独有模块会不可达"

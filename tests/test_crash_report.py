@@ -55,7 +55,10 @@ def test_writer_never_raises_even_when_target_is_unwritable(tmp_path, monkeypatc
     """崩溃记录器自己再崩一次，只会把原始错误从屏幕上冲掉，让排查更难。"""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(
-        "runtime.crash_report._crash_dir",
+        # Must be the module write_crash_report was imported from at the top of
+        # this file; the bare copy has its own _crash_dir, so the failure this
+        # test simulates never happened and a real report got written.
+        "aria_code.runtime.crash_report._crash_dir",
         lambda: (_ for _ in ()).throw(OSError("disk on fire")),
     )
     try:

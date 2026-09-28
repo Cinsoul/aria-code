@@ -324,7 +324,10 @@ class TestPromptRouting(unittest.TestCase):
         # tried to fetch market data for the sentence and failed. A chart
         # keyword with no resolvable symbol must fall through to the LLM.
         from unittest import mock
-        from apps.cli.commands import market as market_mod
+        # Same module route_top_level_text is imported from at the top of this
+        # file; patching the bare copy's _route_symbols did nothing, and the
+        # sibling 'does not route' test passed vacuously because of it.
+        from aria_code.apps.cli.commands import market as market_mod
         with mock.patch.object(market_mod, "_route_symbols", return_value=[]):
             routed = route_top_level_text(
                 "你会制作图表和根据我的现有数据去分析吗",
@@ -334,7 +337,7 @@ class TestPromptRouting(unittest.TestCase):
 
     def test_report_keyword_without_symbol_does_not_route(self):
         from unittest import mock
-        from apps.cli.commands import market as market_mod
+        from aria_code.apps.cli.commands import market as market_mod
         with mock.patch.object(market_mod, "_route_symbols", return_value=[]):
             routed = route_top_level_text(
                 "你能生成研究报告吗", {"/chart", "/dashboard", "/report"}
@@ -343,7 +346,7 @@ class TestPromptRouting(unittest.TestCase):
 
     def test_chart_keyword_with_symbol_still_routes(self):
         from unittest import mock
-        from apps.cli.commands import market as market_mod
+        from aria_code.apps.cli.commands import market as market_mod
         with mock.patch.object(market_mod, "_route_symbols", return_value=["AAPL"]):
             routed = route_top_level_text(
                 "画一张K线图看看", {"/chart", "/dashboard", "/report"}

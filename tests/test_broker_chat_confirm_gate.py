@@ -12,8 +12,14 @@ from pathlib import Path
 
 import pytest
 
+# Must match what the code under test imports: broker_cmds.cmd_trade does
+# `from brokers.config import ...`, and `brokers.config` (via src/aria_code) is a
+# different module object from `aria_code.brokers.config` (via src) with its own
+# BROKERS_CONFIG_PATH. Mixing the two made the command write to the real config
+# file while the assertions read an empty temp one — which also meant the
+# config-level tests below were passing vacuously against real user state.
 import brokers.config as config_mod
-from aria_code.brokers.config import (
+from brokers.config import (
     add_broker_config,
     is_chat_confirm_enabled,
     set_chat_confirm_enabled,
@@ -79,13 +85,28 @@ class _FakeConsole:
         return self._answer
 
 
+def _handler(console):
+    """BrokerCommandsMixin reads self.context.console / self.context.has_rich.
+
+    Composed into SlashCommands it gets `context` from the terminal; bare in a
+    unit test it has to be given one. Before the move to AriaContext these
+    methods read aria_cli's module globals, which the monkeypatching set up.
+    """
+    from aria_code.apps.cli.commands import broker_cmds
+    from aria_code.apps.cli.context import AriaContext
+
+    handler = broker_cmds.BrokerCommandsMixin()
+    handler.context = AriaContext(console=console, has_rich=True)
+    return handler
+
+
 @pytest.mark.asyncio
 async def test_allow_chat_confirm_requires_exact_broker_id_not_yes(monkeypatch, tmp_path):
     _patch_config_path(monkeypatch, tmp_path)
     add_broker_config({"id": "ths1", "type": "easytrader", "label": "同花顺"})
 
     import aria_cli
-    from apps.cli.commands import broker_cmds
+    from aria_code.apps.cli.commands import broker_cmds
 
     fake_console = _FakeConsole(answer="yes")
     monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
@@ -100,7 +121,7 @@ async def test_allow_chat_confirm_requires_exact_broker_id_not_yes(monkeypatch, 
 
     monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
 
-    handler = broker_cmds.BrokerCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_trade("allow-chat-confirm ths1")
 
     assert is_chat_confirm_enabled("ths1") is False
@@ -112,7 +133,7 @@ async def test_allow_chat_confirm_succeeds_with_exact_broker_id(monkeypatch, tmp
     add_broker_config({"id": "ths1", "type": "easytrader", "label": "同花顺"})
 
     import aria_cli
-    from apps.cli.commands import broker_cmds
+    from aria_code.apps.cli.commands import broker_cmds
 
     fake_console = _FakeConsole(answer="ths1")
     monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
@@ -127,7 +148,7 @@ async def test_allow_chat_confirm_succeeds_with_exact_broker_id(monkeypatch, tmp
 
     monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
 
-    handler = broker_cmds.BrokerCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_trade("allow-chat-confirm ths1")
 
     assert is_chat_confirm_enabled("ths1") is True
@@ -140,7 +161,7 @@ async def test_disallow_chat_confirm_turns_it_back_off(monkeypatch, tmp_path):
     set_chat_confirm_enabled("ths1", True)
 
     import aria_cli
-    from apps.cli.commands import broker_cmds
+    from aria_code.apps.cli.commands import broker_cmds
 
     fake_console = _FakeConsole(answer="")
     monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
@@ -155,7 +176,7 @@ async def test_disallow_chat_confirm_turns_it_back_off(monkeypatch, tmp_path):
 
     monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
 
-    handler = broker_cmds.BrokerCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_trade("disallow-chat-confirm ths1")
 
     assert is_chat_confirm_enabled("ths1") is False

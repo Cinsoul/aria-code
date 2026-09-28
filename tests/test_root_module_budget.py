@@ -29,8 +29,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# 2026-08-19 冻结的基线。只减不增。
-_BASELINE = 58
+# 2026-08-19 冻结的基线，2026-09-29 随 src-layout 迁移收紧：根目录只剩
+# image_service_runner.py（按路径 subprocess 调用的独立入口，不参与 import）。
+_BASELINE = 1
 
 
 def _root_modules() -> list[str]:
@@ -78,8 +79,12 @@ def test_every_root_module_is_declared_for_packaging():
 
     text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     body = re.search(r"py-modules = \[(.*?)\n\]", text, re.S)
-    assert body, "pyproject.toml 缺少 [tool.setuptools].py-modules"
-    declared = set(re.findall(r'"([^"]+)"', body.group(1)))
+    # The src-layout migration emptied the repo root, so pyproject no longer
+    # carries a py-modules list — the guard's own docstring named that as the
+    # endgame ("5.0 的 src-layout：一个包，py-modules 从 57 条降到 0 条").
+    # Absent means nothing is declared, not that the check cannot run: the
+    # assertion below still fires if a root module reappears and gets imported.
+    declared = set(re.findall(r'"([^"]+)"', body.group(1))) if body else set()
 
     # 只有**会被 import** 的模块才需要进 py-modules。有些根文件是靠路径执行的
     # 独立入口（`python image_service_runner.py`），不参与 import，声明与否

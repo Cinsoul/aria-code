@@ -13,6 +13,14 @@ try:
 except Exception:
     _CORE_FILE_TOOLS: frozenset[str] = frozenset()
 
+# Imported rather than borrowed from aria_cli's globals: this function is also
+# reached without aria_cli loaded (SDK, daemon), where the rebind never runs.
+from .response_cache import (
+    cache_get as _cache_get,
+    cache_key as _cache_key,
+    cache_set as _cache_set,
+)
+
 
 def _try_inject_file_paths(_message: str) -> str:
     """Legacy hook retained for the extracted stream implementation.

@@ -5,6 +5,8 @@ const os = require("os");
 const path = require("path");
 
 const {
+  ariaCliPythonPath,
+  resolveAriaCliPath,
   expandHome,
   platformDataDir,
   platformConfigDir,
@@ -79,4 +81,41 @@ test("info candidates include runtime, config mirror, and legacy locations", () 
     path.join("/tmp/aria-config", "install.json"),
     path.join(os.homedir(), ".aria-code", ".npm-install-info.json"),
   ]);
+});
+
+// 2026-09-29: the Python runtime moved to a src layout, but the npm launcher
+// and postinstall still pointed at <installDir>/aria_cli.py. `npm install -g`
+// then produced an install whose CLI could not find its own entrypoint, and
+// the install smoke test failed on all three platforms.
+test("resolveAriaCliPath prefers the src layout over the legacy root copy", () => {
+  const seen = [];
+  const found = resolveAriaCliPath("/tmp/aria-home", (p) => {
+    seen.push(p);
+    return true;
+  });
+  assert.strictEqual(found, path.join("/tmp/aria-home", "src", "aria_code", "aria_cli.py"));
+  assert.deepStrictEqual(seen, [path.join("/tmp/aria-home", "src", "aria_code", "aria_cli.py")]);
+});
+
+test("resolveAriaCliPath falls back to a pre-migration clone", () => {
+  const legacy = path.join("/tmp/aria-home", "aria_cli.py");
+  const found = resolveAriaCliPath("/tmp/aria-home", (p) => p === legacy);
+  assert.strictEqual(found, legacy);
+});
+
+test("resolveAriaCliPath returns empty when neither layout is present", () => {
+  assert.strictEqual(resolveAriaCliPath("/tmp/aria-home", () => false), "");
+  assert.strictEqual(resolveAriaCliPath("", () => true), "");
+});
+
+test("ariaCliPythonPath points at src, not the aria_code package dir", () => {
+  assert.strictEqual(
+    ariaCliPythonPath(path.join("/tmp/aria-home", "src", "aria_code", "aria_cli.py")),
+    path.join("/tmp/aria-home", "src"),
+  );
+  // Pre-migration clone: the entrypoint's own directory is the import root.
+  assert.strictEqual(
+    ariaCliPythonPath(path.join("/tmp/aria-home", "aria_cli.py")),
+    "/tmp/aria-home",
+  );
 });

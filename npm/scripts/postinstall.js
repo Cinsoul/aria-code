@@ -17,7 +17,7 @@ const { spawnSync } = require("child_process");
 const fs       = require("fs");
 const path     = require("path");
 const readline = require("readline");
-const { resolveAriaPaths } = require("../lib/paths");
+const { resolveAriaPaths, resolveAriaCliPath, ARIA_CLI_RELATIVE_CANDIDATES } = require("../lib/paths");
 const { parsePyvenvCfg, venvDriftReason } = require("../lib/venv");
 
 // ── Colours ──────────────────────────────────────────────────────────────────
@@ -532,7 +532,10 @@ function writeInstallInfo(python, venv) {
     installDirSource: PATHS.installDirSource,
     venvDir:    venv.venvDir,
     venvPy:     venv.venvPy,
-    ariaCli:    path.join(INSTALL_DIR, "aria_cli.py"),
+    // Resolved against the clone that was just made, so the metadata names the
+    // layout actually on disk instead of assuming the pre-src-layout root copy.
+    ariaCli:    resolveAriaCliPath(INSTALL_DIR)
+                || path.join(INSTALL_DIR, ARIA_CLI_RELATIVE_CANDIDATES[0]),
     configDir:  PATHS.configDir,
     cacheDir:   PATHS.cacheDir,
     infoFile:   INFO_FILE,

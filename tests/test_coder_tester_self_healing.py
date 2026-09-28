@@ -29,6 +29,20 @@ def test_agent_registry_discovery():
     assert strategist_cls is not None
 
 
+# 85b4d36 ("feat(coder): empower coder agent to dynamically write code using LLM
+# instead of a static template") removed CoderAgent.generate_backtest_script and
+# _build_self_contained_python, and analyze() no longer returns a script_path at
+# all — it drives a tool-calling LLM loop and reports prose. The two tests below
+# assert the deleted contract. They are kept rather than deleted so the coverage
+# gap stays visible: whoever owns the LLM-driven coder has to decide what the
+# replacement contract is and what an offline test of it looks like.
+_CODER_TEMPLATE_REMOVED = pytest.mark.skip(
+    reason="CoderAgent's static script generator was removed in 85b4d36; "
+           "these assert the pre-LLM contract and need rewriting against the new one"
+)
+
+
+@_CODER_TEMPLATE_REMOVED
 def test_coder_agent_generate_self_contained_script():
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = pathlib.Path(tmpdir)
@@ -63,12 +77,33 @@ def test_coder_agent_generate_self_contained_script():
 
 
 def test_self_healing_engine_syntax_and_execution():
+    """Clean script → runs first try, metrics and artifacts collected.
+
+    Owns its fixture rather than asking CoderAgent for one: this is a
+    SelfHealingEngine test, and routing it through the agent made it depend on
+    the static generator that 85b4d36 removed (and now on a live LLM).
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = pathlib.Path(tmpdir)
-        coder = CoderAgent(output_dir=out_dir)
-        script_path, _ = coder.generate_backtest_script("AAPL")
+        script_path = out_dir / "strategy_aapl.py"
+        # _extract_results reads <stem>_metrics.json and <stem>_backtest.png.
+        script_path.write_text(
+            '\n'.join([
+                "import json, pathlib",
+                "OUT = pathlib.Path(__file__).parent",
+                'metrics = {"symbol": "AAPL", "total_return_pct": 12.5,',
+                '           "sharpe_ratio": 1.1, "max_drawdown_pct": -4.2}',
+                '(OUT / "strategy_aapl_metrics.json").write_text(json.dumps(metrics))',
+                '(OUT / "strategy_aapl_backtest.png").write_bytes(b"\\x89PNG\\r\\n\\x1a\\n")',
+                "print(json.dumps(metrics))",
+            ]),
+            encoding="utf-8",
+        )
 
         engine = SelfHealingEngine(python_executable=sys.executable)
+        valid, err, _line = engine.verify_syntax(script_path)
+        assert valid is True
+        assert err is None
         async def _run():
             res = await engine.execute_and_heal(script_path)
             assert res.success is True
@@ -108,6 +143,7 @@ if __name__ == "__main__":
         asyncio.run(_run())
 
 
+@_CODER_TEMPLATE_REMOVED
 def test_full_pipeline_strategist_coder_tester():
     with tempfile.TemporaryDirectory() as tmpdir:
         out_dir = pathlib.Path(tmpdir)

@@ -327,7 +327,8 @@ def _show_write_preview(params: dict):
     ))
 def _apply_tool_approval(params: dict, decision: ApprovalDecision) -> dict:
     """Apply approval state to CLI globals and execution params."""
-    global _auto_approve_session, _session_always_allow, _session_command_prefixes
+    # The two sets are only mutated in place, so only the rebound flag needs this.
+    global _auto_approve_session
     if decision.auto_approve_session:
         _auto_approve_session = True
     if decision.tool_scope:

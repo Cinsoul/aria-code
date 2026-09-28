@@ -91,6 +91,40 @@ function platformCacheDir(platform = os.platform(), env = process.env) {
   return path.join(env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache"), APP_SLUG);
 }
 
+// ── aria_cli.py location ──────────────────────────────────────────────────────
+//
+// The Python runtime moved to a src layout (src/aria_code/aria_cli.py); before
+// that it sat at the clone root. postinstall.js git-clones whichever revision
+// the user installs, and an existing install keeps whatever layout it was
+// cloned at, so both have to keep resolving. Ordered newest-first.
+const ARIA_CLI_RELATIVE_CANDIDATES = [
+  path.join("src", "aria_code", "aria_cli.py"),
+  "aria_cli.py",
+];
+
+// The directory to put on PYTHONPATH so `import aria_code...` resolves for a
+// given aria_cli.py. For the src layout that is the `src` dir, not the package
+// dir the file itself lives in.
+function ariaCliPythonPath(ariaCliPath) {
+  const pkgDir = path.dirname(ariaCliPath);
+  return path.basename(pkgDir) === "aria_code" ? path.dirname(pkgDir) : pkgDir;
+}
+
+// Returns the first candidate that exists under installDir, or "" if none do.
+// `exists` is injectable so tests need no fixture tree on disk.
+function resolveAriaCliPath(installDir, exists = fs.existsSync) {
+  if (!installDir) return "";
+  for (const rel of ARIA_CLI_RELATIVE_CANDIDATES) {
+    const candidate = path.join(installDir, rel);
+    try {
+      if (exists(candidate)) return candidate;
+    } catch (_) {
+      // Unreadable candidate — try the next one.
+    }
+  }
+  return "";
+}
+
 function resolveAriaPaths(options = {}) {
   const env = options.env || process.env;
   const platform = options.platform || os.platform();
@@ -145,6 +179,9 @@ module.exports = {
   APP_NAME,
   APP_SLUG,
   LEGACY_DIRNAME,
+  ARIA_CLI_RELATIVE_CANDIDATES,
+  ariaCliPythonPath,
+  resolveAriaCliPath,
   expandHome,
   platformDataDir,
   platformConfigDir,

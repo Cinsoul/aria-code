@@ -51,7 +51,11 @@ def test_execute_order_preview_is_not_bound_at_module_level():
     # _call_broker_confirm_order's gated path), but only as a function-local
     # import inside that one handler — never a module-level attribute a
     # careless import elsewhere in this file could pick up unguarded.
-    import packages.aria_mcp.server as server_mod
+    # Must be the module the _call_* handlers at the top of this file come
+    # from — patching the bare `packages.aria_mcp.server` copy left _get_broker
+    # real, so confirm_order failed at broker lookup before reaching the gate
+    # these tests are about.
+    import aria_code.packages.aria_mcp.server as server_mod
 
     assert not hasattr(server_mod, "execute_order_preview")
     assert "_call_broker_confirm_order" in dir(server_mod)
@@ -82,7 +86,7 @@ async def test_confirm_order_refuses_missing_preview_id():
 
 @pytest.mark.asyncio
 async def test_confirm_order_refuses_when_chat_confirm_not_enabled(monkeypatch):
-    import packages.aria_mcp.server as server_mod
+    import aria_code.packages.aria_mcp.server as server_mod
 
     class _FakeBroker:
         broker_id = "some_broker"
@@ -99,7 +103,7 @@ async def test_confirm_order_refuses_when_chat_confirm_not_enabled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_confirm_order_executes_only_when_both_gates_pass(monkeypatch):
-    import packages.aria_mcp.server as server_mod
+    import aria_code.packages.aria_mcp.server as server_mod
 
     class _FakeBroker:
         broker_id = "some_broker"
@@ -342,7 +346,7 @@ async def test_comparison_chart_no_usable_data_reports_error(monkeypatch):
 @pytest.mark.asyncio
 @requires_charts
 async def test_allocation_chart_writes_artifact_on_success(monkeypatch, tmp_path):
-    import packages.aria_mcp.server as server_mod
+    import aria_code.packages.aria_mcp.server as server_mod
     from brokers.base import Position
 
     class _FakeBroker:
@@ -361,7 +365,7 @@ async def test_allocation_chart_writes_artifact_on_success(monkeypatch, tmp_path
 
 @pytest.mark.asyncio
 async def test_allocation_chart_no_positions_reports_error(monkeypatch):
-    import packages.aria_mcp.server as server_mod
+    import aria_code.packages.aria_mcp.server as server_mod
 
     class _FakeBroker:
         def positions(self):

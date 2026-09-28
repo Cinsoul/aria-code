@@ -1,6 +1,15 @@
 import builtins
+import os
 import pathlib
 import sys
+
+from aria_code.apps.cli.context import AriaContext
+
+
+class _ContextOnly:
+    """Stand-in for SlashCommands where only self.context is reached."""
+
+    context = AriaContext(console=None, has_rich=False)
 
 
 _CLI_DIR = str(pathlib.Path(__file__).parents[1])
@@ -382,6 +391,9 @@ def test_report_markdown_prompt_omits_na_placeholders(monkeypatch, tmp_path):
 
     class FakeCommands:
         terminal = FakeTerminal()
+        # cmd_report prints through self.context; has_rich False keeps it on the
+        # plain-print branch so no console object is needed.
+        context = AriaContext(console=None, has_rich=False)
 
     class FakeBundle:
         quote = {"success": True, "price": 100.0, "provider": "test", "provider_chain": ["test"]}
@@ -447,9 +459,22 @@ def test_market_render_import_does_not_require_prompt_toolkit():
         print("ok")
     """)
 
+    repo_root = pathlib.Path(__file__).parents[1]
+    # `ui` moved under src/aria_code, so a bare subprocess at the repo root can
+    # no longer import it — mirror the roots pyproject's pytest pythonpath and
+    # the aria-code launcher put on sys.path.
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join([
+            str(repo_root / "src" / "aria_code"),
+            str(repo_root / "src"),
+            os.environ.get("PYTHONPATH", ""),
+        ]).rstrip(os.pathsep),
+    }
     result = subprocess.run(
         [sys.executable, "-c", code],
-        cwd=pathlib.Path(__file__).parents[1],
+        cwd=repo_root,
+        env=env,
         text=True,
         capture_output=True,
         timeout=10,
@@ -650,7 +675,7 @@ def test_team_report_includes_data_quality_section(monkeypatch, tmp_path):
 
     asyncio.run(
         aria_cli.SlashCommands._save_team_report(
-            object(),
+            _ContextOnly(),
             "NVDA",
             team_result,
             bundle,

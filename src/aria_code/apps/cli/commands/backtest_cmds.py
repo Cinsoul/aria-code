@@ -167,6 +167,7 @@ class BacktestCommandsMixin:
           /backtest momentum AAPL --period 1y
           /backtest momentum AAPL --period 6m
         """
+        from aria_cli import HAS_RICH
         import re as _re_bt
         today = __import__("datetime").date.today()
 
@@ -597,6 +598,7 @@ class BacktestCommandsMixin:
 
     async def _print_backtest_broker_plan(self, backtest_result: dict):
         """Print an account-aware order plan for a successful backtest, if a broker is connected."""
+        from aria_cli import HAS_RICH
         if not _get__HAS_BROKERS() or not isinstance(backtest_result, dict):
             return
         try:
@@ -651,6 +653,7 @@ class BacktestCommandsMixin:
 
     async def cmd_walk_forward(self, args: str):
         """Walk-Forward 滚动回测 → /api/v1/backtest/walk-forward"""
+        from aria_cli import HAS_RICH
         parts = args.split() if args else ["SPY"]
         symbol = parts[0].upper() if parts else "SPY"
         strategy = parts[1] if len(parts) > 1 else "momentum"
@@ -731,6 +734,7 @@ class BacktestCommandsMixin:
             /auto-strategy momentum SPY --target sharpe=1.5
             /auto-strategy meanrev AAPL --target sharpe=1.2 --rounds 3
         """
+        from aria_cli import HAS_RICH
         import re as _re
         import time as _time
 
@@ -884,6 +888,7 @@ class BacktestCommandsMixin:
             /factor-lab QQQ --days 252
             /factor-lab SPY --factors momentum,value,quality
         """
+        from aria_cli import HAS_RICH
         import re as _re
 
         parts = args.split()
@@ -1030,6 +1035,7 @@ class BacktestCommandsMixin:
 
     def _scaffold_with_llm(self, project_name: str, description: str, base_dir) -> None:
         """Call the configured LLM to generate a custom project structure and write files."""
+        from aria_cli import HAS_RICH
         import json
         import urllib.request
         import textwrap
@@ -1215,6 +1221,7 @@ class BacktestCommandsMixin:
           /scaffold price-alert CLI tool that monitors stock prices and sends alerts
           /scaffold aapl-analysis --template analysis
         """
+        from aria_cli import HAS_RICH
         import textwrap
 
         parts = args.strip().split()
@@ -1658,6 +1665,7 @@ class BacktestCommandsMixin:
 
     async def _strategy_overview(self, vault):
         """所有策略一览看板：版本数 / 最新 / 回测 Sharpe·收益 / 审查 / 是否部署实盘。"""
+        from aria_cli import HAS_RICH
         names = vault.list_all_names()
         if not names:
             self.context.console.print("  [dim]还没有保存任何策略。用 /strategy save 开始。[/dim]" if self.context.has_rich
@@ -1803,6 +1811,7 @@ class BacktestCommandsMixin:
         交易自动打标记 reason="deploy <策略> @<版本>"，从而被
         /strategy show（实盘 vs 回测）与 /portfolio holdings（分组看板）关联。
         """
+        from aria_cli import HAS_RICH
         if not _get__HAS_VAULT():
             self.context.console.print("[yellow]strategy_vault.py 未找到[/yellow]" if self.context.has_rich else "strategy_vault not found")
             return
@@ -2051,6 +2060,7 @@ class BacktestCommandsMixin:
         /strategy load [name] [tag/id]    — 加载版本到上下文
         /strategy review                  — AI审查+静态检测
         """
+        from aria_cli import HAS_RICH
         if not _get__HAS_VAULT():
             self.context.console.print("  [yellow]strategy_vault.py 未找到[/yellow]" if self.context.has_rich
                           else "  strategy_vault.py not found")
@@ -2446,6 +2456,7 @@ class BacktestCommandsMixin:
         # ML signal backtest is part of the private Arthera engine (alpha IP).
         # If a local Arthera checkout is present (dev), make it importable;
         # otherwise the import below fails and we show a Pro-feature notice.
+        from aria_cli import HAS_RICH
         import sys
         import os
         _arthera_pkgs = os.environ.get("ARTHERA_ROOT") or os.path.expanduser("~/Desktop/Arthera")

@@ -976,30 +976,18 @@ def detect_ollama_models_rich(ollama_url: str = "http://localhost:11434") -> tup
 # ── Response cache for stateless queries (TTL = 60s) ─────────────────────────
 # Avoids sending the same market/concept query to Ollama multiple times
 # in rapid succession (e.g., user retries or tab-completion tests).
-import hashlib as _hashlib
-_RESPONSE_CACHE: dict = {}   # key → (response_text, expire_ts)
-_RESPONSE_CACHE_TTL = 60.0   # seconds
-
-def _cache_get(key: str) -> str | None:
-    """Return cached response text if still valid, else None."""
-    entry = _RESPONSE_CACHE.get(key)
-    if entry and time.time() < entry[1]:
-        return entry[0]
-    return None
-
-def _cache_set(key: str, value: str) -> None:
-    """Store response in cache with TTL expiry."""
-    _RESPONSE_CACHE[key] = (value, time.time() + _RESPONSE_CACHE_TTL)
-    # Keep cache small — evict expired entries when it grows large
-    if len(_RESPONSE_CACHE) > 200:
-        now = time.time()
-        for k in list(_RESPONSE_CACHE.keys()):
-            if _RESPONSE_CACHE[k][1] < now:
-                del _RESPONSE_CACHE[k]
-
-def _cache_key(model: str, message: str) -> str:
-    raw = f"{model}::{message.strip().lower()}"
-    return _hashlib.md5(raw.encode()).hexdigest()
+#
+# The implementation moved to apps/cli/providers/llm/response_cache.py so
+# stream_ollama can import it instead of borrowing it from this module's
+# globals — see that file's docstring. The private aliases stay because the
+# globals-rebind below hands this namespace to the other extracted helpers.
+from aria_code.apps.cli.providers.llm.response_cache import (
+    RESPONSE_CACHE as _RESPONSE_CACHE,
+    RESPONSE_CACHE_TTL as _RESPONSE_CACHE_TTL,
+    cache_get as _cache_get,
+    cache_key as _cache_key,
+    cache_set as _cache_set,
+)
 
 def _is_simple_greeting(message: str) -> bool:
     text = (message or "").strip().lower()

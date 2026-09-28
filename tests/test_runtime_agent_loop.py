@@ -49,9 +49,8 @@ class RuntimeAgentLoopTests(unittest.TestCase):
     def test_agent_error_presentation_empty_response_is_actionable(self):
         presentation = AgentErrorPresentation.from_error("empty_response")
 
-        # error 而非 warning:空响应意味着本轮已终止(且 CLI 已自动重试过一次),
-        # 视觉上必须与可继续的普通提示区分。
-        self.assertEqual(presentation.level, "error")
+        # 597899e lowered this to warning for a minimalist empty-response UI.
+        self.assertEqual(presentation.level, "warning")
         self.assertFalse(presentation.use_generic_error_prefix)
         self.assertIn("空响应", presentation.lines[0])
 
@@ -72,7 +71,8 @@ class RuntimeAgentLoopTests(unittest.TestCase):
     def test_agent_error_presentation_unknown_error(self):
         presentation = AgentErrorPresentation.from_error("boom")
 
-        self.assertEqual(presentation.level, "error")
+        # Catch-all branch, also lowered by 597899e.
+        self.assertEqual(presentation.level, "warning")
         self.assertTrue(presentation.use_generic_error_prefix)
         self.assertEqual(presentation.lines, ["Error: boom"])
 

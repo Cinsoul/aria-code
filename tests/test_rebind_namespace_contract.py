@@ -35,7 +35,7 @@ BUILTINS = set(dir(builtins))
 
 def _rebound_mixin_names() -> set[str]:
     """从 aria_cli.py 源码里读出实际被重绑的 mixin 类名。"""
-    src = (REPO_ROOT / "aria_cli.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "src" / "aria_code" / "aria_cli.py").read_text(encoding="utf-8")
     return {m.group(1) for m in re.finditer(r"_rebind_mixin_globals\((\w+)\)", src)}
 
 

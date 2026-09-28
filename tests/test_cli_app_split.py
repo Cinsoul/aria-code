@@ -246,8 +246,10 @@ def test_console_script_points_to_apps_cli_entrypoint():
     with open("pyproject.toml", "rb") as handle:
         data = tomllib.load(handle)
 
-    assert data["project"]["scripts"]["aria-code"] == "apps.cli.main:main"
-    assert "apps*" in data["tool"]["setuptools"]["packages"]["find"]["include"]
+    assert data["project"]["scripts"]["aria-code"] == "aria_code.apps.cli.main:main"
+    # apps/ is no longer a top-level package: since the src-layout migration the
+    # single "aria_code*" entry covers it and every other subpackage.
+    assert "aria_code*" in data["tool"]["setuptools"]["packages"]["find"]["include"]
 
 
 def test_market_slash_commands_are_registered_for_interactive_routing():
@@ -692,7 +694,11 @@ async def test_generate_html_report_runs_team_and_generator(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_run_team_analysis_captures_noisy_output_and_sanitizes(monkeypatch):
     import agents.team
-    import apps.cli.commands.team as team_module
+    # run_team_analysis is imported from aria_code.apps.cli.commands.team at the
+    # top of this file; patching the bare copy left fetch_team_data_bundle real,
+    # so the test went to the network for NVDA instead of using the stub.
+    # agents.team / datasources.router stay bare — team.py imports them that way.
+    import aria_code.apps.cli.commands.team as team_module
     import datasources.router
 
     calls = {}

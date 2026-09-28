@@ -396,8 +396,11 @@ def test_generate_report_writes_sidecar_metadata_and_raw_data(monkeypatch, tmp_p
     async def _run():
         return await generate_report("AAPL")
 
+    # generate_report is imported from aria_code.report_generator at the top of
+    # this file; patching the bare copy left the real fetch in place, so the
+    # sidecar recorded the live provider chain instead of the stub's ["fake"].
     monkeypatch.setattr(
-        "report_generator._fetch_report_data_sync",
+        "aria_code.report_generator._fetch_report_data_sync",
         lambda symbol: (
             df,
             CleanResult(df, quality_score=99),
@@ -412,7 +415,7 @@ def test_generate_report_writes_sidecar_metadata_and_raw_data(monkeypatch, tmp_p
             },
         ),
     )
-    monkeypatch.setattr("report_generator.generate_price_chart", lambda *_args, **_kwargs: "<svg></svg>")
+    monkeypatch.setattr("aria_code.report_generator.generate_price_chart", lambda *_args, **_kwargs: "<svg></svg>")
 
     path = asyncio.run(_run())
 

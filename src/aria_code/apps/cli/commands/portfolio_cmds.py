@@ -1094,6 +1094,7 @@ class PortfolioCommandsMixin:
                /team AAPL --full          ← 7-agent 完整模式（+新闻/催化剂/行业）
                /team AAPL --pipeline      ← 开启 DAG 串行协作模式（Context Sharing）
         """
+        from aria_cli import Panel
         import sys as _sys
         team_args = parse_team_args(args)
         symbols = resolve_team_symbols(team_args, self.terminal.config)

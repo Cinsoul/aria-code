@@ -13,7 +13,10 @@ def test_supervisor_uses_only_registered_agents_when_no_llm_response(monkeypatch
                 {"name": "supervisor", "description": "router", "builtin": True},
             ]
 
-    monkeypatch.setattr("agents.registry.get_registry", lambda: Registry())
+    # supervisor.py does `from .registry import get_registry`, which resolves to
+    # aria_code.agents.registry for the class imported above — patching the bare
+    # copy left the real registry in place and returned its agents instead.
+    monkeypatch.setattr("aria_code.agents.registry.get_registry", lambda: Registry())
 
     agent = SupervisorAgent()
     result = asyncio.run(agent.analyze("AAPL", {}))

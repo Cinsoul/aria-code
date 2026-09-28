@@ -85,6 +85,8 @@ class TradingRiskTests(unittest.TestCase):
         # is the only way to check import-time layering without mutating this
         # process's module state (deleting/reloading modules here orphans other
         # tests' collection-time references and corrupts their monkeypatching).
+        import os
+        import pathlib
         import subprocess
         import sys
         code = (
@@ -92,9 +94,22 @@ class TradingRiskTests(unittest.TestCase):
             "bad = [m for m in sys.modules if m.startswith('brokers') or m.startswith('privacy')]; "
             "sys.exit(1 if bad else 0)"
         )
-        proc = subprocess.run([sys.executable, "-c", code], capture_output=True)
+        # `safety` lives under src/aria_code since the layout migration, so a bare
+        # subprocess cannot import it — which failed the same way a real layering
+        # violation would. stderr is in the message now so the two are tellable apart.
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
+        env = {
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join([
+                str(repo_root / "src" / "aria_code"),
+                str(repo_root / "src"),
+                os.environ.get("PYTHONPATH", ""),
+            ]).rstrip(os.pathsep),
+        }
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True, env=env)
         self.assertEqual(proc.returncode, 0,
-                         "importing safety must not import brokers/privacy")
+                         "importing safety must not import brokers/privacy; "
+                         f"stderr={proc.stderr.decode(errors='replace')}")
 
 
 if __name__ == "__main__":
