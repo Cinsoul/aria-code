@@ -14,9 +14,14 @@ if _CLI_DIR not in sys.path:
 
 class _CodeTerminal:
     def __init__(self, response: str):
+        from aria_code.apps.cli.context import AriaContext
+
         self.config = {"model": "qwen2.5:7b"}
         self.conversation = []
         self._response = response
+        # SlashCommands.context delegates here, as it does in production —
+        # has_rich False keeps cmd_code on the plain-print branch.
+        self.context = AriaContext(console=None, has_rich=False)
 
     async def send_message(self, _prompt):
         self.conversation.append({"role": "assistant", "content": self._response})
@@ -29,8 +34,6 @@ async def test_cmd_code_saves_to_user_generated_dir_by_default(monkeypatch, tmp_
     monkeypatch.setenv("ARIA_USER_OUTPUT_ROOT", str(tmp_path))
     terminal = _CodeTerminal("```python\nprint('hello')\n```")
     commands = aria_cli.SlashCommands(terminal)
-    commands.context = type("AriaContextMock", (), {"console": None, "has_rich": False, "save_config": lambda: None})()
-
 
     await commands.cmd_code("build a simple strategy script")
 
