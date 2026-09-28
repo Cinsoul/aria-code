@@ -19,6 +19,21 @@ class _FakeSession:
         self.url = url
 
 
+def _handler(console):
+    """CanvasCommandsMixin reads self.context.console / self.context.has_rich.
+
+    It is normally composed into SlashCommands, which gets `context` from the
+    terminal. Instantiated bare for a unit test it has to be given one — before
+    the move to AriaContext these methods read aria_cli's module globals, which
+    is what the monkeypatching below used to drive.
+    """
+    from aria_code.apps.cli.context import AriaContext
+
+    handler = CanvasCommandsMixin()
+    handler.context = AriaContext(console=console, has_rich=True)
+    return handler
+
+
 async def test_cmd_canvas_starts_session_and_opens_browser(monkeypatch):
     import aria_cli
     import preview_server
@@ -40,7 +55,7 @@ async def test_cmd_canvas_starts_session_and_opens_browser(monkeypatch):
     opened = {}
     monkeypatch.setattr(preview_server, "open_in_browser", lambda url: opened.setdefault("url", url))
 
-    handler = CanvasCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_canvas("")
 
     assert started.get("called") is True
@@ -64,7 +79,7 @@ async def test_cmd_canvas_already_running_does_not_restart(monkeypatch):
 
     monkeypatch.setattr(preview_server, "start_session", fail_start_session)
 
-    handler = CanvasCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_canvas("")
 
     assert any("8765" in msg for msg in fake_console.printed)
@@ -79,7 +94,7 @@ async def test_cmd_canvas_stop_with_no_session_running(monkeypatch):
     monkeypatch.setattr(aria_cli, "HAS_RICH", True, raising=False)
     monkeypatch.setattr(preview_server, "get_active_session", lambda: None)
 
-    handler = CanvasCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_canvas("stop")
 
     assert any("未在运行" in msg for msg in fake_console.printed)
@@ -103,7 +118,7 @@ async def test_cmd_canvas_stop_tears_down_running_session(monkeypatch):
 
     monkeypatch.setattr(preview_server, "stop_session", fake_stop_session)
 
-    handler = CanvasCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_canvas("stop")
 
     assert stopped.get("called") is True
@@ -127,7 +142,7 @@ async def test_cmd_canvas_start_failure_reports_error(monkeypatch):
 
     monkeypatch.setattr(preview_server, "start_session", failing_start_session)
 
-    handler = CanvasCommandsMixin()
+    handler = _handler(fake_console)
     await handler.cmd_canvas("")
 
     assert any("no free port" in e for e in errors)

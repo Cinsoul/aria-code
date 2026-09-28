@@ -4,7 +4,11 @@ import unittest
 from rich import box
 from rich.console import Console
 
-import ui.robot as robot
+# Same module object the names below come from: `ui.robot` (via src/aria_code)
+# and `aria_code.ui.robot` (via src) are distinct modules with separate
+# _theme_cache globals, so setting it on one left get_robot_row reading the
+# other and the light/dark assertions compared two identical palettes.
+import aria_code.ui.robot as robot
 from aria_code.ui.banner import render_full_banner
 from aria_code.ui.robot import ROBOT_ROW_COUNT, RobotState, get_robot_row, get_status_dot, set_robot_state
 
