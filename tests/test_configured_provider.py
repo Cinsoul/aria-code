@@ -44,7 +44,10 @@ async def test_configured_provider_uses_non_ollama_local_runtime(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_configured_cloud_provider_normalizes_tool_schema(monkeypatch):
-    import providers.llm.registry as registry
+    # ConfiguredProvider now imports get_provider from aria_code.providers.llm.
+    # registry; the bare copy is a different module object, so patching it here
+    # left the real provider lookup in place and FakeCloud was never called.
+    import aria_code.providers.llm.registry as registry
 
     seen = {}
 
