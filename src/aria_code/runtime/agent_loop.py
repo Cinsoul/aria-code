@@ -612,20 +612,21 @@ class AgentErrorPresentation:
                 lines=(
                     [
                         "没有可用的 AI 模型",
-                        "  Ollama 未运行，且未配置云端 API Key。",
+                        "  尚未登录，Ollama 也没有运行。",
                         "  解决方案（任选其一）：",
-                        "    • 启动 Ollama:  ollama serve",
-                        "    • 配置云端 Key: /apikey set deepseek <your-key>",
+                        "    • 登录即用:     /login  —— 在浏览器里登录或注册，模型由服务端提供，不需要自备 API Key",
+                        "    • 本地离线:     ollama serve",
+                        "    • 自备 Key:     /apikey set deepseek <your-key>",
                         "    • 导出环境变量: export DEEPSEEK_API_KEY=sk-...",
                     ]
                     if is_zh else
                     [
                         "No AI model is available.",
-                        "  Ollama is offline and no cloud API key is configured.",
+                        "  You are not signed in, and Ollama is offline.",
                         "  Choose one:",
-                        "    • Start Ollama: ollama serve",
-                        "    • Configure a key: /apikey set deepseek <your-key>",
-                        "    • Export an environment variable: export DEEPSEEK_API_KEY=sk-...",
+                        "    • Sign in:  /login  — in the browser; the model is served for you, no API key needed",
+                        "    • Offline:  ollama serve",
+                        "    • Your own key: /apikey set deepseek <your-key>",
                     ]
                 ),
             )
@@ -819,11 +820,12 @@ async def run_serial_tool(
     *,
     remote_runner: RemoteToolRunner | None = None,
     hook: Hook | None = None,
+    approval: ApprovalDecision | None = None,
 ) -> Tuple[dict, float]:
     """Execute one tool call and return (result, elapsed_seconds)."""
     started = time.time()
     if tool_name in tool_executor.local_tools:
-        result = tool_executor.execute_local(tool_name, tool_params)
+        result = tool_executor.execute_local(tool_name, tool_params, approval=approval)
     elif remote_runner is not None:
         if hook is not None:
             hook("pre_tool", tool_name, tool_params, None)
@@ -908,14 +910,19 @@ async def execute_tool_turn(
             ))
             continue
 
-        if tool_name in confirm and approval_callback is not None:
+        approval = None
+        if tool_name in confirm:
+            if approval_callback is None:
+                tool_batch.cancel()
+                break
             decision = await _maybe_await(approval_callback(tool_name, tool_params))
             if decision is None:
-                decision = ApprovalDecision.allow()
+                decision = ApprovalDecision.deny("approval unavailable")
             if not decision.approved:
                 tool_batch.cancel()
                 break
             approval_applier(tool_params, decision)
+            approval = decision
 
         tr, tool_elapsed = await run_serial_tool(
             tool_name,
@@ -923,6 +930,7 @@ async def execute_tool_turn(
             tool_executor,
             remote_runner=remote_runner,
             hook=hook,
+            approval=approval,
         )
         tool_batch.add_result(tool_name, tr, formatter, elapsed=tool_elapsed)
         activities.append(ToolExecutionActivity(

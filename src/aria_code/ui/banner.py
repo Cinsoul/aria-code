@@ -372,7 +372,7 @@ def render_session_banner(
     console,
     has_rich: bool,
     lang: str = "en",
-    web_url: str = "https://arthera.ai",
+    web_url: str = "https://arthera.finance",
 ) -> None:
     """Render the 'Keep working from anywhere' card with session sync link."""
     is_zh = lang.lower().startswith("zh")

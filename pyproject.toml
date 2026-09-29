@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aria-code"
 version = "4.4.1"
-description = "AI-powered financial terminal — local LLM + multi-source market data"
+description = "AI coding and research workspace with optional finance and connected-domain tools"
 readme = "README.md"
 license = { text = "BUSL-1.1" }
 # Upper bound is real, not defensive: the core dep pandas_ta pulls numba, and
@@ -16,7 +16,7 @@ license = { text = "BUSL-1.1" }
 # clear "requires a different Python" message. Verified 3.13 installs and runs
 # (`aria-code --version` → 4.2.0); raise the bound once numba ships 3.14 wheels.
 requires-python = ">=3.10"
-keywords = ["ai", "llm", "finance", "trading", "terminal", "cli"]
+keywords = ["ai", "llm", "coding-agent", "research", "finance", "terminal", "cli"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

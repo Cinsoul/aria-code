@@ -6368,7 +6368,7 @@ class ArtheraTerminal:
                 console=console,
                 has_rich=HAS_RICH,
                 lang=self.config.get("ui_lang", "en") or "en",
-                web_url=self.config.get("web_url", "https://arthera.ai"),
+                web_url=self.config.get("web_url", "https://arthera.finance"),
             )
         except Exception:
             pass
