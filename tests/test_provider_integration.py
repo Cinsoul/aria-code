@@ -22,7 +22,12 @@ _CLI_DIR = str(pathlib.Path(__file__).parents[1])
 if _CLI_DIR not in sys.path:
     sys.path.insert(0, _CLI_DIR)
 
-import providers.llm.registry as _reg
+# Same module object stream_cloud_fallback / _try_provider are imported from
+# below: `providers.llm.registry` (via src/aria_code) and
+# `aria_code.providers.llm.registry` (via src) are distinct module objects, so
+# every patch.object(_reg, ...) in this file was applying to a copy nobody
+# called. ci.yml deselects this file, so only test.yml's pytest job saw it.
+import aria_code.providers.llm.registry as _reg
 from aria_code.providers.llm.base import Message, ProviderConfig
 from aria_code.providers.llm.openai_compat import DeepSeekProvider, SiliconFlowProvider
 from aria_code.providers.llm.registry import _try_provider, stream_cloud_fallback

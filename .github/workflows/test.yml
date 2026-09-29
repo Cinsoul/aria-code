@@ -102,4 +102,11 @@ jobs:
           pip install -e ".[cn,dev]"
 
       - name: Test
-        run: pytest --ignore=tests/e2e -q
+        env:
+          # Same reason ci.yml sets it: without this, symbol routing calls
+          # fetch_market_universe() (akshare, no timeout) and the affected
+          # cases — which test pure local routing against a static table —
+          # hang or fail on a live HTTP call. CI only; unset behaviour for
+          # users and the hosted service is unchanged.
+          ARIA_OFFLINE: "1"
+        run: pytest --ignore=tests/e2e -q --timeout=60
