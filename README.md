@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg" width="100">
-    <img src="docs/assets/logo-light.svg" alt="Aria Code" width="100">
-  </picture>
+  <img src="docs/assets/aria-code-icon.png" alt="Aria Code icon" width="100">
 </p>
 
 <p align="center">
