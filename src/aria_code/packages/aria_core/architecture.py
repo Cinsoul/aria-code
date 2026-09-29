@@ -114,9 +114,9 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         depends_on=("settings", "tools", "safety", "context"),
         next_steps=(
             "Fold send_message's remaining pre-turn (routing/decomposition/context injection) and post-turn (rendering/history/metrics) sections into testable modules, mirroring turn_planning/prompt_assembly.",
-            "Untangle stream_ollama's 20 aria_cli module-global borrowings (45 → 30 → 20; 47 before "
+            "Untangle stream_ollama's 12 aria_cli module-global borrowings (45 → 30 → 20 → 12; 47 before "
             "the response cache moved to apps/cli/providers/llm/response_cache.py). Counted with "
-            "stdlib symtable rather than a hand-rolled AST walk. The 25 reclaimed are module-level "
+            "stdlib symtable rather than a hand-rolled AST walk. The 33 reclaimed are module-level "
             "imports in ollama_stream.py: the rebind merges rather than replaces "
             "(dict(source.__globals__) then .update(globals())), so a name defined there is the base "
             "of the merge, aria_cli still wins on conflict, and the CLI path is untouched while the "
@@ -126,11 +126,18 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
             "confirmation set, and it caught aria_cli holding one-line *wrapper* shims over "
             "apps/cli/message_processing.py — a wrapper is a different function object from what it "
             "calls, so the two paths ran different objects until the shims became aliases. "
-            "aria_cli also gave up 60 lines: the three offline/greeting responders moved to "
-            "apps/cli/providers/llm/offline_responses.py, where the provider whose failure they "
-            "describe lives. Still live for the remaining 20: with aria_cli unloaded the raw "
-            "function's globals lack _ACTIVE_COMMAND_POLICY, execute_local_tool, the _build_* "
-            "prompt builders and the approval functions. "
+            "aria_cli also shed code rather than just re-pointing imports: the three offline/greeting "
+            "responders moved to apps/cli/providers/llm/offline_responses.py and the sports "
+            "prefetch to apps/cli/handlers/sports_handlers.py, each next to the thing whose "
+            "failure or domain it belongs to, and eleven wrapper shims became aliases. "
+            "ANALYSIS_SYSTEM_PROMPT is the one documented exception to the identity rule: "
+            "build_analysis_system_prompt() stamps the date at call time, so the two paths hold "
+            "equal strings that are never the same object, asserted by value instead. "
+            "Still live for the remaining 12: _ACTIVE_COMMAND_POLICY, _ARIA_BOT_MODE, "
+            "_CONFIRM_TOOLS, _HAS_ARIARC, _PROJECT_CONTEXT, execute_local_tool, get_ariarc, "
+            "build_tool_system_prompt, _print_tool_result and the three approval/summary "
+            "functions — all of them either CLI session state or objects whose aria_cli copy "
+            "differs from the extracted module's. "
             "tests/test_ollama_stream_imports.py pins the identity rule and the budget.",
         ),
     ),

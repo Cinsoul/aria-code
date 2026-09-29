@@ -1375,23 +1375,20 @@ def _detect_lang(text: str) -> str:
 from aria_code.apps.cli.prompts.system_prompts import LANG_RULE as _LANG_RULE
 
 
-def _build_coding_prompt_lite(user_message: str) -> str:
-    """Thin shim — implementation in apps/cli/prompts/system_prompts.py."""
-    from apps.cli.prompts.system_prompts import build_coding_prompt_lite as _f
-    return _f(user_message)
-
-
-def _build_analysis_prompt_lite(user_message: str) -> str:
-    """Thin shim — implementation in apps/cli/prompts/system_prompts.py."""
-    from apps.cli.prompts.system_prompts import build_analysis_prompt_lite as _f
-    return _f(user_message)
+# Aliased, not wrapped: a wrapper is a different function object from what it
+# calls, so stream_ollama importing the real builders while this module kept
+# wrappers would run two different objects on the CLI and fallback paths.
+from aria_code.apps.cli.prompts.system_prompts import (  # noqa: E402
+    build_analysis_prompt_lite as _build_analysis_prompt_lite,
+    build_analysis_system_prompt as _build_analysis_system_prompt,
+    build_coding_prompt_lite as _build_coding_prompt_lite,
+    build_finance_prompt as _build_finance_prompt,
+    build_prefetched_analysis_prompt as _build_prefetched_analysis_prompt,
+)
 
 
 # NOTE: FINANCE_CHAT_PROMPT is a function now — it injects the current date dynamically.
-def _build_finance_prompt(user_message: str = "") -> str:
-    """Thin shim — implementation in apps/cli/prompts/system_prompts.py."""
-    from apps.cli.prompts.system_prompts import build_finance_prompt as _f
-    return _f(user_message)
+
 
 FINANCE_CHAT_PROMPT = _build_finance_prompt()  # evaluated once at import; rebuilt per stream call
 
@@ -1400,18 +1397,9 @@ FINANCE_CHAT_PROMPT = _build_finance_prompt()  # evaluated once at import; rebui
 # real data via tool calls but don't require writing Python scripts
 # ============================================================================
 
-def _build_analysis_system_prompt() -> str:
-    """Thin shim — implementation in apps/cli/prompts/system_prompts.py."""
-    from apps.cli.prompts.system_prompts import build_analysis_system_prompt as _f
-    return _f()
+
 
 ANALYSIS_SYSTEM_PROMPT = _build_analysis_system_prompt()
-
-
-def _build_prefetched_analysis_prompt(nano: bool = False, user_message: str = "") -> str:
-    """Thin shim — implementation in apps/cli/prompts/system_prompts.py."""
-    from apps.cli.prompts.system_prompts import build_prefetched_analysis_prompt as _f
-    return _f(nano=nano, user_message=user_message)
 
 
 # ── LaTeX → plain-text converter ────────────────────────────────────────────
@@ -1521,14 +1509,9 @@ from aria_code.apps.cli.intent import (
 )
 
 
-def _try_prefetch_sports_data(message: str) -> str:
-    """Attempt to fetch live sports data relevant to the query."""
-    try:
-        from football_data_client import get_sports_context_for_query
-        ctx = get_sports_context_for_query(message)
-        return ctx or ""
-    except Exception:
-        return ""
+from aria_code.apps.cli.handlers.sports_handlers import (  # noqa: E402
+    try_prefetch_sports_data as _try_prefetch_sports_data,
+)
 
 
 
@@ -1572,19 +1555,16 @@ from aria_code.apps.cli.message_processing import (  # noqa: E402
 
 
 
-def _build_broker_context_block() -> str:
-    """Thin shim — implementation in apps/cli/message_processing.py."""
-    from apps.cli.message_processing import build_broker_context_block as _f
-    return _f()
+from aria_code.apps.cli.message_processing import (  # noqa: E402
+    build_broker_context_block as _build_broker_context_block,
+)
 
 
 
 
 
 
-def _try_prefetch_market_data(message: str, history: list = None) -> str:
-    """Thin wrapper — real implementation in apps.cli.handlers.market_handlers."""
-    return _src_prefetch_market_data(message, history)
+_try_prefetch_market_data = _src_prefetch_market_data  # alias, not a wrapper
 
 
 import re as _re_fi
