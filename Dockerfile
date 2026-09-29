@@ -19,5 +19,9 @@ COPY . .
 RUN mkdir -p /root/.aria
 
 ENV PYTHONUNBUFFERED=1
+# The package moved to a src layout. Both roots go on the path for the same
+# reason pyproject's pytest config lists them: the package imports itself by
+# bare names (`from runtime import ...`) as well as `aria_code.*`.
+ENV PYTHONPATH=/aria/src:/aria/src/aria_code
 
-CMD ["python3", "aria_cli.py"]
+CMD ["python3", "src/aria_code/aria_cli.py"]

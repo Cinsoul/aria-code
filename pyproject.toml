@@ -129,6 +129,10 @@ lsp = ["python-lsp-server[all]>=1.10.0"]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.7",
+    # test.yml's pytest job installs the suite through this extra and passes
+    # --timeout; without the plugin pytest rejects the flag with exit code 4
+    # before running anything. ci.yml pip-installs it separately.
+    "pytest-timeout>=2.3.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
 ]
