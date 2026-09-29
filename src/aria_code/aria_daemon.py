@@ -477,6 +477,46 @@ def _maybe_auto_execute(preview_result: dict) -> list[str]:
         return [f"自动执行检查失败，保留为预览: `{exc}`"]
 
 
+
+def gateway_config() -> dict:
+    """The config the daemon hands to the runtime gateway.
+
+    This used to be a dict literal pinned to Ollama:
+
+        {"model": os.environ.get("ARIA_DAEMON_MODEL", "qwen2.5:7b"),
+         "ollama_url": ..., "local_provider": "ollama"}
+
+    so the daemon never saw the user's configuration. Someone running Aria on
+    a Vertex/Gemini model had every alert analysed by a local qwen2.5:7b, and
+    someone with no Ollama at all had the gateway raise on every alert, fall
+    back to the quick summary, and say so only at log level info.
+
+    The gateway itself is fully config-driven — analyze_alert_via_gateway
+    passes model/api_url/ollama_url straight through — so it was only ever the
+    daemon fabricating this.
+
+    Loaded per call rather than cached: the daemon is long-lived, and a config
+    change should reach the next alert without a restart. The two env vars stay
+    as operator overrides (ARIA_DAEMON_MODEL is in this module's env table).
+    """
+    from apps.cli.bootstrap import default_config
+    from apps.cli.config_paths import resolve_paths
+    from packages.aria_services.settings import SettingsService
+
+    paths = resolve_paths()
+    cfg = SettingsService(
+        config_dir=paths.config_dir,
+        config_file=paths.config_file,
+        sessions_dir=paths.sessions_dir,
+        defaults=default_config(),
+    ).load()
+
+    if os.environ.get("ARIA_DAEMON_MODEL"):
+        cfg["model"] = os.environ["ARIA_DAEMON_MODEL"]
+    if os.environ.get("OLLAMA_URL"):
+        cfg["ollama_url"] = os.environ["OLLAMA_URL"]
+    return cfg
+
 async def _run_tradingview_alert(payload: dict) -> str:
     """Handle a TradingView alert webhook job."""
     try:
@@ -535,16 +575,13 @@ async def _run_tradingview_alert(payload: dict) -> str:
     try:
         from apps.channels.intake import analyze_alert_via_gateway
         from apps.channels.tradingview import task_prompt
-        _gw_config = {
-            "model": os.environ.get("ARIA_DAEMON_MODEL", "qwen2.5:7b"),
-            "ollama_url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
-            "local_provider": "ollama",
-        }
         analysis = await asyncio.wait_for(
-            analyze_alert_via_gateway(task_prompt(alert), _gw_config), timeout=90.0
+            analyze_alert_via_gateway(task_prompt(alert), gateway_config()), timeout=90.0
         )
     except Exception as exc:
-        logger.info("gateway analysis unavailable (%s) — using quick summary", exc)
+        # warning, not info: this is a silent capability downgrade — the alert
+        # still gets answered, but by the legacy summary rather than the model.
+        logger.warning("gateway analysis unavailable (%s) — using quick summary", exc)
     if not analysis:
         analysis = await _run_report(symbol)
     return "\n".join(header + preview_lines) + "\n\n" + analysis

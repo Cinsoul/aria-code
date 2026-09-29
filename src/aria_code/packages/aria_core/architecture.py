@@ -60,10 +60,18 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         target_state="A single settings service resolves env, config files, CLI flags, and secrets without leaking credentials.",
         current_state=(
             "packages/aria_services/settings.py exists and apps/cli/config_store.py builds it, but "
-            "aria_cli.py is its only caller — aria_daemon.py, brokers/config.py and "
-            "packages/aria_mcp/server.py each read their own files directly. The service is written; "
-            "adoption is what is missing, which is a different job from the one this layer used to "
-            "describe."
+            "aria_cli.py and aria_daemon.py are its callers. Two of the three sites this entry "
+            "used to name were miscategorised: brokers/config.py owns a different file "
+            "(brokers.json, broker credentials) and already writes it owner-only via "
+            "packages/aria_core/secure_file.py, and packages/aria_mcp/server.py never reads the "
+            "main config at all — it delegates to brokers.config.is_chat_confirm_enabled. The one "
+            "real bypass was aria_daemon.py, which built the runtime gateway's config as a dict "
+            "literal pinned to Ollama and so never saw the user's configuration: a Vertex/Gemini "
+            "user had every channel alert analysed by a local qwen2.5:7b, and a user without "
+            "Ollama had the gateway raise on every alert and degrade to the legacy summary at log "
+            "level info. It now loads through SettingsService per call, keeping "
+            "ARIA_DAEMON_MODEL/OLLAMA_URL as operator overrides; "
+            "tests/test_daemon_gateway_config.py pins it and fails on a hardcoded model name."
         ),
         status=LayerStatus.PARTIAL,
         source_paths=(
@@ -73,8 +81,9 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
             "packages/aria_core/secure_file.py",
         ),
         next_steps=(
-            "Route aria_daemon.py, brokers/config.py and packages/aria_mcp/server.py through the "
-            "settings service instead of reading config files directly.",
+            "Consider a settings-service entry point for brokers.json so brokers/config.py "
+            "stops owning its own load/save pair — it is already secure, so this is "
+            "consolidation rather than a fix.",
         ),
     ),
     ArchitectureLayer(
