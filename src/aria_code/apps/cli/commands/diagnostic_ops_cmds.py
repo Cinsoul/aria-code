@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._ui import print_error
+
 import asyncio
 import json
 import pathlib
@@ -61,9 +63,6 @@ from typing import Dict, Any, Optional
 
 def _test_datasource(*args, **kwargs):
     from aria_cli import _test_datasource as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def _get_ARIA_TOOLS():
     from aria_cli import ARIA_TOOLS as val
@@ -741,7 +740,7 @@ class DiagnosticOpsCommandsMixin:
             from datasources.router import _SOURCE_REGISTRY, DataRouter
             router = DataRouter()
         except ImportError:
-            _print_error("datasources 模块未找到")
+            print_error(self.context, "datasources 模块未找到")
             return
 
         if self.context.has_rich:

@@ -4,7 +4,10 @@ WorkspaceCommandsMixin — Workspace commands: packages, file, project, init, se
 Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's namespace
 by _rebind_mixin_globals() called at module load time.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 from aria_code.packages.aria_core.paths import aria_home
 
 
@@ -54,9 +57,6 @@ def _get_MCP_CONFIG_PATH():
 def _get_SESSIONS_DIR():
     from aria_cli import SESSIONS_DIR as val
     return val
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
-    return fn(*args, **kwargs)
 def _get__HAS_MODEL_CAP():
     from aria_cli import _HAS_MODEL_CAP as val
     return val
@@ -113,7 +113,7 @@ class WorkspaceCommandsMixin:
             from packages.aria_skills import builtin_skill_specs
             from packages.aria_tools import build_registry_from_legacy
         except Exception as exc:
-            _print_error(f"packages facade unavailable: {exc}")
+            print_error(self.context, f"packages facade unavailable: {exc}")
             return
 
         sub = args.strip().lower()

@@ -13,6 +13,8 @@ NameError，而这正是 requires-python = "<3.14,>=3.10" 声明支持的全部�
 全绿。已发布的 4.3.0 同样中招：pip install 后运行 aria-code 直接崩溃。
 """
 
+from ._ui import print_error
+
 import pathlib
 
 
@@ -1105,7 +1107,7 @@ class CoreCommandsMixin:
           2. Remote Aria backend (AWS) — if local not available
           3. Graceful error if both fail
         """
-        from aria_cli import LOCAL_TOOLS, Text, _print_error, execute_aria_tool
+        from aria_cli import LOCAL_TOOLS, Text, execute_aria_tool
         display = label or tool_name
 
         # ── 1. Try LOCAL_TOOLS first (run in executor to avoid blocking) ──
@@ -1160,12 +1162,12 @@ class CoreCommandsMixin:
                 self.context.console.print(f"  [dim]{json.dumps(data, ensure_ascii=False)[:500]}[/dim]" if self.context.has_rich
                               else json.dumps(data, ensure_ascii=False)[:500])
         else:
-            _print_error(f"Failed: {result.get('error', 'No data')}")
+            print_error(self.context, f"Failed: {result.get('error', 'No data')}")
     async def _run_parallel(self, tool_name: str,
                              param_list: list,
                              label_fn=None):
         """Run a tool in parallel for multiple param dicts, display each result."""
-        from aria_cli import LOCAL_TOOLS, _print_error, _print_finance_result, execute_aria_tool
+        from aria_cli import LOCAL_TOOLS, _print_finance_result, execute_aria_tool
         tasks = [
             asyncio.create_task(
                 asyncio.get_event_loop().run_in_executor(
@@ -1179,7 +1181,7 @@ class CoreCommandsMixin:
         for p, r in zip(param_list, results):
             lbl = label_fn(p) if label_fn else tool_name
             if isinstance(r, Exception):
-                _print_error(f"{lbl}: {r}")
+                print_error(self.context, f"{lbl}: {r}")
             else:
                 _print_finance_result(tool_name, r)
     async def _fetch_and_display_finance(self, tool_name: str, params: dict, label: str,
@@ -1831,7 +1833,7 @@ class CoreCommandsMixin:
                 print(f"生成失败: {exc}")
     async def cmd_tv(self, args: str):
         """Print a TradingView chart URL or export a Pine Script strategy."""
-        from aria_cli import _build_tradingview_indicator_readout, _chart_display_label, _copy_text_to_clipboard, _open_path_or_url, _print_error, _resolve_market_arg_symbol, _reveal_path_in_finder, _src_market_snapshot_analysis, _strip_latex, _write_text_companion, make_markdown
+        from aria_cli import _build_tradingview_indicator_readout, _chart_display_label, _copy_text_to_clipboard, _open_path_or_url, _resolve_market_arg_symbol, _reveal_path_in_finder, _src_market_snapshot_analysis, _strip_latex, _write_text_companion, make_markdown
         parts = [p.strip() for p in args.strip().split() if p.strip()]
         open_browser = any(p in {"--open", "-o", "open"} for p in parts)
         export_pine = any(p in {"--pine", "pine", "--strategy", "strategy", "策略"} for p in parts)
@@ -1878,7 +1880,7 @@ class CoreCommandsMixin:
             tv_symbol = tradingview_symbol(symbol)
             url = tradingview_url(symbol, interval=interval)
         except Exception as exc:
-            _print_error(f"TradingView URL 生成失败: {exc}")
+            print_error(self.context, f"TradingView URL 生成失败: {exc}")
             return
 
         if self.context.has_rich:
@@ -1939,7 +1941,7 @@ class CoreCommandsMixin:
                     else:
                         print("Revealed in Finder" if revealed else f"reveal failed: {reveal_err}")
             except Exception as exc:
-                _print_error(f"Pine Script 导出失败: {exc}")
+                print_error(self.context, f"Pine Script 导出失败: {exc}")
                 return
 
         if open_browser and url:
@@ -1979,7 +1981,7 @@ class CoreCommandsMixin:
                /chart BTC-USD 2y
         支持 period: 1m 3m 6m 1y 2y 3y 5y ytd max
         """
-        from aria_cli import _chart_display_label, _display_path, _generate_chart_sync, _print_error, _resolve_market_arg_symbol, sanitize_chart_symbol_args
+        from aria_cli import _chart_display_label, _display_path, _generate_chart_sync, _resolve_market_arg_symbol, sanitize_chart_symbol_args
         _VALID_PERIODS = {"1m","3m","6m","1y","2y","3y","5y","ytd","max",
                           "1mo","3mo","6mo"}
         parts  = args.strip().split()
@@ -2078,10 +2080,10 @@ class CoreCommandsMixin:
                 pass
         else:
             err = result.get("error") or result.get("response", "未知错误")
-            _print_error(f"图表生成失败: {err[:120]}")
+            print_error(self.context, f"图表生成失败: {err[:120]}")
     async def _cmd_chart_multi(self, symbols: list[tuple[str, str]], period: str):
         """Generate a normalized comparison chart plus individual K-line charts."""
-        from aria_cli import _chart_display_label, _display_path, _print_error
+        from aria_cli import _chart_display_label, _display_path
         labels = [_chart_display_label(raw, resolved) for raw, resolved in symbols]
         if self.context.has_rich:
             self.context.console.print(f"\n  [bold]⏺[/bold] compare {' · '.join(labels)} · {period}")
@@ -2125,7 +2127,7 @@ class CoreCommandsMixin:
             else:
                 print(f"  OK comparison chart generated ({elapsed_ms}ms): {path_label}")
         else:
-            _print_error(f"对比图生成失败: {(result.get('error') or 'unknown')[:120]}")
+            print_error(self.context, f"对比图生成失败: {(result.get('error') or 'unknown')[:120]}")
 
         child_artifacts = []
         for raw_symbol, resolved in symbols:
@@ -2150,13 +2152,13 @@ class CoreCommandsMixin:
         Usage: /shortterm
                /shortterm 000333 601138 300750
         """
-        from aria_cli import _print_error
+
         import subprocess
         import sys as _sys
         _base = pathlib.Path(__file__).parent.parent.parent / "research" / "shortterm"
         script = _base / "run_shortterm.py"
         if not script.exists():
-            _print_error(f"短线分析脚本未找到: {script}")
+            print_error(self.context, f"短线分析脚本未找到: {script}")
             return
         codes = args.strip().split()
         cmd   = [_sys.executable, str(script)]
@@ -2168,7 +2170,7 @@ class CoreCommandsMixin:
             print("\n  📊 运行短线分析...\n")
         result = subprocess.run(cmd, text=True, capture_output=False)
         if result.returncode != 0:
-            _print_error("短线分析执行失败，请检查 research/shortterm/")
+            print_error(self.context, "短线分析执行失败，请检查 research/shortterm/")
     async def cmd_longterm(self, args: str):
         """
         运行 A股长线分析（月线级别，3-18个月目标）并输出报告。
@@ -2176,13 +2178,13 @@ class CoreCommandsMixin:
                /longterm --quick   (只分析 core 级标的)
                /longterm 600519 000858
         """
-        from aria_cli import _print_error
+
         import subprocess
         import sys as _sys
         _base = pathlib.Path(__file__).parent.parent.parent / "research" / "longterm"
         script = _base / "run_longterm.py"
         if not script.exists():
-            _print_error(f"长线分析脚本未找到: {script}")
+            print_error(self.context, f"长线分析脚本未找到: {script}")
             return
         parts = args.strip().split()
         cmd   = [_sys.executable, str(script)]
@@ -2197,7 +2199,7 @@ class CoreCommandsMixin:
             print("\n  📈 运行长线分析...\n")
         result = subprocess.run(cmd, text=True, capture_output=False)
         if result.returncode != 0:
-            _print_error("长线分析执行失败，请检查 research/longterm/")
+            print_error(self.context, "长线分析执行失败，请检查 research/longterm/")
     async def cmd_indices(self, args: str):
         """全球主要指数实时行情."""
         from aria_cli import _HAS_MDC, _clean_tool_error_message, _get_mdc
@@ -2436,7 +2438,7 @@ class CoreCommandsMixin:
                /edgar TSLA facts        — 财务事实（收入/利润历史）
                /edgar NVDA insider      — 内幕交易披露 (Form 4)
         """
-        from aria_cli import _fetch_edgar_data, _print_error
+        from aria_cli import _fetch_edgar_data
         parts = args.strip().split()
         if not parts:
             self.context.console.print("  [dim]Usage: /edgar SYMBOL [filings|facts|insider][/dim]" if self.context.has_rich
@@ -2457,7 +2459,7 @@ class CoreCommandsMixin:
             )
 
         if not result:
-            _print_error(f"未找到 {symbol} 的 EDGAR 数据")
+            print_error(self.context, f"未找到 {symbol} 的 EDGAR 数据")
             return
 
         if self.context.has_rich:

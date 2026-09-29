@@ -4,7 +4,10 @@ PortfolioCommandsMixin — Portfolio commands: journal, report, portfolio, apply
 Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's namespace
 by _rebind_mixin_globals() called at module load time.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 
 
 def _detect_lang_for_team(text: str) -> str:
@@ -62,9 +65,6 @@ def _print_verdict_banner(*args, **kwargs):
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
     from aria_cli import _get_mdc as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def report_agent_names(*args, **kwargs):
     from aria_cli import report_agent_names as fn
@@ -1059,7 +1059,7 @@ class PortfolioCommandsMixin:
                     lang=_lang, on_agent_done=_on_agent_done,
                 )
             except Exception as e:
-                _print_error(str(e), "deep")
+                print_error(self.context, str(e), "deep")
                 continue
 
             md = render_tier(result, tier)

@@ -4,7 +4,10 @@ MarketCommandsMixin — Market commands: quote, realty, football, screen, news, 
 Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's namespace
 by _rebind_mixin_globals() called at module load time.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 from typing import Optional, Tuple
 
 
@@ -293,9 +296,6 @@ def _load_data_keys(*args, **kwargs):
     return fn(*args, **kwargs)
 def _render_asset_score(*args, **kwargs):
     from aria_cli import _render_asset_score as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def _render_rental_yield(*args, **kwargs):
     from aria_cli import _render_rental_yield as fn
@@ -1292,13 +1292,13 @@ class MarketCommandsMixin:
                     "symbol": symbol, "market": "US", "period": "1mo"
                 })
             if not result:
-                _print_error(f"{symbol}: 数据服务不可用（API未运行）", "tool")
+                print_error(self.context, f"{symbol}: 数据服务不可用（API未运行）", "tool")
                 continue
             if result.get("success") and result.get("data"):
                 output = format_quote_output(result)
                 self.context.console.print(output)
             else:
-                _print_error(f"Failed: {result.get('error', 'No data')}")
+                print_error(self.context, f"Failed: {result.get('error', 'No data')}")
 
     async def cmd_screen_cn(self, args: str):
         """A股选股筛选器 (local, akshare)."""

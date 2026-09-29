@@ -2,7 +2,10 @@
 
 Extracted from aria_cli.py. Module globals imported lazily inside method bodies.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 
 
 def format_backtest_data_error(
@@ -111,9 +114,6 @@ def _tool_run_command(*args, **kwargs):
     return fn(*args, **kwargs)
 def logger(*args, **kwargs):
     from aria_cli import logger as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def _get__HAS_VAULT():
     from aria_cli import _HAS_VAULT as val
@@ -505,13 +505,13 @@ class BacktestCommandsMixin:
 
         # Guard: execute_aria_tool / REST fallback can return None
         if not result:
-            _print_error("回测服务不可用 (API未运行)  — 先启动后端: cd apps/api && python -m uvicorn src.main:app", "tool")
+            print_error(self.context, "回测服务不可用 (API未运行)  — 先启动后端: cd apps/api && python -m uvicorn src.main:app", "tool")
             return
 
         if result.get("success"):
             d = result.get("data", result)
             if not isinstance(d, dict):
-                _print_error(f"回测结果格式异常: {type(d)}", "tool")
+                print_error(self.context, f"回测结果格式异常: {type(d)}", "tool")
                 return
             src = result.get("_source", "aria")
             if HAS_RICH:
@@ -594,7 +594,7 @@ class BacktestCommandsMixin:
                         self.context.console.print(f"  [#57606a]Equity:[/#57606a] [green]{spark}[/green]" if self.context.has_rich else f"  Equity: {spark}")
             await self._print_backtest_broker_plan(d)
         else:
-            _print_error(f"Backtest failed: {result.get('error', 'Unknown')}", "tool")
+            print_error(self.context, f"Backtest failed: {result.get('error', 'Unknown')}", "tool")
 
     async def _print_backtest_broker_plan(self, backtest_result: dict):
         """Print an account-aware order plan for a successful backtest, if a broker is connected."""
@@ -682,13 +682,13 @@ class BacktestCommandsMixin:
                 try:
                     data = await _do_wf()
                 except Exception as e:
-                    _print_error(str(e), "tool"); return
+                    print_error(self.context, str(e), "tool"); return
         else:
             print(label)
             try:
                 data = await _do_wf()
             except Exception as e:
-                _print_error(str(e), "tool"); return
+                print_error(self.context, str(e), "tool"); return
 
         summary = data.get("summary", data)
         folds = data.get("folds", [])
@@ -2512,7 +2512,7 @@ class BacktestCommandsMixin:
             else:
                 print(f"  ◆ Pro 功能  {_msg}")
         except Exception as e:
-            _print_error(f"ML 回测失败: {e}")
+            print_error(self.context, f"ML 回测失败: {e}")
             import traceback
             self.context.console.print(f"  [dim]{traceback.format_exc()}[/dim]") if self.context.has_rich else print(traceback.format_exc())
 

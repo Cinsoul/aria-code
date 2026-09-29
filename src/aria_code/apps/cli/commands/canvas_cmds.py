@@ -4,7 +4,10 @@ Extracted following the same convention as broker_cmds.py/backtest_cmds.py:
 module globals (self.context.has_rich, self.context.console, etc.) are imported lazily inside each
 method body to avoid circular imports at load time.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 
 
 import json
@@ -37,7 +40,7 @@ class CanvasCommandsMixin:
 
     async def cmd_canvas(self, args: str):
         """实时预览面板: /canvas [stop] —— 启动/停止本地预览服务器，报告和图表生成后会自动在浏览器里实时更新。"""
-        from aria_cli import   _print_error
+
 
         sub = args.strip().lower()
         import preview_server
@@ -62,7 +65,7 @@ class CanvasCommandsMixin:
         try:
             session = await preview_server.start_session()
         except Exception as exc:
-            _print_error(f"预览服务器启动失败: {exc}", "换个端口范围或检查网络配置后重试")
+            print_error(self.context, f"预览服务器启动失败: {exc}", "换个端口范围或检查网络配置后重试")
             return
 
         preview_server.open_in_browser(session.url)
