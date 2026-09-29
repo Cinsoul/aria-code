@@ -29,7 +29,7 @@ def parse_team_args(*args, **kwargs):
     from aria_cli import parse_team_args as fn
     return fn(*args, **kwargs)
 def evaluate_command_policy(*args, **kwargs):
-    from aria_cli import evaluate_command_policy as fn
+    from aria_code.safety import evaluate_command_policy as fn
     return fn(*args, **kwargs)
 def resolve_team_symbols(*args, **kwargs):
     from aria_cli import resolve_team_symbols as fn

@@ -21,7 +21,7 @@ def _get_LOCAL_TOOLS():
     from ..tool_registry import LOCAL_TOOLS as val
     return val
 def _get_provider_key(*args, **kwargs):
-    from aria_cli import _get_provider_key as fn
+    from aria_code.apps.cli.provider_keys import get_provider_key as fn
     return fn(*args, **kwargs)
 def _tool_run_command(*args, **kwargs):
     from aria_cli import _tool_run_command as fn

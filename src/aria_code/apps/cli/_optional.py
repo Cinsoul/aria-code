@@ -23,6 +23,7 @@ __all__ = [
     "validate_broker_config", "supported_broker_types", "get_config_template",
     "BROKERS_CONFIG_PATH",
     "HAS_MODEL_CAP", "get_model_capability",
+    "HAS_MCP", "MCPToolRegistry", "MCP_CONFIG_PATH", "init_mcp",
 ]
 
 try:
@@ -105,3 +106,15 @@ try:
 except ImportError:  # pragma: no cover - exercised only without model_capability
     get_model_capability = None  # type: ignore[assignment]
     HAS_MODEL_CAP = False
+
+
+# ── MCP ──────────────────────────────────────────────────────────────────────
+try:
+    from mcp_client import MCP_CONFIG_PATH, MCPToolRegistry, init_mcp  # noqa: F401
+
+    HAS_MCP = True
+except ImportError:  # pragma: no cover - exercised only without mcp_client
+    MCPToolRegistry = None  # type: ignore[assignment]
+    MCP_CONFIG_PATH = None  # type: ignore[assignment]
+    init_mcp = None  # type: ignore[assignment]
+    HAS_MCP = False

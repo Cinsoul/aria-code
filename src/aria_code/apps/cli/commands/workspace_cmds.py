@@ -21,13 +21,13 @@ import os
 from typing import Dict, Any, Optional
 
 def detect_ollama_models_rich(*args, **kwargs):
-    from aria_cli import detect_ollama_models_rich as fn
+    from aria_code.apps.cli.helpers import detect_ollama_models_rich as fn
     return fn(*args, **kwargs)
 def _load_project_context(*args, **kwargs):
     from aria_code.apps.cli.helpers import _load_project_context as fn
     return fn(*args, **kwargs)
 def _get__HAS_MCP():
-    from aria_cli import _HAS_MCP as val
+    from aria_code.apps.cli._optional import HAS_MCP as val
     return val
 def _get_LOCAL_TOOL_SCHEMAS():
     # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
@@ -35,7 +35,7 @@ def _get_LOCAL_TOOL_SCHEMAS():
     return val
 import pathlib
 def _get_provider_key(*args, **kwargs):
-    from aria_cli import _get_provider_key as fn
+    from aria_code.apps.cli.provider_keys import get_provider_key as fn
     return fn(*args, **kwargs)
 def _get_rich_box():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
@@ -55,7 +55,7 @@ def get_model_capability(*args, **kwargs):
     from aria_code.apps.cli._optional import get_model_capability as fn
     return fn(*args, **kwargs)
 def _get_MCP_CONFIG_PATH():
-    from aria_cli import MCP_CONFIG_PATH as val
+    from aria_code.apps.cli._optional import MCP_CONFIG_PATH as val
     return val
 def _get_SESSIONS_DIR():
     from aria_cli import SESSIONS_DIR as val
@@ -67,7 +67,7 @@ def _strip_markdown_fences(*args, **kwargs):
     from aria_cli import _strip_markdown_fences as fn
     return fn(*args, **kwargs)
 def _load_data_keys(*args, **kwargs):
-    from aria_cli import _load_data_keys as fn
+    from aria_code.apps.cli.provider_keys import load_data_keys as fn
     return fn(*args, **kwargs)
 
 import json

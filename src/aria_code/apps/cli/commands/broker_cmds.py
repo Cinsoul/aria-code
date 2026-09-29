@@ -458,7 +458,7 @@ class BrokerCommandsMixin:
             print(f"已断开: {broker_id}")
 
     async def _cmd_broker_add(self, broker_type: str):
-        from aria_cli import _arrow_select
+        from aria_code.ui.picker import arrow_select as _arrow_select
         from aria_code.apps.cli._optional import supported_broker_types as _supported_broker_types, get_config_template as _get_broker_template, add_broker_config as _add_broker_cfg, BROKERS_CONFIG_PATH as _BROKERS_CONFIG_PATH
         from ui.picker import arrow_select
 
@@ -1145,7 +1145,7 @@ class BrokerCommandsMixin:
 
     async def _prompt_no_broker_action(self) -> None:
         """未配置券商时显示可导航的操作菜单，选择后直接路由到对应功能。"""
-        from aria_cli import _arrow_select
+        from aria_code.ui.picker import arrow_select as _arrow_select
         from aria_code.apps.cli._optional import BROKERS_CONFIG_PATH as _BROKERS_CONFIG_PATH
         from ui.picker import arrow_select
         import subprocess

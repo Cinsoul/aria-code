@@ -11,10 +11,13 @@ globals-rebind for the modules that still rely on it are unaffected.
 
 from __future__ import annotations
 
+import json
 import pathlib
 from typing import Optional
 
 __all__ = [
+    "detect_ollama_models",
+    "detect_ollama_models_rich",
     "_load_project_context",
     "_display_value",
     "_chart_display_label",
@@ -222,3 +225,78 @@ def format_sparkline(prices: list, width: int = 30) -> str:
         idx = int((prices[i] - mn) / rng * (len(blocks) - 1))
         result += blocks[idx]
     return result[:width]
+
+
+def detect_ollama_models(ollama_url: str = "http://localhost:11434") -> list:
+    """Query Ollama /api/tags and return list of available model names.
+
+    Always bypasses HTTP_PROXY so localhost is reached directly even when a
+    system proxy (VPN / clash / surge) is active.
+    """
+    import urllib.request
+    # Force direct connection — bypass any HTTP_PROXY / HTTPS_PROXY env vars
+    _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with _opener.open(f"{ollama_url}/api/tags", timeout=5) as r:
+            data = json.loads(r.read())
+        return [m["name"] for m in data.get("models", [])]
+    except Exception:
+        # Also try 127.0.0.1 if hostname is "localhost" (IPv6 resolution fallback)
+        if "localhost" in ollama_url:
+            try:
+                fallback = ollama_url.replace("localhost", "127.0.0.1")
+                with _opener.open(f"{fallback}/api/tags", timeout=5) as r:
+                    data = json.loads(r.read())
+                return [m["name"] for m in data.get("models", [])]
+            except Exception:
+                pass
+        return []
+
+
+def detect_ollama_models_rich(ollama_url: str = "http://localhost:11434") -> tuple:
+    """Return (models_list, error_str) where each entry in models_list is a dict:
+        {"name": str, "size_label": str, "family": str, "quant": str,
+         "execution": "local" | "remote", "remote_host": str,
+         "context_window": int, "capabilities": list[str]}
+    error_str is None on success, or a short human-readable reason on failure.
+    """
+    import urllib.request
+    _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    def _try(url: str):
+        with _opener.open(f"{url}/api/tags", timeout=5) as r:
+            return json.loads(r.read())
+
+    data = None
+    last_err = None
+    for u in [ollama_url] + ([ollama_url.replace("localhost", "127.0.0.1")]
+                              if "localhost" in ollama_url else []):
+        try:
+            data = _try(u)
+            break
+        except OSError as e:
+            last_err = str(e)
+        except Exception as e:
+            last_err = str(e)
+
+    if data is None:
+        return [], last_err or "connection failed"
+
+    results = []
+    for m in data.get("models", []):
+        det  = m.get("details", {})
+        size = det.get("parameter_size", "")
+        fam  = det.get("family", "")
+        qnt  = det.get("quantization_level", "")
+        results.append({
+            "name":       m["name"],
+            "size_label": size,    # e.g. "1.5B", "7B", "671.0B"
+            "family":     fam,     # e.g. "qwen2", "deepseek2"
+            "quant":      qnt,     # e.g. "Q4_K_M", "MXFP4"
+            "execution":  "remote" if m.get("remote_host") else "local",
+            "remote_model": m.get("remote_model", ""),
+            "remote_host": m.get("remote_host", ""),
+            "context_window": int(det.get("context_length") or 0),
+            "capabilities": list(m.get("capabilities") or []),
+        })
+    return results, None
