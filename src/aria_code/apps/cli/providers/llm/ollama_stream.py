@@ -21,6 +21,52 @@ from .response_cache import (
     cache_set as _cache_set,
 )
 
+# ── names reclaimed from the borrow set ──────────────────────────────────────
+# stream_ollama borrows 45 bare names from aria_cli's module globals. The
+# rebind in aria_cli._rebind_stream_ollama MERGES rather than replaces —
+# `dict(source.__globals__)` then `.update(globals())` — so anything defined
+# here is the base of that merge and aria_cli still wins on conflicts. Adding a
+# name here therefore cannot change the CLI path; it only gives the fallback
+# path (SDK, daemon, any consumer that never imports aria_cli) a name it
+# previously died on.
+#
+# Every name below was checked to be *the same object* aria_cli holds. That
+# check is the whole point, not ceremony:
+#
+#   · _CONFIRM_TOOLS looks importable from apps.cli.tool_executor, but that
+#     module's copy is a placeholder stub — an empty set() — while aria_cli's
+#     is the real {'edit_file', 'multi_edit', ...}. Importing the obvious
+#     source would have silently made every tool skip confirmation. Fail open.
+#   · _apply_tool_approval, _confirm_tool_execution_decision and
+#     _format_tool_summary resolve to different function objects in
+#     tool_executor than in aria_cli, and they sit on the approval path.
+#   · get_ariarc and build_tool_system_prompt differ only by import root
+#     (`ariarc` vs `aria_code.ariarc`) — importing either here would add a
+#     second module object rather than remove a borrow.
+#   · _try_prefetch_market_data exists in handlers.market_handlers, but
+#     aria_cli defines its own.
+#
+# tests/test_ollama_stream_imports.py enforces the identity rule, so this list
+# cannot grow a diverging entry later.
+import json
+import logging
+import os
+import time
+
+logger = logging.getLogger(__name__)
+
+from aria_code.apps.cli.deterministic import _is_broker_intent
+from aria_code.apps.cli.helpers import detect_ollama_models_rich
+from aria_code.apps.cli.model_catalog import (
+    _HAS_MODEL_CAP,
+    get_model_cfg,
+    resolve_model_key,
+)
+from aria_code.apps.cli.prompts.coding import CODING_SYSTEM_PROMPT
+from aria_code.apps.cli.tool_registry import LOCAL_TOOL_SCHEMAS
+from aria_code.apps.cli.tools.market_tools import _HAS_MDC
+from aria_code.ui.console import HAS_RICH, Panel, console
+
 
 def _try_inject_file_paths(_message: str) -> str:
     """Legacy hook retained for the extracted stream implementation.
