@@ -18,6 +18,7 @@ const fs       = require("fs");
 const path     = require("path");
 const readline = require("readline");
 const { resolveAriaPaths, resolveAriaCliPath, ARIA_CLI_RELATIVE_CANDIDATES } = require("../lib/paths");
+const { resolveCloneRef, unreachableRefMessage, missingVersionMessage } = require("../lib/release");
 const { parsePyvenvCfg, venvDriftReason } = require("../lib/venv");
 
 // ── Colours ──────────────────────────────────────────────────────────────────
@@ -69,14 +70,16 @@ const REPO_URL  = "https://github.com/artherahq/aria-code.git";
 // get a stable released version — never a mid-development branch HEAD.
 let PKG_VERSION = "";
 try { PKG_VERSION = (require("../package.json").version || "").trim(); } catch { /* ignore */ }
-const RELEASE_TAG = PKG_VERSION ? `v${PKG_VERSION}` : "";
-// Test-only override for this repo's own CI install-smoke-test: without it,
-// the smoke test packs the npm wrapper from the PR branch but the Python
-// runtime (aria_cli.py etc.) still gets git-cloned from RELEASE_TAG/main —
-// meaning a fix to any runtime file could never turn CI green pre-merge, only
-// after. Real installs never set this; only the CI workflow does.
-const TEST_REF = (process.env.ARIA_INSTALL_TEST_REF || "").trim();
-const CLONE_REF = TEST_REF || RELEASE_TAG;
+// ARIA_INSTALL_TEST_REF is a test-only override for this repo's own CI
+// install-smoke-test: without it the smoke test packs the npm wrapper from the
+// PR branch while the Python runtime still gets cloned from the release tag,
+// so a fix to any runtime file could never turn CI green pre-merge. Real
+// installs never set it.
+const REF = resolveCloneRef({
+  version: PKG_VERSION,
+  testRef: process.env.ARIA_INSTALL_TEST_REF,
+});
+const CLONE_REF = REF.ref;
 const PATHS = resolveAriaPaths();
 const INSTALL_DIR = PATHS.installDir;
 const INFO_FILE   = PATHS.infoFile;
@@ -306,26 +309,33 @@ function ensureRepo() {
       }
     }
     if (!moved) {
-      const r = run("git", ["-C", INSTALL_DIR, "pull", "--ff-only"]);
-      if (r.status !== 0) warn("update failed — using existing version");
-      else ok("Repository up to date");
+      // No `git pull` fallback: the default branch is not what this package
+      // pins to. If the checkout already *is* the pinned ref we are fine
+      // offline; anything else is a failed install, not a silent downgrade to
+      // unreleased code.
+      const at = run("git", ["-C", INSTALL_DIR, "rev-parse", "HEAD"], { silent: true });
+      const want = run("git", ["-C", INSTALL_DIR, "rev-parse", `${CLONE_REF}^{commit}`], { silent: true });
+      const same = at.status === 0 && want.status === 0
+        && String(at.stdout).trim() === String(want.stdout).trim();
+      if (same) {
+        ok(`Already at ${CLONE_REF}`);
+      } else {
+        err(unreachableRefMessage(CLONE_REF, REPO_URL));
+        process.exit(1);
+      }
     }
   } else {
     info(`Cloning Aria Code into ${INSTALL_DIR} …`);
-    let r = { status: 1 };
-    if (CLONE_REF) {
-      r = run("git", ["clone", "--depth=1", "--branch", CLONE_REF, REPO_URL, INSTALL_DIR]);
-      if (r.status === 0) ok(`Cloned ${CLONE_REF} to ${INSTALL_DIR}`);
-      else warn(`Ref ${CLONE_REF} not on remote yet — falling back to default branch`);
+    if (!CLONE_REF) {
+      err(missingVersionMessage());
+      process.exit(1);
     }
+    const r = run("git", ["clone", "--depth=1", "--branch", CLONE_REF, REPO_URL, INSTALL_DIR]);
     if (r.status !== 0) {
-      r = run("git", ["clone", "--depth=1", REPO_URL, INSTALL_DIR]);
-      if (r.status !== 0) {
-        err(`git clone failed. Try manually:\n  git clone ${REPO_URL} ${INSTALL_DIR}`);
-        process.exit(1);
-      }
-      ok(`Cloned to ${INSTALL_DIR}`);
+      err(unreachableRefMessage(CLONE_REF, REPO_URL));
+      process.exit(1);
     }
+    ok(`Cloned ${CLONE_REF} to ${INSTALL_DIR}`);
   }
 }
 

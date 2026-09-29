@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # ancestry check below needs real history
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -25,6 +27,23 @@ jobs:
             python scripts/bump_version.py --check "${{ github.ref_name }}"
           else
             python scripts/bump_version.py --check ${{ github.event.inputs.version }}
+          fi
+
+      # The version strings agreeing with the tag says nothing about *where*
+      # the tag is. v4.4.2 passed the check above and was published from a
+      # branch that never merged to main; main and the release line then drifted
+      # for a month, and 25 shipped src/aria_code modules ended up existing only
+      # in what users install. A release must be code main actually has.
+      - name: the commit being released must be on main
+        run: |
+          git fetch --no-tags --depth=0 origin +refs/heads/main:refs/remotes/origin/main
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "OK: $(git rev-parse --short HEAD) is on origin/main"
+          else
+            echo "::error::Refusing to publish. $(git rev-parse --short HEAD) is not an"
+            echo "::error::ancestor of origin/main, so this release would ship code that"
+            echo "::error::the main line does not contain. Merge to main and tag there."
+            exit 1
           fi
 
   create-release:
