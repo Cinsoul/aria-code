@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 RUN pip install --no-cache-dir fastapi uvicorn[standard] websockets httpx
 
-COPY aria_relay_server.py .
+# Moved with the src-layout migration. COPY of a missing path is a hard
+# build failure, not a runtime one. The module is self-contained
+# (stdlib + httpx + fastapi), so it still ships on its own.
+COPY src/aria_code/aria_relay_server.py .
 
 ENV PYTHONUNBUFFERED=1
 
