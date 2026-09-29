@@ -14,8 +14,13 @@ license = { text = "BUSL-1.1" }
 # fails deep in the dependency tree on a numba source build — an error that
 # names neither aria-code nor pandas_ta. With it, pip refuses up front with a
 # clear "requires a different Python" message. Verified 3.13 installs and runs
-# (`aria-code --version` → 4.2.0); raise the bound once numba ships 3.14 wheels.
-requires-python = ">=3.10"
+# (`aria-code --version` → 4.4.2); raise the bound once numba ships 3.14 wheels.
+#
+# The bound was added in 1b2ca47 and silently dropped again in 4b46f32, a CI
+# commit about ruff and pytest paths, which left this comment sitting above a
+# line that no longer did what it says. tests/test_packaging_constraints.py now
+# fails if the upper bound goes missing.
+requires-python = ">=3.10,<3.14"
 keywords = ["ai", "llm", "coding-agent", "research", "finance", "terminal", "cli"]
 classifiers = [
     "Development Status :: 4 - Beta",
