@@ -201,7 +201,14 @@ def evaluate_command_policy(
     try:
         selected_mode = PermissionMode(mode)
     except ValueError:
-        selected_mode = PermissionMode.WORKSPACE_WRITE
+        # Fail closed. An unrecognised mode used to resolve to WORKSPACE_WRITE,
+        # which is more permissive than READ_ONLY, not less: under read-only a
+        # write command is a hard block, while under workspace-write it is a
+        # block the user can unlock by approving. Resolving an invalid value to
+        # the laxer of the two turns a typo — or a caller passing a *policy*
+        # name into the *mode* slot — into an approval prompt that should never
+        # have been offered.
+        selected_mode = PermissionMode.READ_ONLY
 
     risk = classify_command_risk(normalized)
     network = command_uses_network(normalized)

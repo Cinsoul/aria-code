@@ -65,7 +65,16 @@ class SafetyService:
 
     def privacy(self):
         """Current PrivacySettings derived from config."""
-        from privacy import PrivacySettings
+        # Package-qualified on purpose. The bare `privacy` and the packaged
+        # `aria_code.privacy` are distinct module objects with distinct class
+        # objects, and every other caller in the tree uses the packaged form —
+        # importing it bare here handed those callers a PrivacySettings that
+        # was not the PrivacySettings they compare against.
+        #
+        # The trading helpers below stay bare precisely because the opposite is
+        # true there: every brokers.trading caller in the tree is bare, so the
+        # packaged form is what would split the class.
+        from aria_code.privacy import PrivacySettings
         return PrivacySettings.from_config(self._config)
 
     # ── broker / trading risk (capability: audit — trading is the audited

@@ -5742,7 +5742,8 @@ class ArtheraTerminal:
         if _os.environ.get("ARIA_NO_TELEMETRY"):
             return
         try:
-            _settings = PrivacySettings.from_config(self.config)
+            from aria_code.safety import SafetyService
+            _settings = SafetyService(self.config).privacy()
             _rec = FeedbackRecord.create(
                 rating=rating,
                 message=(message or "")[:500],

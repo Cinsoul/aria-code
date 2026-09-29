@@ -104,7 +104,12 @@ def tool_run_command(
     decision = evaluate_command_policy(
         command,
         effective_policy,
-        mode=params.get("permission_mode", "safe"),
+        # "safe" is a *policy* name, not a mode — it never matched
+        # PermissionMode and silently resolved to workspace-write. Both
+        # executors supply a real mode, so this default is only reached
+        # by a caller that bypasses them; read-only is the right answer
+        # there.
+        mode=params.get("permission_mode", "read-only"),
         network_enabled=bool(params.get("network_enabled", True)),
     )
     command = decision.normalized_command
