@@ -1,7 +1,7 @@
 """Tests for runtime.subagent background task system."""
 
 import pytest
-from aria_code.runtime.subagent import (
+from runtime.subagent import (
     _TASKS,
     SubagentTask,
     tool_spawn_task,

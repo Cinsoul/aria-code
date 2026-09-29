@@ -41,8 +41,9 @@ class CanvasCommandsMixin:
     async def cmd_canvas(self, args: str):
         """实时预览面板: /canvas [stop] —— 启动/停止本地预览服务器，报告和图表生成后会自动在浏览器里实时更新。"""
 
-
         sub = args.strip().lower()
+        # Bare, not packaged: the two roots are distinct module objects, the
+        # rest of the tree uses this form, and it is what the tests patch.
         import preview_server
 
         if sub == "stop":

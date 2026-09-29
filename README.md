@@ -18,10 +18,21 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=flat-square&logo=npm&label=npm" alt="npm version"/></a>
-  <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=flat-square&logo=pypi&label=PyPI" alt="PyPI version"/></a>
-  <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI status"/></a>
-  <img src="https://img.shields.io/badge/license-BSL%201.1-64748b?style=flat-square" alt="BSL 1.1 license"/>
+  <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=for-the-badge&logo=npm&color=cb3837&label=npm" alt="npm"/></a>
+  <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI&color=3775A9" alt="PyPI"/></a>
+  <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI" alt="CI"/></a>
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="python"/>
+  <img src="https://img.shields.io/badge/Ollama-Local_LLM-black?style=for-the-badge&logo=llama&logoColor=white" alt="ollama"/>
+  <img src="https://img.shields.io/badge/Providers-19+_Cloud-f59e0b?style=for-the-badge" alt="providers"/>
+  <img src="https://img.shields.io/badge/License-BSL%201.1-f59e0b?style=for-the-badge" alt="license"/>
+  <img src="https://img.shields.io/github/stars/artherahq/aria-code?style=for-the-badge&color=f59e0b" alt="stars"/>
+</p>
+
+<h1 align="center">Aria Code</h1>
+
+<p align="center">
+  <b>General-purpose AI product reviewer and coding agent</b><br>
+  <sub>Review products · Understand repositories · Write and verify code · Optional finance capabilities</sub>
 </p>
 
 <p align="center">
@@ -42,7 +53,7 @@
 
 ## What is Aria Code?
 
-Aria Code is a **terminal-first AI coding and research agent**. It can work with project files and developer tools, and it also offers domain tools for financial research and connected business workflows such as warehouse analysis. Local models are an option for tasks that can run offline; live data and cloud models require network access.
+Aria Code is a **terminal-first product and software-engineering agent**. It can review an uploaded product, understand an existing repository, find correctness and security risks, plan improvements, implement features, and verify code across common stacks. Financial and quantitative research remain available as optional domain capabilities rather than defining the default experience.
 
 ```
 $ aria-code
@@ -251,7 +262,7 @@ Available extras: `cn` · `crypto` · `charts` · `data` · `files` · `web` ·
 git clone https://github.com/artherahq/aria-code.git
 cd aria-code
 uv venv && uv pip install -e ".[full]"   # uv (fast); or use python -m venv + pip
-python3 aria_cli.py
+aria-code
 ```
 
 ### 🇨🇳 China / behind a firewall (network timeouts)
@@ -335,6 +346,31 @@ Aria Code has a full keyboard shortcut system powered by `prompt_toolkit`:
 | `Ctrl+C` | Cancel current response / clear input |
 | `Ctrl+D` | Exit Aria |
 | `Esc` | Interrupt streaming response |
+
+### Uploaded project review service
+
+Aria Code can also run as an internal, read-only reviewer behind the Arthera
+API gateway. It accepts bounded `.zip`, `.tar`, `.tar.gz`, or `.tgz` source
+archives, skips sensitive and generated files, and never executes uploaded
+code or installs its dependencies.
+
+```bash
+pip install -e '.[service]'
+export ARIA_CODE_REVIEW_TOKEN='use-a-long-random-shared-token'
+uvicorn aria_code.project_review_server:app --host 0.0.0.0 --port 8787
+```
+
+The public client uploads to Arthera at `POST /api/v2/aria-code/project-reviews`;
+clients must never receive the internal review token. Authenticated coding runs
+can also import an archive through `POST /api/v2/aria-code/workspaces`. The
+internal service expands it into a tenant-bound, expiring workspace with
+execution and network access disabled. Its initial tool profile is read-only:
+list files, read text, and search code. Coding agents may stage a complete text
+change and receive a unified diff, but that proposal cannot touch the source
+tree until the Arthera control plane verifies a matching one-time approval.
+Applied changes retain an integrity-checked rollback checkpoint. Mount
+`ARIA_CODE_WORKSPACE_ROOT` on a private persistent volume and run the service
+with `ARIA_RUNTIME_SCOPE=remote`.
 
 ### Input Modes
 
@@ -574,7 +610,7 @@ Your Feishu message
 ### Mode A: Relay (Recommended)
 
 ```bash
-python3 setup_wizard.py
+python3 -m aria_code.setup_wizard
 # Select "Feishu relay mode"
 # Output: ✅ Your Client ID: ARIA-xxxxxxxx-xxxx
 ```
@@ -724,28 +760,24 @@ python3 aria_daemon.py start
 
 ```
 aria-code/
-├── aria_cli.py               # Main CLI + REPL (keyboard shortcuts, ! shell, @ context)
-├── aria_daemon.py            # Background daemon + scheduler
-├── market_data_client.py     # Unified market data (Finnhub primary for US)
-├── setup_wizard.py           # Bilingual setup wizard (19 providers)
-│
-├── apps/cli/
-│   ├── i18n.py               # Language auto-detection + UI string translations
-│   ├── commands/
-│   │   └── model_cmds.py     # /model /apikey /providers (19 cloud providers)
-│   ├── prompts/
-│   │   └── coding.py         # Code generation prompts (end_date fix, akshare fallback)
-│   └── tools/
-│       └── market_tools.py   # Market data tools (Finnhub dp field)
-│
-├── ui/
-│   ├── banner.py             # Bilingual banner (i18n aware)
-│   └── completer.py          # Fuzzy autocomplete: / commands · @ context · ! history
-│
-├── providers/llm/            # LLM adapters (19+ cloud endpoints)
-├── agents/financial/         # Fundamental / Technical / Macro / Risk / Synthesis
-├── brokers/                  # CN (Futu/Longbridge/Tiger) + Intl (IBKR/Alpaca)
-└── datasources/sources/      # yfinance · akshare · FRED · EDGAR · Finnhub
+└── src/aria_code/             # Main package
+    ├── aria_cli.py            # CLI core (session state, slash-command dispatch)
+    ├── aria_mcp_server.py     # MCP server entry point
+    ├── apps/cli/
+    │   ├── i18n.py            # Language auto-detection + UI string translations
+    │   ├── commands/
+    │   │   └── model_cmds.py  # /model /apikey /providers (19 cloud providers)
+    │   ├── prompts/
+    │   │   └── coding.py      # Code generation prompts (end_date fix, akshare fallback)
+    │   └── tools/
+    │       └── market_tools.py # Market data tools (Finnhub dp field)
+    ├── ui/
+    │   ├── banner.py          # Bilingual banner (i18n aware)
+    │   └── completer.py       # Fuzzy autocomplete: / commands · @ context · ! history
+    ├── providers/llm/         # LLM adapters (19+ cloud endpoints)
+    ├── agents/financial/      # Fundamental / Technical / Macro / Risk / Synthesis
+    ├── brokers/                # CN (Futu/Longbridge/Tiger) + Intl (IBKR/Alpaca)
+    └── datasources/sources/   # yfinance · akshare · FRED · EDGAR · Finnhub
 ```
 
 ---

@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional
 
 def _arrow_select(*args, **kwargs):
     # Re-exported by aria_cli; imported from its own module here.
-    from aria_code.ui.picker import arrow_select as fn
+    from ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def get_model_cfg(*args, **kwargs):
     from ..model_catalog import get_model_cfg as fn

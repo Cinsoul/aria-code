@@ -411,7 +411,7 @@ class TestLocalFinanceTools:
         # Patch out both yfinance and akshare
         _yf_orig  = sys.modules.get("yfinance")
         _ak_orig  = sys.modules.get("akshare")
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         _orig_yf  = lft._HAS_YF
         _orig_ak  = lft._HAS_AK
         lft._HAS_YF = False
@@ -448,7 +448,7 @@ class TestLocalLLMProvider:
         models happen to be installed on the current machine.
         """
         from unittest.mock import patch
-        import local_llm_provider
+        from aria_code import local_llm_provider
         from local_llm_provider import LocalLLMProvider
         with patch.object(local_llm_provider, "resolve_model_sync",
                           return_value="qwen2.5-coder:7b"):
@@ -596,19 +596,22 @@ class TestAliyunDataClient:
         import pathlib
         from unittest.mock import patch
 
-        tmp = tempfile.mkdtemp()
-        config_path = pathlib.Path(tmp) / "config.json"
+        # A context manager, not tempfile.mkdtemp(): the bare call never
+        # cleans up, and 52 of these config.json directories had piled up in
+        # $TMPDIR. This class is pytest-style, so it has no addCleanup.
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = pathlib.Path(tmp) / "config.json"
 
-        with patch("aliyun_data_client._cfg_path", return_value=str(config_path)):
-            from aliyun_data_client import save_cloud_config, _load_cloud_config, AliyunDataClient
-            save_cloud_config(cloud_url="http://test-server:9000")
-            AliyunDataClient.reset()
-            cfg = _load_cloud_config()
-            # patch is in effect — config file should now contain our URL
-            assert config_path.exists()
-            import json as _json
-            saved = _json.loads(config_path.read_text())
-            assert saved["cloud_url"] == "http://test-server:9000"
+            with patch("aria_code.aliyun_data_client._cfg_path", return_value=str(config_path)):
+                from aliyun_data_client import save_cloud_config, _load_cloud_config, AliyunDataClient
+                save_cloud_config(cloud_url="http://test-server:9000")
+                AliyunDataClient.reset()
+                _load_cloud_config()
+                # patch is in effect — config file should now contain our URL
+                assert config_path.exists()
+                import json as _json
+                saved = _json.loads(config_path.read_text())
+                assert saved["cloud_url"] == "http://test-server:9000"
 
 
 # ===========================================================================
@@ -621,18 +624,18 @@ class TestNewFinanceTools:
 
     def _patch_cloud_off(self):
         """Temporarily disable cloud client for fallback testing."""
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         orig = lft._HAS_CLOUD
         lft._HAS_CLOUD = False
         return orig
 
     def _restore_cloud(self, orig):
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         lft._HAS_CLOUD = orig
 
     def test_get_ai_signal_local_fallback(self):
         """When cloud is off, get_ai_signal should still return a valid signal."""
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         orig = self._patch_cloud_off()
         try:
             # Patch _calculate_factors to avoid network
@@ -657,7 +660,7 @@ class TestNewFinanceTools:
 
     def test_get_market_insights_local_fallback(self):
         """Without cloud, get_market_insights should return factor summaries."""
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         orig = self._patch_cloud_off()
         try:
             orig_factors = lft._calculate_factors
@@ -678,7 +681,7 @@ class TestNewFinanceTools:
 
     def test_get_predictions_local_fallback(self):
         """Without cloud, get_predictions should return momentum-based predictions."""
-        import local_finance_tools as lft
+        from aria_code import local_finance_tools as lft
         orig = self._patch_cloud_off()
         try:
             orig_factors = lft._calculate_factors

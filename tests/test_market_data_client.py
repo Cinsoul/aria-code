@@ -17,7 +17,7 @@ def _isolate_market_data(monkeypatch):
     - block the no-proxy fallback session so a reachable Eastmoney host can't
       turn a 'should fail' case into a flaky pass via a real network call.
     """
-    import market_data_client
+    from aria_code import market_data_client
 
     class _NoNetSession:
         def get(self, *_a, **_k):

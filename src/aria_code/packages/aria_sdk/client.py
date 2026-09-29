@@ -12,8 +12,8 @@ import uuid
 from dataclasses import replace
 from typing import AsyncGenerator
 
-from aria_code.apps.cli.deterministic import run_deterministic_chain
-from aria_code.apps.cli.providers.base import (
+from apps.cli.deterministic import run_deterministic_chain
+from apps.cli.providers.base import (
     LLMDone,
     LLMStatus,
     LLMThinking,
@@ -21,7 +21,7 @@ from aria_code.apps.cli.providers.base import (
     LLMToolCall,
     LLMToolResult,
 )
-from aria_code.runtime import (
+from runtime import (
     AgentEventCancelled,
     AgentEventComplete,
     AgentEventError,

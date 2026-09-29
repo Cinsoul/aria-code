@@ -1,6 +1,6 @@
 import pytest
 
-import apps.cli.commands.model_cmds as model_cmds
+import aria_code.apps.cli.commands.model_cmds as model_cmds
 
 
 class _Terminal:

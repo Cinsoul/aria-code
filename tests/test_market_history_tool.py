@@ -39,7 +39,7 @@ def _series(n):
 
 @pytest.fixture
 def _patch_mdc(monkeypatch):
-    import apps.cli.tools.market_tools as mt
+    import aria_code.apps.cli.tools.market_tools as mt
 
     def _install(fake):
         # The tool now routes through DataService; wrap the fake MDC in a real

@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 logger = logging.getLogger(__name__)
 

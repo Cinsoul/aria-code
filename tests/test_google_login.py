@@ -211,7 +211,7 @@ class CmdLoginRoutingTests(unittest.IsolatedAsyncioTestCase):
 
     def _handler(self):
         from aria_code.apps.cli.commands.auth_cmds import AuthCommandsMixin
-        from aria_code.apps.cli.context import AriaContext
+        from apps.cli.context import AriaContext
 
         handler = AuthCommandsMixin()
         handler.context = AriaContext(console=None, has_rich=False)

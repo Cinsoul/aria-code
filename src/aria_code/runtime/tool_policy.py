@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Literal
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 PolicyVerdict = Literal["allow", "deny", "ask", "default"]
 

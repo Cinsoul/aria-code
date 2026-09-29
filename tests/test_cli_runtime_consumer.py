@@ -1,11 +1,11 @@
 import pytest
 
-from aria_code.apps.cli.runtime_consumer import (
+from apps.cli.runtime_consumer import (
     TerminalApprovalEventConsumer,
     TerminalRuntimeEventConsumer,
     TurnPhase,
 )
-from aria_code.runtime import AgentEventStatus, AgentEventToken, AgentEventToolCall, AgentEventToolResult, ApprovalDecision
+from runtime import AgentEventStatus, AgentEventToken, AgentEventToolCall, AgentEventToolResult, ApprovalDecision
 
 
 class _Console:

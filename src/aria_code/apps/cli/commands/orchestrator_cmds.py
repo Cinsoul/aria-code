@@ -66,8 +66,8 @@ class OrchestratorCommandsMixin:
     async def cmd_route(self, args: str):
         """Dynamic Agent Routing (Orchestrator) using LLM and interactive streaming."""
         from aria_code.runtime.orchestrator import dynamic_agent_orchestration
-        from aria_code.apps.cli.providers.base import ConfiguredProvider
-        from aria_code.agents.registry import get_registry
+        from apps.cli.providers.base import ConfiguredProvider
+        from agents.registry import get_registry
         
         request = args.strip()
         if not request:

@@ -105,7 +105,7 @@ class TradingKillSwitchWorks(unittest.TestCase):
                 os.environ[k] = v
 
     def _documented_var(self) -> str:
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
         names = ENV_NAME.findall(SafetyService.trading_dry_run.__doc__ or "")
         self.assertTrue(names, "trading_dry_run() documents no env var")
         # Exactly one: the docstring deliberately describes the old dead name
@@ -114,7 +114,7 @@ class TradingKillSwitchWorks(unittest.TestCase):
         return names[0]
 
     def test_documented_switch_freezes_a_live_account(self):
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
         svc = SafetyService({"mode": "live"})
         os.environ.pop("ARIA_DRY_RUN", None)
         os.environ.pop("ARIA_TRADING_DRY_RUN", None)

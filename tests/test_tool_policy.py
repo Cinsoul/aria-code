@@ -10,7 +10,7 @@ from unittest.mock import patch
 def tmp_policy_file(tmp_path, monkeypatch):
     """Patch _policy_file() to use a temp path so tests don't touch ~/.arthera."""
     policy_path = tmp_path / "tool_policy.json"
-    import runtime.tool_policy as _tp
+    import aria_code.runtime.tool_policy as _tp
     monkeypatch.setattr(_tp, "_policy_file", lambda: policy_path)
     return policy_path
 

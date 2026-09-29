@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, Optional
 
-from aria_code.apps.cli.tradingview_bridge import (
+from apps.cli.tradingview_bridge import (
     _alert_dedup_key as alert_dedup_key,
     _expected_webhook_secret,
     parse_tradingview_alert,

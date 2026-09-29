@@ -176,7 +176,7 @@ class BaseAgent(ABC):
         _lang_rule = self._LANG_RULES.get(self.lang, self._LANG_RULES["zh"])
         _data_warn = self._data_guard(quote or {})
         system = system + self._TIME_SENSITIVE_FACT_POLICY + _lang_rule + _data_warn
-        from aria_code.providers.llm.base import Message
+        from providers.llm.base import Message
 
         # 自动注入 DAG pipeline 中的 upstream context
         if hasattr(self, "_current_data") and self._current_data:
@@ -266,7 +266,7 @@ class BaseAgent(ABC):
                                 "name": match.group(1),
                                 "args": args_dict
                             })
-                        except:
+                        except Exception:
                             pass
 
             if not tool_calls:

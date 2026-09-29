@@ -20,7 +20,7 @@ import argparse
 import asyncio
 import sys
 
-from aria_code.agents.team import AgentTeam
+from agents.team import AgentTeam
 from aria_code.agents.warehouse import WAREHOUSE_SCHEME, WAREHOUSE_TEAM
 from aria_code.agents.warehouse.dashboard import save_report
 from aria_code.agents.warehouse.local_snapshot import load_snapshot_from_path

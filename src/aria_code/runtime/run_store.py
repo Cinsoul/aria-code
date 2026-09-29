@@ -19,7 +19,7 @@ from .run_state import (
     normalize_run_status,
     require_transition,
 )
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 _SECRET_KEYS = {

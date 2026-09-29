@@ -168,7 +168,7 @@ def test_thread_id_for_groups_by_category_and_topic():
 async def test_write_artifact_metadata_notifies_active_session(tmp_path, monkeypatch):
     from artifacts import create_user_artifact, write_artifact_metadata
 
-    monkeypatch.setattr("artifacts.user_generated_dir", lambda create=True: tmp_path)
+    monkeypatch.setattr("aria_code.artifacts.user_generated_dir", lambda create=True: tmp_path)
     session = await preview_server.start_session()
 
     record = create_user_artifact("reports/market", "AAPL", "AAPL_market_report", ".html")
@@ -186,7 +186,7 @@ def test_write_artifact_metadata_is_noop_safe_without_session(tmp_path, monkeypa
     is a plain sync function callable from anywhere)."""
     from artifacts import create_user_artifact, write_artifact_metadata
 
-    monkeypatch.setattr("artifacts.user_generated_dir", lambda create=True: tmp_path)
+    monkeypatch.setattr("aria_code.artifacts.user_generated_dir", lambda create=True: tmp_path)
     assert preview_server.get_active_session() is None
 
     record = create_user_artifact("reports/market", "AAPL", "AAPL_market_report", ".html")

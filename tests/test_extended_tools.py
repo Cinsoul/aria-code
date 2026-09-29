@@ -3,7 +3,7 @@ tests/test_extended_tools.py — Unit tests for Slack, Feishu, TradingView, Quic
 """
 
 import pytest
-from aria_code.tools.extended_tools import (
+from tools.extended_tools import (
     tool_send_slack_notification,
     tool_push_feishu_card,
     tool_parse_tradingview_alert,

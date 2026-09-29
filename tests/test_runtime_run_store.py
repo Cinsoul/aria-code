@@ -6,7 +6,7 @@ import socket
 
 import pytest
 
-from aria_code.runtime import (
+from runtime import (
     InvalidRunTransition,
     RunStatus,
     RunStore,

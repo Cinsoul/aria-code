@@ -20,7 +20,7 @@ from typing import Optional
 import pandas as pd
 
 from ..base import BaseDataSource, FundamentalsResult, HistoryResult, QuoteResult
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 logger = logging.getLogger(__name__)
 

@@ -75,7 +75,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 def _resolve_aria_home() -> Path:

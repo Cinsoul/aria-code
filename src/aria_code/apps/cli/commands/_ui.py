@@ -60,7 +60,7 @@ def print_error(context: Any, msg: str, hint: str = "") -> None:
     ``has_rich``; the renderer already falls back to plain print when console is
     None, so a context built without one still works.
     """
-    from aria_code.ui.render.output import print_error as _render
+    from ui.render.output import print_error as _render
 
     _render(
         msg,

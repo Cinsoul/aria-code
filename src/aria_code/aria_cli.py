@@ -105,7 +105,8 @@ if TYPE_CHECKING:
     from brokers.base import AccountInfo
 
 from aria_code.apps.cli.plotly_html import plotly_script_tag
-from aria_code.apps.cli.bootstrap import (
+from apps.cli.bootstrap import (
+    DEFAULT_MODEL,
     default_config,
     disable_broken_proxy as _disable_broken_proxy,
     initialize_cli_environment,
@@ -118,8 +119,8 @@ from aria_code.apps.cli.lifecycle_hooks import run_event_hook
 initialize_cli_environment()
 
 from aria_code.change_store import ChangeConflictError, GLOBAL_CHANGE_STORE
-from aria_code.safety import evaluate_command_policy
-from aria_code.plan_utils import parse_plan_steps
+from safety import evaluate_command_policy
+from plan_utils import parse_plan_steps
 from aria_code.privacy import FeedbackRecord, FeedbackStore, PrivacySettings
 from aria_code.apps.cli.session_store import SessionManager
 from aria_code.apps.cli.turn_planning import (
@@ -130,7 +131,7 @@ from aria_code.apps.cli.turn_planning import (
     should_decompose,
 )
 from aria_code.apps.cli.prompt_assembly import build_base_message, should_prepend_file_tool_hint, with_ml_signal_prefix
-from aria_code.runtime import (
+from runtime import (
     AgentErrorPresentation,
     AgentTurnEnvelope,
     AgentTurnState,
@@ -151,10 +152,10 @@ except ImportError:
     class RunStatus:  # type: ignore[no-redef]  # pragma: no cover - fallback until runtime/run_state.py lands
         PLANNING = RUNNING = WAITING_APPROVAL = VERIFYING = "unavailable"
         SUCCEEDED = FAILED = CANCELLED = INTERRUPTED = "unavailable"
-from aria_code.runtime.tool_policy import check_tool_policy
-from aria_code.apps.cli.plan_mode import PlanModeState
+from runtime.tool_policy import check_tool_policy
+from apps.cli.plan_mode import PlanModeState
 from aria_code.workspace import VerificationPlanner, WorkspaceFiles, WorkspaceSecurity
-from aria_code.apps.cli.commands.catalog import VISIBLE_SLASH_COMMANDS
+from apps.cli.commands.catalog import VISIBLE_SLASH_COMMANDS
 from aria_code.apps.cli.commands.market_context import build_analyze_context, build_analyze_prompt
 from aria_code.apps.cli.commands.market import (
     parse_analysis_args,
@@ -164,18 +165,18 @@ from aria_code.apps.cli.commands.market import (
     sanitize_chart_symbol_args,
     try_top_level_route,
 )
-from aria_code.apps.cli.providers.base import AriaSSEProvider, ConfiguredProvider, OllamaProvider
-from aria_code.apps.cli.preflight import build_intent_preflight, format_preflight_plain
-from aria_code.apps.cli.runtime_consumer import (
+from apps.cli.providers.base import AriaSSEProvider, ConfiguredProvider, OllamaProvider
+from apps.cli.preflight import build_intent_preflight, format_preflight_plain
+from apps.cli.runtime_consumer import (
     TerminalApprovalEventConsumer,
     TerminalRuntimeEventConsumer,
     TurnPhase,
 )
-from aria_code.packages.aria_sdk.streaming import stream_provider_result
+from packages.aria_sdk.streaming import stream_provider_result
 # broker_cmds / model_cmds / workspace_cmds 的 mixin 方法裸名调用 aria_home()。
 # 它们各自模块顶部也 import 了它，但 _rebind_mixin_globals 把方法的 __globals__
 # 整个换成本模块的，那层导入在运行期不参与解析——只有这里这一份算数。
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 from aria_code.ui.render.market import print_quote_result, print_ta_result
 from aria_code.apps.cli.commands.report import (
     all_agents_failed,
@@ -189,7 +190,7 @@ from aria_code.apps.cli.commands.report import (
     save_markdown_report,
     update_report_index,
 )
-from aria_code.apps.cli.commands.team import (
+from apps.cli.commands.team import (
     parse_team_args,
     resolve_team_symbols,
     run_deep_cli,
@@ -197,7 +198,7 @@ from aria_code.apps.cli.commands.team import (
     save_team_report,
     team_agent_names,
 )
-from aria_code.ui.render.team import (
+from ui.render.team import (
     VERDICT_STYLE,
     build_team_table_rows,
     calc_column_widths,
@@ -230,6 +231,7 @@ from aria_code.ui.render.finance import (
 )
 from aria_code.apps.cli.direct import dispatch_direct_command, is_watchable_direct_command
 from aria_code.apps.cli.tools.system_tools import (
+    tool_ask_user    as _src_ask_user,
     tool_run_command as _src_run_command,
     tool_web_fetch   as _src_web_fetch,
     tool_github      as _src_github,
@@ -239,12 +241,16 @@ from aria_code.apps.cli.tools.notebook_tools import (
     tool_notebook_read as _src_notebook_read,
     tool_notebook_edit as _src_notebook_edit,
 )
-from aria_code.apps.cli.tools.file_tools import (
+
+from apps.cli.tools.file_tools import tool_lsp_hover as _tool_lsp_hover
+from apps.cli.tools.file_tools import tool_lsp_definition as _tool_lsp_definition
+from apps.cli.tools.file_tools import tool_lsp_references as _tool_lsp_references
+from apps.cli.tools.file_tools import (
     tool_read_file   as _src_read_file,
     tool_list_files  as _src_list_files,
     tool_search_code as _src_search_code,
 )
-from aria_code.apps.cli.tools.market_tools import (
+from apps.cli.tools.market_tools import (
     tool_get_market_data    as _src_get_market_data,
     tool_get_market_history as _src_get_market_history,
     tool_broker_query       as _src_broker_query,
@@ -253,11 +259,11 @@ from aria_code.apps.cli.tools.market_tools import (
 from aria_code.apps.cli.handlers.broker_handlers import handle_broker_query as _src_handle_broker_query
 from aria_code.apps.cli.handlers.realty_handlers import handle_realty_query as _src_handle_realty_query
 from aria_code.apps.cli.handlers.strategy_advice import handle_strategy_advice as _src_strategy_advice
-from aria_code.apps.cli.handlers.chart_handlers import (
+from apps.cli.handlers.chart_handlers import (
     handle_stock_chart_analysis_direct as _src_chart_analysis_direct,
     handle_stock_chart_analysis        as _src_chart_analysis,
 )
-from aria_code.apps.cli.utils.market_detect import (  # noqa: F401 — re-exported
+from apps.cli.utils.market_detect import (  # noqa: F401 — re-exported
     _re_sym, _STOCK_PATTERN,
     _CRYPTO_WORDS, _COMPANY_TO_TICKER,
     _BROKER_INTENT_KW, _is_broker_intent,
@@ -290,7 +296,7 @@ from aria_code.apps.cli.commands.ashare_prediction_cmds import (
     prediction_freshness,
 )
 from aria_code.apps.cli.commands.data_cmds import DataCommandsMixin
-from aria_code.apps.cli.commands.ops_cmds import OpsCommandsMixin
+from apps.cli.commands.ops_cmds import OpsCommandsMixin
 from aria_code.apps.cli.commands.diagnostic_cmds import DiagnosticCommandsMixin
 from aria_code.apps.cli.commands.diagnostic_ops_cmds import (
     DiagnosticOpsCommandsMixin,
@@ -310,7 +316,7 @@ from aria_code.apps.cli.commands.session_cmds import SessionCommandsMixin
 from aria_code.apps.cli.session_export import build_session_export_payload  # 同上
 from aria_code.apps.cli.commands.workspace_cmds import WorkspaceCommandsMixin
 from aria_code.apps.cli.commands.model_cmds import ModelCommandsMixin
-from aria_code.apps.cli.commands.market_cmds import (
+from apps.cli.commands.market_cmds import (
     MarketCommandsMixin,
     _fetch_public_news_fallback,
 )
@@ -414,7 +420,7 @@ logging.getLogger("curl_cffi").setLevel(logging.CRITICAL)
 # ============================================================================
 
 # ── UI layer — console, flags, ESC watcher ────────────────────────────────────
-from aria_code.ui.console import (
+from ui.console import (
     console, HAS_RICH, HAS_PT, _SYNTAX_THEME, make_markdown,
     _EscWatcher, _esc_watcher, _HAS_TERMIOS,
 )
@@ -442,7 +448,7 @@ if _HAS_TERMIOS:
     import termios, tty, select as _select
 
 
-from aria_code.ui.picker import arrow_select as _arrow_select, run_picker_in_thread as _run_picker_in_thread
+from ui.picker import arrow_select as _arrow_select, run_picker_in_thread as _run_picker_in_thread
 
 
 
@@ -463,7 +469,7 @@ from aria_code.apps.cli.constants import _PROVIDER_KEY_MAP, _DATA_KEY_MAP, _DATA
 # Default base URLs for cloud providers (OpenAI-compatible unless noted)
 # _PROVIDER_BASE_URLS 已移到 apps/cli/provider_endpoints.py（28 个端点）。
 # 这里 re-import 回本模块命名空间：多处裸名引用依赖它在 aria_cli 的 globals 里。
-from aria_code.apps.cli.provider_endpoints import _PROVIDER_BASE_URLS
+from apps.cli.provider_endpoints import _PROVIDER_BASE_URLS
 
 
 
@@ -933,8 +939,6 @@ from aria_code.apps.cli.providers.llm.offline_responses import (  # noqa: E402
 
 
 
-
-
 THINKING_MODES = {
     "auto":     {"label": "Auto",     "description": "Let Aria decide when to think deeply"},
     "instant":  {"label": "Instant",  "description": "Fast responses, no extended thinking"},
@@ -968,14 +972,23 @@ import difflib
 def _is_safe_path(resolved: pathlib.Path) -> bool:
     """Return True if the resolved path is inside an allowed root directory.
 
-    Allowed roots: home directory, /tmp, /var/folders (macOS temp).
+    Allowed roots: the working directory, the home directory, and the temp
+    dirs (/tmp, /var/folders on macOS).
     Blocks: /etc, /sys, /proc, /dev, and any path that resolves through a
     symlink to outside those roots (symlink traversal prevention).
+
+    ``allow_home`` is left unset so WorkspaceSecurity applies its documented
+    rule: local sessions get home and temp, and a remote worker confines
+    itself by setting ARIA_RUNTIME_SCOPE=remote (Dockerfile.review does).
+    Hardcoding False here applied the remote confinement to the local CLI,
+    which contradicted this docstring — and because the temp roots are only
+    added on the allow_home branch, it also blocked every write to /tmp and
+    /var/folders, so the CLI could not write to its own scratch space.
     """
-    return WorkspaceSecurity().is_safe_path(resolved)
+    return WorkspaceSecurity(cwd=__import__('os').getcwd()).is_safe_path(resolved)
 
 
-from aria_code.apps.cli.tool_executor import *
+from apps.cli.tool_executor import *
 
 
 
@@ -1032,6 +1045,10 @@ LOCAL_TOOLS.update({
     "search_code":    (_tool_search_code,    "Search for patterns in code (grep)"),
     "search":         (_tool_search_code,    "Search for patterns in code (alias for search_code)"),
     "run_command":    (_tool_run_command,    "Execute a shell command"),
+    "ask_user":       (_src_ask_user,        "Ask the user for clarification"),
+    "lsp_hover":      (_tool_lsp_hover,      "Get hover documentation/type signature (LSP)"),
+    "lsp_definition": (_tool_lsp_definition, "Find definition (LSP)"),
+    "lsp_references": (_tool_lsp_references, "Find references (LSP)"),
     # ── Extended tools (Claude Code parity) ─────────────────────────────────
     "web_fetch":      (_tool_web_fetch,      "Fetch a URL and return page text"),
     "github":         (_tool_github,         "GitHub API/CLI: PRs, issues, diffs, search, git_status, commit_and_push (commits as Aria bot)"),
@@ -1053,7 +1070,7 @@ try:
     logger.info("Registered %d subagent tools", len(SUBAGENT_TOOLS))
 except Exception as _exc:
     logger.debug("Subagent tools init error: %s", _exc)
-    SUBAGENT_SCHEMAS = []
+    SUBAGENT_SCHEMAS: list = []  # type: ignore[no-redef]
 
 # ── Register LSP diagnostics tool ─────────────────────────────────────────────
 try:
@@ -1062,7 +1079,25 @@ try:
     logger.info("Registered %d LSP tools", len(LSP_TOOLS))
 except Exception as _exc:
     logger.debug("LSP tools init error: %s", _exc)
-    LSP_SCHEMAS = []
+    LSP_SCHEMAS: list = []  # type: ignore[no-redef]
+
+# ── Register repo-map tools (symbol index + symbol lookup) ────────────────────
+try:
+    from aria_code.runtime.repo_map import REPO_MAP_TOOLS, REPO_MAP_SCHEMAS
+    LOCAL_TOOLS.update(REPO_MAP_TOOLS)
+    logger.info("Registered %d repo-map tools", len(REPO_MAP_TOOLS))
+except Exception as _exc:
+    logger.debug("Repo-map tools init error: %s", _exc)
+    REPO_MAP_SCHEMAS: list = []  # type: ignore[no-redef]
+
+# ── Register artifact publishing (model-facing canvas tool) ───────────────────
+try:
+    from aria_code.tools.artifact_tools import ARTIFACT_TOOLS, ARTIFACT_TOOL_SCHEMAS
+    LOCAL_TOOLS.update(ARTIFACT_TOOLS)
+    logger.info("Registered %d artifact tools", len(ARTIFACT_TOOLS))
+except Exception as _exc:
+    logger.debug("Artifact tools init error: %s", _exc)
+    ARTIFACT_TOOL_SCHEMAS: list = []  # type: ignore[no-redef]
 
 # ── Register computer-use tools (browser automation + desktop control) ──────
 _HAS_COMPUTER_USE = False
@@ -1072,7 +1107,7 @@ try:
     _HAS_COMPUTER_USE = True
     logger.info("Registered %d computer-use tools", len(COMPUTER_USE_TOOLS))
 except ImportError:
-    _CU_SCHEMAS = []
+    _CU_SCHEMAS: list = []  # type: ignore[no-redef]
 
 # Pre-initialize so finance/plugin registrations can append schemas to it.
 # The bulk static schemas are extended below; this empty list must exist first.
@@ -1161,17 +1196,23 @@ except Exception as _exc:
 
 try:
     try:
-        from aria_code.tools.extended_tools import register_extended_tools as _reg_ext
+        from tools.extended_tools import register_extended_tools as _reg_ext
     except ImportError:
         from tools.extended_tools import register_extended_tools as _reg_ext  # type: ignore[no-redef]
     _reg_ext(LOCAL_TOOLS)
-    logger.info("Registered extended enterprise tools (Slack, Feishu, TradingView, QuickBooks, Shopify, Snowflake)")
+    # Deliberately registered WITHOUT schemas: these six are shape-only stubs
+    # that fabricate success (see extended_tools' module docstring). Keeping
+    # them out of LOCAL_TOOL_SCHEMAS is what stops the model from calling one
+    # and reporting "posted to #trading-desk" when nothing was sent. They are
+    # registered at all so /tools can show what is stubbed and so the guard
+    # gives a real answer if something reaches them by name.
+    logger.info("Registered 6 enterprise connector stubs (not implemented; see extended_tools)")
 except Exception as _exc:
     logger.debug("Extended tools init error: %s", _exc)
 
 try:
     try:
-        from aria_code.tools.code_audit_tools import register_code_audit_tools as _reg_audit
+        from tools.code_audit_tools import register_code_audit_tools as _reg_audit
     except ImportError:
         from tools.code_audit_tools import register_code_audit_tools as _reg_audit  # type: ignore[no-redef]
     _reg_audit(LOCAL_TOOLS)
@@ -1202,6 +1243,8 @@ if _HAS_COMPUTER_USE:
 # Make spawn_task / task_* and lsp_diagnostics visible to the model.
 LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(SUBAGENT_SCHEMAS))
 LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(LSP_SCHEMAS))
+LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(REPO_MAP_SCHEMAS))
+LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(ARTIFACT_TOOL_SCHEMAS))
 
 
 
@@ -1357,7 +1400,7 @@ def _run_hook(hook_type: str, tool_name: str, params: dict, result: dict = None)
 # Defining a second pair here meant the rebound copy cached into this module's
 # dict while the original cached into that one — two caches, and whichever
 # module a caller reached decided which it got.
-from aria_code.apps.cli.tool_executor import (  # noqa: F401
+from apps.cli.tool_executor import (  # noqa: F401
     _CACHE_TTL,
     _TOOL_CACHE,
 )
@@ -1378,13 +1421,13 @@ def _detect_lang(text: str) -> str:
     return _f(text)
 
 
-from aria_code.apps.cli.prompts.system_prompts import LANG_RULE as _LANG_RULE
+from apps.cli.prompts.system_prompts import LANG_RULE as _LANG_RULE
 
 
 # Aliased, not wrapped: a wrapper is a different function object from what it
 # calls, so stream_ollama importing the real builders while this module kept
 # wrappers would run two different objects on the CLI and fallback paths.
-from aria_code.apps.cli.prompts.system_prompts import (  # noqa: E402
+from apps.cli.prompts.system_prompts import (  # noqa: E402
     build_analysis_prompt_lite as _build_analysis_prompt_lite,
     build_analysis_system_prompt as _build_analysis_system_prompt,
     build_coding_prompt_lite as _build_coding_prompt_lite,
@@ -1402,7 +1445,6 @@ FINANCE_CHAT_PROMPT = _build_finance_prompt()  # evaluated once at import; rebui
 # ANALYSIS_SYSTEM_PROMPT: for stock/crypto/macro analysis queries that need
 # real data via tool calls but don't require writing Python scripts
 # ============================================================================
-
 
 
 ANALYSIS_SYSTEM_PROMPT = _build_analysis_system_prompt()
@@ -1552,7 +1594,7 @@ def _fix_json_string(raw: str) -> str:
 # module held wrappers made the CLI and fallback paths run different objects —
 # caught by tests/test_ollama_stream_imports.py. Signatures are identical, so
 # the alias is an exact replacement.
-from aria_code.apps.cli.message_processing import (  # noqa: E402
+from apps.cli.message_processing import (  # noqa: E402
     compact_messages as _compact_messages,
     parse_text_tool_calls as _parse_text_tool_calls,
     strip_tool_call_tags as _strip_tool_call_tags,
@@ -1561,7 +1603,7 @@ from aria_code.apps.cli.message_processing import (  # noqa: E402
 
 
 
-from aria_code.apps.cli.message_processing import (  # noqa: E402
+from apps.cli.message_processing import (  # noqa: E402
     build_broker_context_block as _build_broker_context_block,
 )
 
@@ -2481,7 +2523,7 @@ def _try_handle_stock_chart_analysis(message: str) -> dict:
 # ============================================================================
 
 async def stream_chat(base_url: str, message: str, history: list,
-                      model: str = "qwen2.5:7b", thinking_mode: str = "auto",
+                      model: str = "", thinking_mode: str = "auto",
                       user_context: dict = None, auth_token: str = None,
                       on_token=None, on_thinking=None, on_tool_call=None,
                       on_tool_result=None, on_status=None,
@@ -2525,7 +2567,7 @@ def _build_user_context(config: dict) -> Optional[dict]:
     else:
         ctx["market_status"] = "closed"
     # Active model name
-    model_id = config.get("model", "qwen2.5:7b")
+    model_id = config.get("model", DEFAULT_MODEL)
     mkey = resolve_model_key(model_id)
     minfo = MODELS.get(mkey, {})
     ctx["ai_model"] = minfo.get("name", model_id)
@@ -2989,8 +3031,8 @@ def _ashare_code_to_name(symbol: str) -> str:
     return names.get(code, "")
 
 
-from aria_code.ui.render.output import FINANCE_TOOL_NAMES as _FINANCE_TOOL_NAMES
-from aria_code.ui.render.output import display_path as _display_path
+from ui.render.output import FINANCE_TOOL_NAMES as _FINANCE_TOOL_NAMES
+from ui.render.output import display_path as _display_path
 
 
 
@@ -3266,8 +3308,8 @@ class ArtheraCompleter:
             return None
 
 
-from aria_code.ui.completer import AriaPTCompleter, ARIA_PT_STYLE, build_aria_pt_style
-from aria_code.apps.cli.commands.market_cmds import _parse_nl_team_pair
+from ui.completer import AriaPTCompleter, ARIA_PT_STYLE, build_aria_pt_style
+from apps.cli.commands.market_cmds import _parse_nl_team_pair
 
 
 
@@ -3278,15 +3320,34 @@ from aria_code.apps.cli.commands.market_cmds import _parse_nl_team_pair
 
 import types as _types
 
+
+def _clone_function_with_globals(fn):
+    """Rebuild *fn* against this module's globals, preserving its signature.
+
+    ``FunctionType`` carries ``__defaults__`` but not ``__kwdefaults__``, so a
+    keyword-only parameter with a default silently became *required* after a
+    rebind — the caller then failed with "missing required keyword-only
+    argument" for a parameter that plainly has a default in the source.  The
+    metadata below is copied for the same reason: a rebound function should be
+    indistinguishable from the original apart from its globals.
+    """
+    clone = _types.FunctionType(
+        fn.__code__, globals(), fn.__name__, fn.__defaults__, fn.__closure__
+    )
+    clone.__kwdefaults__ = fn.__kwdefaults__
+    clone.__doc__ = fn.__doc__
+    clone.__module__ = fn.__module__
+    clone.__qualname__ = fn.__qualname__
+    clone.__annotations__ = dict(getattr(fn, "__annotations__", {}) or {})
+    clone.__dict__.update(fn.__dict__)
+    return clone
+
+
 def _rebind_mixin_globals(mixin_cls):
     """Point mixin methods' __globals__ to this module's namespace so bare names resolve."""
     for _attr_name, _attr in list(vars(mixin_cls).items()):
         if isinstance(_attr, _types.FunctionType):
-            _new_fn = _types.FunctionType(
-                _attr.__code__, globals(), _attr.__name__,
-                _attr.__defaults__, _attr.__closure__
-            )
-            setattr(mixin_cls, _attr_name, _new_fn)
+            setattr(mixin_cls, _attr_name, _clone_function_with_globals(_attr))
 
 
 def _rebind_module_function_globals(module, names):
@@ -3302,24 +3363,21 @@ def _rebind_module_function_globals(module, names):
     for _name in names:
         _attr = getattr(module, _name, None)
         if isinstance(_attr, _types.FunctionType):
-            globals()[_name] = _types.FunctionType(
-                _attr.__code__, globals(), _attr.__name__,
-                _attr.__defaults__, _attr.__closure__,
-            )
+            globals()[_name] = _clone_function_with_globals(_attr)
 
 
-import apps.cli.tool_executor as _tool_executor_module
+import aria_code.apps.cli.tool_executor as _tool_executor_module
 _rebind_module_function_globals(_tool_executor_module, _tool_executor_module.__all__)
 
 # _test_api_key 同理：model_cmds.py 的 mixin 用裸名调用它。
-import apps.cli.provider_endpoints as _provider_endpoints_module
+import aria_code.apps.cli.provider_endpoints as _provider_endpoints_module
 _rebind_module_function_globals(_provider_endpoints_module, ["_test_api_key"])
 
 # ── Broker rendering ──────────────────────────────────────────────────────────
 # 实现已移到 apps/cli/broker_render.py。同 football_reports：这些函数依赖本模块的
 # console / HAS_RICH / Panel / rich_box，必须重绑到本模块 globals，普通 import 会
 # 在运行期 NameError。broker_cmds.py 与测试都通过 aria_cli 命名空间取用。
-import apps.cli.broker_render as _broker_render_module
+import aria_code.apps.cli.broker_render as _broker_render_module
 _rebind_module_function_globals(_broker_render_module, _broker_render_module.__all__)
 
 class SlashCommands(
@@ -3976,6 +4034,7 @@ class ArtheraTerminal:
         self._pending_market_resolution: Optional[dict] = None
         self._last_preflight_key: str = ""
         self._auto_compact_count: int = 0
+        self._unregistered_model_warned: set = set()
         # ── Multi-file analysis session ──────────────────────────────────────
         try:
             from file_analysis_tools import FileSession
@@ -4089,7 +4148,7 @@ class ArtheraTerminal:
 
     def print_header(self):
         # Resolve current model info
-        current_id  = self.config.get("model", "qwen2.5:7b")
+        current_id  = self.config.get("model", DEFAULT_MODEL)
 
         # ── 模型自动配对（现实优先）─────────────────────────────────────────
         # 检测本机已安装的 Ollama 模型；若配置模型未安装，自动配对到最优
@@ -4280,7 +4339,7 @@ class ArtheraTerminal:
         )
 
     def _status_line(self) -> str:
-        current_id = self.config.get("model", "qwen2.5:7b")
+        current_id = self.config.get("model", DEFAULT_MODEL)
         # If Ollama switched to a different model, show the actual running model
         display_id = self._actual_model or current_id
         model_name = display_id  # fallback: raw model ID
@@ -4660,6 +4719,7 @@ class ArtheraTerminal:
             try:
                 _mc = get_model_capability(_curr_model_id)
                 _model_has_tools = bool(_mc.tool_calls and _mc.context_window >= 8192)
+                self._warn_unregistered_model(_curr_model_id, _mc)
             except Exception:
                 pass
 
@@ -4804,7 +4864,7 @@ class ArtheraTerminal:
                 return
             # Analysis query: fall through to LLM for deep commentary on the snapshot data
 
-        model = self.config.get("model", "qwen2.5:7b")
+        model = self.config.get("model", DEFAULT_MODEL)
         thinking_mode = self.config.get("thinking_mode", "auto")
         auth_token = self.config.get("auth_token")
         user_context = _build_user_context(self.config)
@@ -4815,7 +4875,7 @@ class ArtheraTerminal:
 
         # Context pressure warning — only once per session when > 85% full
         _est_tokens = sum(len(m.get("content", "")) for m in self.conversation) // 3
-        _max_ctx    = get_model_cfg(self.config.get("model", "qwen2.5:7b")).get("num_ctx", 16384)
+        _max_ctx    = get_model_cfg(self.config.get("model", DEFAULT_MODEL)).get("num_ctx", 16384)
         from ui.render.output import print_context_warning as _pcw
         _pcw(_est_tokens, _max_ctx, console=console, has_rich=HAS_RICH,
              session_id=getattr(self, "session_id", ""))
@@ -4852,7 +4912,7 @@ class ArtheraTerminal:
                 _plan_result = await stream_provider_result(
                     OllamaProvider(
                         self.config.get("ollama_url", "http://localhost:11434"),
-                        self.config.get("model", "qwen2.5:7b"),
+                        self.config.get("model", DEFAULT_MODEL),
                         show_market_prefetch_status=False,
                     ),
                     _decomp_prompt,
@@ -5411,7 +5471,7 @@ class ArtheraTerminal:
             self._last_response = final_text   # for /copy
             _context_compacted_from_usage = False
 
-            _ctx_max = get_model_cfg(self.config.get("model", "qwen2.5:7b")).get("num_ctx", 16384)
+            _ctx_max = get_model_cfg(self.config.get("model", DEFAULT_MODEL)).get("num_ctx", 16384)
             if HAS_RICH:
                 from ui.render.output import format_turn_footer as _format_turn_footer
                 _footer = _format_turn_footer(
@@ -5450,7 +5510,7 @@ class ArtheraTerminal:
                         try:
                             self.conversation = _compact_messages(
                                 self.conversation,
-                                model_key=self.config.get("model", "qwen2.5:7b"),
+                                model_key=self.config.get("model", DEFAULT_MODEL),
                             )
                         except Exception:
                             if len(self.conversation) > 10:
@@ -5697,7 +5757,7 @@ class ArtheraTerminal:
         if _os.environ.get("ARIA_NO_TELEMETRY"):
             return
         try:
-            from aria_code.safety import SafetyService
+            from safety import SafetyService
             _settings = SafetyService(self.config).privacy()
             _rec = FeedbackRecord.create(
                 rating=rating,
@@ -5823,6 +5883,33 @@ class ArtheraTerminal:
             known_context_tokens=known,
         )
 
+    def _warn_unregistered_model(self, model_id: str, cap) -> None:
+        """Warn once per model when it is missing from the capability registry.
+
+        An unregistered model runs with no tools and a 4K context budget, so it
+        answers repository questions from memory instead of reading files and
+        the context gauge measures against the wrong window.  That downgrade
+        used to be invisible; surface it so it can be fixed rather than
+        mistaken for the model being bad at the task.
+        """
+        try:
+            from model_capability import is_unknown_model
+        except Exception:
+            return
+        if not is_unknown_model(cap):
+            return
+        if model_id in self._unregistered_model_warned:
+            return
+        self._unregistered_model_warned.add(model_id)
+        if HAS_RICH:
+            console.print(
+                f"  [yellow]⚠ 模型 {model_id} 未登记在能力表中[/yellow]\n"
+                f"  [dim]已按保守设置运行：不调用工具、上下文按 "
+                f"{cap.context_window} tokens 计算。[/dim]\n"
+                f"  [dim]如果它其实支持工具调用，请在 model_capability.py 的 "
+                f"_CAPABILITY_TABLE 中登记。[/dim]"
+            )
+
     async def _maybe_auto_compact_before_turn(self, incoming_content: str = "") -> bool:
         """Compact history before a request enters the model when context is hot."""
         if not bool(self.config.get("auto_compact_context", True)):
@@ -5835,7 +5922,7 @@ class ArtheraTerminal:
             from apps.cli.message_processing import context_compaction_decision
             decision = context_compaction_decision(
                 self.conversation,
-                model_key=self.config.get("model", "qwen2.5:7b"),
+                model_key=self.config.get("model", DEFAULT_MODEL),
                 extra_content=incoming_content,
                 threshold=threshold,
             )
@@ -5854,7 +5941,7 @@ class ArtheraTerminal:
                 self.conversation = _compact_messages(
                     self.conversation,
                     max_chars=max_chars,
-                    model_key=self.config.get("model", "qwen2.5:7b"),
+                    model_key=self.config.get("model", DEFAULT_MODEL),
                 )
             except Exception:
                 if len(self.conversation) > 10:
@@ -5863,7 +5950,7 @@ class ArtheraTerminal:
         try:
             new_decision = context_compaction_decision(
                 self.conversation,
-                model_key=self.config.get("model", "qwen2.5:7b"),
+                model_key=self.config.get("model", DEFAULT_MODEL),
                 extra_content=incoming_content,
                 threshold=threshold,
             )
@@ -6104,6 +6191,34 @@ class ArtheraTerminal:
                 if not user_input:
                     continue
 
+                # -- Auto-hydrate path context (Claude Code parity) --
+                import os, pathlib
+                _potential_paths = [word for word in user_input.split() if "/" in word or "\\" in word]
+                _hydrated_files = []
+                for p in _potential_paths:
+                    try:
+                        p_obj = pathlib.Path(p).expanduser().resolve()
+                        if p_obj.exists():
+                            if p_obj.is_dir():
+                                # Temporarily change directory to the dragged project!
+                                os.chdir(p_obj)
+                                self.config["cwd"] = str(p_obj)
+                                user_input += f"\n\n[System Note: The current working directory has been automatically changed to {p_obj}. You MUST use `list_files` or `search_code` to explore this directory before answering.]"
+                            elif p_obj.is_file():
+                                _hydrated_files.append(p_obj)
+                    except Exception:
+                        pass
+                
+                if _hydrated_files:
+                    _context = "\n\n[System Note: The user mentioned the following local files. Here are their contents for context:]\n"
+                    for f in _hydrated_files:
+                        try:
+                            _content = f.read_text()[:15000] # Hydrate up to 15k chars
+                            _context += f"\n--- {f} ---\n{_content}\n"
+                        except Exception:
+                            pass
+                    user_input += _context
+
                 # ── Session recap: show summary if away for 3+ minutes ─────────
                 import time as _time
                 _now = _time.time()
@@ -6243,7 +6358,7 @@ class ArtheraTerminal:
     async def run_prompt(self, prompt: str, json_output: bool = False,
                          fmt: str = "table", output_file: str = None, quiet: bool = False):
         """Run a single prompt (non-interactive / pipe mode)."""
-        model = self.config.get("model", "qwen2.5:7b")
+        model = self.config.get("model", DEFAULT_MODEL)
         thinking_mode = self.config.get("thinking_mode", "auto")
         auth_token = self.config.get("auth_token")
         user_context = _build_user_context(self.config)
@@ -6328,51 +6443,61 @@ class ArtheraTerminal:
                 except Exception:
                     _prompt_spinner = None
             try:
-                # Ollama models (no "/" provider prefix) skip the api_url stub
-                # backend entirely — same routing as the interactive REPL.
-                _force_backend_p = bool(self.config.get("backend_chat")) and bool(self.api_url)
-                if not _force_backend_p and (local_mode or "/" not in (model or "")):
-                    result = await stream_provider_result(
-                        OllamaProvider(
-                            self.config.get("ollama_url", "http://localhost:11434"),
-                            model,
-                            show_market_prefetch_status=False,
-                        ),
-                        prompt,
-                        [],
-                        tools=LOCAL_TOOL_SCHEMAS,
-                    )
-                else:
-                    # Cloud-provider model: try api_url, fall back to Ollama on
-                    # failure OR a stub placeholder response.
-                    result = await stream_provider_result(
-                        AriaSSEProvider(
-                            self.api_url,
-                            model,
-                            thinking_mode=thinking_mode,
-                            user_context=user_context,
-                            auth_token=auth_token,
-                            project_context=_PROJECT_CONTEXT,
-                            use_react_gateway=bool(self.config.get("arthera_react_gateway")),
-                        ),
-                        prompt,
-                        [],
-                        tools=LOCAL_TOOL_SCHEMAS,
-                    )
-                    _resp = result.get("response", "") or ""
-                    if (not result.get("success")
-                            or len(_resp) < 20
-                            or _response_is_stub_placeholder(_resp)):
-                        result = await stream_provider_result(
-                            OllamaProvider(
-                                self.config.get("ollama_url", "http://localhost:11434"),
-                                model,
-                                show_market_prefetch_status=False,
-                            ),
-                            prompt,
-                            [],
-                            tools=LOCAL_TOOL_SCHEMAS,
-                        )
+                # Headless -p runs the SAME loop as the REPL.
+                #
+                # It used to call stream_provider_result directly: one provider
+                # round, tool schemas advertised but nothing executing what came
+                # back, and a single best-effort pass over tool_calls_pending
+                # afterwards whose results the model never saw. So `-p` was not
+                # agentic at all — no rounds, no tool results fed back, no loop
+                # guard, no acceptance gate. Every non-interactive user (CI, a
+                # pipe, the eval harness) got a chat reply where the REPL would
+                # have done the work.
+                #
+                # run_chat_via_runtime is the documented single entry point and
+                # already handles provider selection and cloud→Ollama fallback,
+                # which is what the two branches here were open-coding.
+                from apps.cli.providers.runtime_bridge import run_chat_via_runtime
+
+                _turn = await run_chat_via_runtime(
+                    prompt=prompt, history=[],
+                    local_tools=LOCAL_TOOLS, tool_schemas=LOCAL_TOOL_SCHEMAS,
+                    model=model, config=self.config, api_url=self.api_url,
+                    ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
+                    thinking_mode=thinking_mode, user_context=user_context,
+                    auth_token=auth_token, project_context=_PROJECT_CONTEXT,
+                    max_rounds=int(self.config.get("max_rounds", 30) or 30),
+                    # No approval UI exists in headless mode. Leaving the confirm
+                    # set populated would block every write on a prompt nobody is
+                    # there to answer; the operator opts in with
+                    # --dangerously-skip-permissions or --allow-tools.
+                    confirm_tools=(
+                        frozenset() if _auto_approve_session
+                        else frozenset(_CONFIRM_TOOLS) - _session_always_allow
+                    ),
+                    return_result=True,
+                )
+                _tools_used = list(getattr(_turn.final, "tools", []) or [])
+                # An empty closing message after the tools already ran is not a
+                # failed turn. The model did the work and then said nothing;
+                # exiting 1 there told a script the task failed while the edit
+                # sat finished on disk. Narrow on purpose — any other error,
+                # and a turn that ran no tools at all, still fails.
+                _empty_after_work = (
+                    _turn.error == "empty_response" and bool(_tools_used)
+                )
+                result = {
+                    "success": _turn.ok or _empty_after_work,
+                    "response": (
+                        _turn.text
+                        or (f"（模型未给出收尾说明。已执行的工具：{', '.join(_tools_used)}）"
+                            if _empty_after_work else "")
+                    ),
+                    "error": "" if _empty_after_work else (_turn.error or ""),
+                    "provider": getattr(_turn.final, "provider", ""),
+                    "tools_used": _tools_used,
+                    "acceptance": getattr(_turn.final, "acceptance", None),
+                }
             finally:
                 if _prompt_spinner is not None:
                     try:
@@ -6380,26 +6505,14 @@ class ArtheraTerminal:
                     except Exception:
                         pass
 
-        # Execute any pending tool calls (write_file / run_command) generated by
-        # the code-block fallback in stream_ollama.  This makes -p mode behave
-        # the same as interactive mode for code generation tasks.
-        pending = result.get("tool_calls_pending", [])
-        if pending and result.get("success"):
-            for tc in pending:
-                tool_name  = tc.get("tool", "")
-                tool_params = tc.get("params", {})
-                if tool_name in LOCAL_TOOLS:
-                    fn = LOCAL_TOOLS[tool_name][0]
-                    tr = fn(tool_params)
-                    if not quiet:
-                        if tool_name == "write_file":
-                            _status = "Created" if tr.get("success") else "Failed"
-                            msg = f"{_status}: file tool"
-                            print(msg if not HAS_RICH else msg, file=sys.stderr)
-                        elif tool_name == "run_command":
-                            _out = tr.get("data", {}).get("stdout", "") or tr.get("error", "")
-                            if _out:
-                                print(_out[:2000])
+        # The agent loop executes tools now, so there is nothing left over to
+        # run here. What is worth surfacing is the acceptance verdict: in
+        # headless mode nobody watched the run, so a turn that changed files
+        # and failed its checks must say so on stderr rather than print a
+        # confident summary and exit 0.
+        _acceptance = (result or {}).get("acceptance") or {}
+        if _acceptance.get("verified") is False and not quiet:
+            print(f"⚠ 验收未通过: {_acceptance.get('headline', '')}", file=sys.stderr)
 
         if json_output or fmt == "json":
             content = json.dumps(result, ensure_ascii=False, indent=2)
@@ -6646,7 +6759,7 @@ Examples:
 # 而不是普通 import：market_cmds.py 那个 mixin 用裸名字调 _football_standings(...)，
 # 靠的是 _rebind_mixin_globals 把它的 __globals__ 指向本模块；同时这些函数自身也
 # 依赖本模块的 console。重新绑定后两边才都能解析。与 tool_executor 同一套机制。
-import apps.cli.football_reports as _football_reports_module
+import aria_code.apps.cli.football_reports as _football_reports_module
 _rebind_module_function_globals(_football_reports_module, _football_reports_module.__all__)
 
 

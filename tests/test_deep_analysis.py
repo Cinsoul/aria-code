@@ -6,18 +6,18 @@ import time
 import unittest
 from pathlib import Path
 
-from aria_code.agents.base import AgentResult
-from aria_code.agents.deep.calibration_loop import (
+from agents.base import AgentResult
+from agents.deep.calibration_loop import (
     PredictionLog, correctness, evaluate_due, evaluate_from_ledger)
 from aria_code.agents.deep.deepen import deepen_agentic
 from aria_code.agents.deep.themes import group_by_theme, theme_of
-from aria_code.agents.deep.quant_fusion import (
+from agents.deep.quant_fusion import (
     gather_quant_evidence, calibrate_confidence, agreement, CalibrationStore,
 )
 from aria_code.agents.deep.critic import critique, soften_signal
 from aria_code.agents.deep.deepen import deepen
-from aria_code.agents.deep.tiers import render_brief, render_standard, render_deep
-from aria_code.agents.deep.pipeline import DeepAnalysisPipeline
+from agents.deep.tiers import render_brief, render_standard, render_deep
+from agents.deep.pipeline import DeepAnalysisPipeline
 
 
 def _r(agent, signal, conf, pts=None, err=None):
@@ -135,9 +135,22 @@ class DeepenTests(unittest.TestCase):
         self.assertEqual(len(prov), len(notes))
 
 
-class TierTests(unittest.TestCase):
+class _TempStoreMixin:
+    """A calibration-store path that is cleaned up afterwards.
+
+    Both test classes need one. They each called tempfile.mkdtemp(), which
+    never cleans up, so every run left directories behind in $TMPDIR.
+    """
+
+    def _store_path(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        return Path(directory.name) / "c.json"
+
+
+class TierTests(_TempStoreMixin, unittest.TestCase):
     def _result(self):
-        pipe = DeepAnalysisPipeline(store=CalibrationStore(Path(tempfile.mkdtemp()) / "c.json"))
+        pipe = DeepAnalysisPipeline(store=CalibrationStore(self._store_path()))
         return pipe.analyze("TEST", _bull_team(), quant_provider=_bull_quant,
                             tool_runner=_tool_runner)
 
@@ -151,9 +164,9 @@ class TierTests(unittest.TestCase):
         self.assertIn("量化", deep)
 
 
-class PipelineTests(unittest.TestCase):
+class PipelineTests(_TempStoreMixin, unittest.TestCase):
     def _pipe(self):
-        return DeepAnalysisPipeline(store=CalibrationStore(Path(tempfile.mkdtemp()) / "c.json"))
+        return DeepAnalysisPipeline(store=CalibrationStore(self._store_path()))
 
     def test_analyze_agree_calibrates_up(self):
         r = self._pipe().analyze("TEST", _bull_team(), quant_provider=_bull_quant,

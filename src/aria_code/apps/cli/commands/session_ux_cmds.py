@@ -17,11 +17,11 @@ def get_model_cfg(*args, **kwargs):
     return fn(*args, **kwargs)
 def OllamaProvider(*args, **kwargs):
     # Re-exported by aria_cli; imported from its own module here.
-    from aria_code.apps.cli.providers.base import OllamaProvider as fn
+    from apps.cli.providers.base import OllamaProvider as fn
     return fn(*args, **kwargs)
 def stream_provider_result(*args, **kwargs):
     # Re-exported by aria_cli; imported from its own module here.
-    from aria_code.packages.aria_sdk.streaming import stream_provider_result as fn
+    from packages.aria_sdk.streaming import stream_provider_result as fn
     return fn(*args, **kwargs)
 
 import json

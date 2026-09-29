@@ -1,7 +1,7 @@
 import unittest
 import asyncio
 
-from aria_code.runtime import (
+from runtime import (
     AgentEventComplete,
     AgentEventError,
     AgentEventStatus,
@@ -294,7 +294,7 @@ class RuntimeAgentLoopTests(unittest.TestCase):
         # Regression: an oversized tool result (e.g. a long pip/install log)
         # must be capped so it can't overflow the model context and cut the
         # task short mid-run.
-        from aria_code.runtime.agent_loop import _MAX_TOOL_RESULT_CHARS
+        from runtime.agent_loop import _MAX_TOOL_RESULT_CHARS
         huge = "Z" * (_MAX_TOOL_RESULT_CHARS * 4)
         followup = build_tool_followup([{"tool": "run_command", "result": huge}])
         self.assertIn("已截断", followup)
@@ -773,7 +773,7 @@ if __name__ == "__main__":
 
 class LoopGuardTests(unittest.TestCase):
     def test_warns_at_soft_threshold_and_breaks_at_hard(self):
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(soft_threshold=2, hard_threshold=4)
         fail = {"success": False, "error": "File not found: /x.py"}
         self.assertIsNone(g.record("read_file", {"path": "/x.py"}, fail))   # 1
@@ -786,7 +786,7 @@ class LoopGuardTests(unittest.TestCase):
         self.assertIn("停止", hard)
 
     def test_success_clears_counter(self):
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(soft_threshold=2)
         fail = {"success": False, "error": "error"}
         g.record("t", {"a": 1}, fail)
@@ -795,7 +795,7 @@ class LoopGuardTests(unittest.TestCase):
         self.assertIsNone(g.record("t", {"a": 1}, fail))
 
     def test_distinct_params_tracked_separately(self):
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(soft_threshold=2)
         fail = {"success": False, "error": "error"}
         self.assertIsNone(g.record("t", {"a": 1}, fail))
@@ -805,7 +805,7 @@ class LoopGuardTests(unittest.TestCase):
         # The observed blind spot: peer_comparison failed 4x with slightly
         # different args and no directive ever fired. Tool-level counting
         # advises at the third failure regardless of params.
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(soft_threshold=2, hard_threshold=4, tool_soft_threshold=3)
         fail = {"success": False, "error": "yfinance network error"}
         self.assertIsNone(g.record("peer_comparison", {"symbol": "AAPL"}, fail))
@@ -818,7 +818,7 @@ class LoopGuardTests(unittest.TestCase):
         self.assertIsNone(g.record("peer_comparison", {"symbol": "TSLA"}, fail))
 
     def test_tool_level_counter_cleared_by_success(self):
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(tool_soft_threshold=3)
         fail = {"success": False, "error": "err"}
         g.record("t", {"a": 1}, fail)
@@ -828,7 +828,7 @@ class LoopGuardTests(unittest.TestCase):
         self.assertIsNone(g.record("t", {"a": 5}, fail))       # 2 → still none
 
     def test_exact_signature_hard_break_unaffected_by_tool_layer(self):
-        from aria_code.runtime import LoopGuard
+        from runtime import LoopGuard
         g = LoopGuard(soft_threshold=2, hard_threshold=3, tool_soft_threshold=99)
         fail = {"success": False, "error": "err"}
         g.record("t", {"a": 1}, fail)
@@ -867,12 +867,20 @@ class TodoTrackerTests(unittest.TestCase):
 
 class MultiEditTests(unittest.TestCase):
     def _tmp(self, text):
-        import tempfile
+        """A throwaway file, removed when the test ends.
+
+        This used to call tempfile.mkdtemp() with no cleanup, so every test in
+        this class left a directory behind — 310 of them had accumulated in
+        $TMPDIR. Small enough never to be noticed, and it never self-corrects.
+        """
         import pathlib
-        d = tempfile.mkdtemp()
-        p = pathlib.Path(d) / "m.py"
-        p.write_text(text)
-        return str(p), p
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = pathlib.Path(directory.name) / "m.py"
+        path.write_text(text)
+        return str(path), path
 
     def test_atomic_success(self):
         from apps.cli.tools.write_tools import tool_multi_edit

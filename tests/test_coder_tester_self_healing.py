@@ -12,7 +12,7 @@ import pytest
 from aria_code.agents.engineering.coder import CoderAgent
 from aria_code.agents.engineering.tester import TesterAgent, TesterSelfHealingAgent
 from aria_code.agents.financial.strategist import StrategistAgent
-from aria_code.agents.registry import get_registry
+from agents.registry import get_registry
 from aria_code.runtime.self_healing import SelfHealingEngine, TracebackInfo
 
 

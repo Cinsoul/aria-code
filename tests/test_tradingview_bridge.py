@@ -1,6 +1,6 @@
 import sqlite3
 
-from aria_code.apps.cli.tradingview_bridge import (
+from apps.cli.tradingview_bridge import (
     build_tradingview_order_preview,
     enqueue_tradingview_alert,
     export_pine_strategy,
@@ -9,7 +9,7 @@ from aria_code.apps.cli.tradingview_bridge import (
     tradingview_symbol,
     tradingview_url,
 )
-from aria_code.brokers.paper_broker import PaperBroker
+from brokers.paper_broker import PaperBroker
 
 
 def _patch_trade_paths(monkeypatch, tmp_path):
@@ -172,7 +172,7 @@ def test_enqueue_rejects_without_secret(monkeypatch, tmp_path):
 def test_verify_webhook_hmac_roundtrip():
     import hashlib
     import hmac as _hmac
-    from aria_code.apps.cli.tradingview_bridge import verify_webhook_hmac
+    from apps.cli.tradingview_bridge import verify_webhook_hmac
     body = '{"symbol":"AAPL","action":"BUY"}'
     sig = _hmac.new(b"k", body.encode(), hashlib.sha256).hexdigest()
     assert verify_webhook_hmac(body, sig, secret="k") is True

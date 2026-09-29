@@ -27,7 +27,7 @@ def _handler(console):
     the move to AriaContext these methods read aria_cli's module globals, which
     is what the monkeypatching below used to drive.
     """
-    from aria_code.apps.cli.context import AriaContext
+    from apps.cli.context import AriaContext
 
     handler = CanvasCommandsMixin()
     handler.context = AriaContext(console=console, has_rich=True)

@@ -16,8 +16,8 @@ import re
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
-from aria_code.ui.console import HAS_PT
-from aria_code.packages.aria_services.references import REFERENCE_KINDS, reference_search_roots
+from ui.console import HAS_PT
+from packages.aria_services.references import REFERENCE_KINDS, reference_search_roots
 
 _REFERENCE_KIND_NAMES = frozenset(item.name for item in REFERENCE_KINDS)
 

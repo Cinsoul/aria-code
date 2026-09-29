@@ -28,7 +28,7 @@ import re
 
 import pytest
 
-from aria_code.packages.aria_core.architecture import _ARCHITECTURE_LAYERS
+from packages.aria_core.architecture import _ARCHITECTURE_LAYERS
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "src" / "aria_code"

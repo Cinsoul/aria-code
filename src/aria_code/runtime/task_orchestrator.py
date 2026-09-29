@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from aria_code.apps.cli.finance_service_catalog import classify_finance_market
-from aria_code.apps.cli.intent_router import build_intent_route
+from apps.cli.finance_service_catalog import classify_finance_market
+from apps.cli.intent_router import build_intent_route
 
 
 @dataclass(frozen=True)

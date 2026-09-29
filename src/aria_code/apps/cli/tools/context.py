@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from aria_code.apps.cli.config_paths import resolve_config_dir
+from apps.cli.config_paths import resolve_config_dir
 
 if TYPE_CHECKING:
     from rich.console import Console

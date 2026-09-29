@@ -3,7 +3,7 @@ import inspect
 import unittest
 
 import aria_code.apps.cli.providers.runtime_bridge as rb
-from aria_code.apps.cli.providers.runtime_bridge import build_tool_executor, make_provider_fn
+from apps.cli.providers.runtime_bridge import build_tool_executor, make_provider_fn
 
 
 def test_run_chat_via_runtime_streams_tokens_and_returns_text(monkeypatch):

@@ -11,7 +11,7 @@ from aria_code.packages.aria_skills.catalog import (
     install_catalog,
     parse_catalog_source,
 )
-from aria_code.packages.aria_skills.loader import skill_tree_sha256
+from packages.aria_skills.loader import skill_tree_sha256
 
 
 @pytest.mark.parametrize(

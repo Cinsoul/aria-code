@@ -2,7 +2,7 @@ import pytest
 import sys
 import types
 
-from aria_code.apps.cli.providers.base import (
+from apps.cli.providers.base import (
     AriaSSEProvider,
     LLMDone,
     LLMStatus,
@@ -11,8 +11,8 @@ from aria_code.apps.cli.providers.base import (
     LLMToolResult,
     OllamaProvider,
 )
-from aria_code.apps.cli.deterministic import run_deterministic_chain
-from aria_code.runtime import ToolExecutor
+from apps.cli.deterministic import run_deterministic_chain
+from runtime import ToolExecutor
 from aria_code.packages.aria_sdk import (
     AriaAgentOptions,
     AriaMessage,

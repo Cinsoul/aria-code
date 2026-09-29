@@ -3,7 +3,7 @@ agents/sports/football_agent.py — Football Analysis Agent
 ===========================================================
 LLM-powered football match analysis using Elo + Dixon-Coles prediction + form data.
 
-Prediction comes from packages.quant_engine.sports.predictor (Elo ratings,
+Prediction comes from aria_code.packages.quant_engine.sports.predictor (Elo ratings,
 Dixon-Coles with negative-binomial tail for lopsided matches, dynamic
 Elo/DC mixing weights, recency-form and head-to-head adjustments, and
 self-calibration), not football_data_client.predict_match — that function

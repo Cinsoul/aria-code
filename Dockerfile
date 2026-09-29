@@ -14,6 +14,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt websockets
 
 COPY . .
+# Installs the console scripts (aria-code, aria-code-mcp) and puts aria_code on
+# the path, which every service module now imports from.
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Config volume mount point
 RUN mkdir -p /root/.aria

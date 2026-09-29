@@ -45,15 +45,15 @@ def test_subpackage_declares_namespace_extension(sub):
 @pytest.mark.parametrize("sub", _SUBPACKAGES)
 def test_subpackage_imports_without_private_repo(sub):
     """公开仓的用户没有 Arthera checkout，缺它绝不能让 import 失败。"""
-    importlib.import_module(f"packages.quant_engine.{sub}")
+    importlib.import_module(f"aria_code.packages.quant_engine.{sub}")
 
 
 @pytest.mark.parametrize(
     "dotted",
     [
-        "packages.quant_engine.backtest.engine",
-        "packages.quant_engine.portfolio.optimizer",
-        "packages.quant_engine.stochastic.ito_calculus",
+        "aria_code.packages.quant_engine.backtest.engine",
+        "aria_code.packages.quant_engine.portfolio.optimizer",
+        "aria_code.packages.quant_engine.stochastic.ito_calculus",
     ],
 )
 def test_bundled_modules_still_win(dotted):
@@ -71,8 +71,8 @@ def test_bundled_modules_still_win(dotted):
 @pytest.mark.parametrize(
     "dotted",
     [
-        "packages.quant_engine.backtest.walk_forward_test",
-        "packages.quant_engine.portfolio.position_manager",
+        "aria_code.packages.quant_engine.backtest.walk_forward_test",
+        "aria_code.packages.quant_engine.portfolio.position_manager",
     ],
 )
 def test_private_only_modules_are_reachable(dotted):

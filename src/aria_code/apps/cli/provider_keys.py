@@ -26,7 +26,7 @@ __all__ = ["get_provider_key", "load_data_keys", "providers_file"]
 
 def providers_file() -> Path:
     """Where providers.json lives, resolved now rather than at import."""
-    from aria_code.apps.cli.bootstrap import runtime_paths
+    from apps.cli.bootstrap import runtime_paths
 
     return runtime_paths().providers_file
 

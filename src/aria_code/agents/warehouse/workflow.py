@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from aria_code.agents.team import AgentTeam, TeamResult
-from aria_code.clients.warehouse_erp_client import WarehouseERPClient
+from agents.team import AgentTeam, TeamResult
+from clients.warehouse_erp_client import WarehouseERPClient
 
 from . import WAREHOUSE_SCHEME, WAREHOUSE_TEAM
 

@@ -6,9 +6,9 @@ import json
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
-from aria_code.artifacts import artifact_summary as build_artifact_summary
-from aria_code.apps.cli.config_paths import config_snapshot
-from aria_code.packages.aria_core import build_session_diagnostic_bundle
+from artifacts import artifact_summary as build_artifact_summary
+from apps.cli.config_paths import config_snapshot
+from packages.aria_core import build_session_diagnostic_bundle
 
 
 def _safe_title_from_conversation(conversation: Sequence[dict]) -> str:

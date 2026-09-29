@@ -7,7 +7,7 @@ imported lazily inside each method body to avoid circular imports at load time.
 from __future__ import annotations
 
 from ._ui import Panel, print_error, rich_box
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 import json
@@ -117,7 +117,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_status(self):
         from aria_code.apps.cli._optional import get_registry as _get_broker_registry
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
 
         # Risk-off banner: make a global trading freeze impossible to miss.
         if SafetyService(self.terminal.config).trading_dry_run():
@@ -458,7 +458,7 @@ class BrokerCommandsMixin:
             print(f"已断开: {broker_id}")
 
     async def _cmd_broker_add(self, broker_type: str):
-        from aria_code.ui.picker import arrow_select as _arrow_select
+        from ui.picker import arrow_select as _arrow_select
         from aria_code.apps.cli._optional import supported_broker_types as _supported_broker_types, get_config_template as _get_broker_template, add_broker_config as _add_broker_cfg, BROKERS_CONFIG_PATH as _BROKERS_CONFIG_PATH
         from ui.picker import arrow_select
 
@@ -969,7 +969,7 @@ class BrokerCommandsMixin:
             OrderIntent, build_order_preview, execute_order_preview,
             list_order_previews,
         )
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
 
         parts = args.strip().split()
         sub = parts[0].lower() if parts else "mode"
@@ -999,7 +999,6 @@ class BrokerCommandsMixin:
                 f"单笔上限: {policy.max_order_value_weight:.1%}  单票仓位上限: {policy.max_single_position_weight:.1%}"
             )
             if self.context.has_rich:
-
                 color = "red" if policy.mode == "live" else "green" if policy.mode == "paper" else "yellow"
                 self.context.console.print(Panel(msg, title="[bold]Trade Mode[/bold]", border_style=color, box=rich_box.ROUNDED))
             else:
@@ -1051,7 +1050,6 @@ class BrokerCommandsMixin:
             rows = list_order_previews(limit=10)
             if self.context.has_rich:
                 from rich.table import Table
-
                 tbl = Table(title="[bold]Trade Previews[/bold]", box=rich_box.ROUNDED, border_style="dim")
                 tbl.add_column("ID")
                 tbl.add_column("Mode")
@@ -1133,7 +1131,6 @@ class BrokerCommandsMixin:
         )
         blockers = preview.get("execution_blockers") or []
         if self.context.has_rich:
-
             status = "可执行" if preview.get("can_execute") else "不可执行"
             body = (
                 f"preview_id: [bold]{preview.get('preview_id')}[/bold]\n"
@@ -1150,7 +1147,7 @@ class BrokerCommandsMixin:
 
     async def _prompt_no_broker_action(self) -> None:
         """未配置券商时显示可导航的操作菜单，选择后直接路由到对应功能。"""
-        from aria_code.ui.picker import arrow_select as _arrow_select
+        from ui.picker import arrow_select as _arrow_select
         from aria_code.apps.cli._optional import BROKERS_CONFIG_PATH as _BROKERS_CONFIG_PATH
         from ui.picker import arrow_select
         import subprocess

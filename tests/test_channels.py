@@ -8,7 +8,7 @@ import unittest
 from unittest import mock
 
 from aria_code.apps.channels import CHANNEL_TASK_SCHEMA, channel_map, default_channels, enabled_channels
-from aria_code.apps.channels.tradingview import alert_to_task
+from apps.channels.tradingview import alert_to_task
 
 
 class RegistryTests(unittest.TestCase):

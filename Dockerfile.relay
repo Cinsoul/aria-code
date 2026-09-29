@@ -19,4 +19,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8765
 
-CMD ["python3", "aria_relay_server.py"]
+CMD ["python3", "-m", "aria_code.aria_relay_server"]

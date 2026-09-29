@@ -10,8 +10,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from aria_code.artifacts import create_user_artifact, write_artifact_metadata, write_artifact_raw_data
-from aria_code.data_service import DataService
+from artifacts import create_user_artifact, write_artifact_metadata, write_artifact_raw_data
+from data_service import DataService
 
 
 @dataclass(frozen=True)

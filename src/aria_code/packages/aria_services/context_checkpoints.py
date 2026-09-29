@@ -27,7 +27,7 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 CHECKPOINT_SCHEMA = "aria.context_checkpoint.v1"
 DEFAULT_KEEP_PER_SESSION = 5

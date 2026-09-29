@@ -8,7 +8,7 @@ by _rebind_mixin_globals() called at module load time.
 from __future__ import annotations
 
 from ._ui import print_error, rich_box
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 import json
@@ -42,7 +42,7 @@ def _get_rich_box():
     return rich_box
 def _arrow_select(*args, **kwargs):
     # Re-exported by aria_cli; taken from its own module here.
-    from aria_code.ui.picker import arrow_select as fn
+    from ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get___version__():
     from aria_cli import __version__ as val
@@ -1257,7 +1257,7 @@ class WorkspaceCommandsMixin:
                     # __file__ 因此指向仓库根的 aria_cli.py 而非本文件，四层 parent
                     # 算出 /Users/setup_wizard.py，永远不存在——异常被下面的
                     # except 吞掉，这条分支一直静默退化成"请手动运行"提示。
-                    import setup_wizard as _wiz
+                    from aria_code import setup_wizard as _wiz
                     _e = _wiz._load_env()
                     if sub == "feishu":
                         _wiz.setup_feishu(_e)
@@ -1267,9 +1267,9 @@ class WorkspaceCommandsMixin:
                 except Exception as _we:
                     _fallback_flag = "--feishu" if sub == "feishu" else "--telegram"
                     if self.context.has_rich:
-                        self.context.console.print(f"  [yellow]请运行: python3 setup_wizard.py {_fallback_flag}[/yellow]")
+                        self.context.console.print(f"  [yellow]请运行: python3 -m aria_code.setup_wizard {_fallback_flag}[/yellow]")
                     else:
-                        print(f"  Run: python3 setup_wizard.py {_fallback_flag}")
+                        print(f"  Run: python3 -m aria_code.setup_wizard {_fallback_flag}")
                 return
 
             self.context.console.print() if self.context.has_rich else print()

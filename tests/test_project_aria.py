@@ -1,4 +1,4 @@
-from aria_code.apps.cli.project_aria import build_project_aria_md
+from apps.cli.project_aria import build_project_aria_md
 
 
 def test_build_project_aria_md_contains_required_sections():

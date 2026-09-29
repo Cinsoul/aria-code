@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from aria_code.packages.aria_core import PermissionLevel
-from aria_code.packages.aria_tools import ToolSpec
+from packages.aria_core import PermissionLevel
+from packages.aria_tools import ToolSpec
 
 
 def _capabilities_for_mcp_tool(name: str, description: str = "") -> List[str]:

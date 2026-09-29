@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 # Features that are ALWAYS free (the BSL shell). Premium features are anything
 # not listed here; they require a license that grants them.

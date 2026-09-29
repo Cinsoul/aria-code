@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from aria_code.runtime import CheckpointStore, WorktreeError, WorktreeManager
+from runtime import CheckpointStore, WorktreeError, WorktreeManager
 
 
 def _git(repo, *args):
@@ -111,7 +111,7 @@ def test_completed_subagent_apply_creates_rewind_checkpoint(
     tmp_path,
     monkeypatch,
 ):
-    from aria_code.runtime.subagent import _TASKS, SubagentTask, apply_task_worktree
+    from runtime.subagent import _TASKS, SubagentTask, apply_task_worktree
 
     monkeypatch.setenv("ARIA_HOME", str(tmp_path / "aria-home"))
     manager = WorktreeManager(tmp_path / "worktrees")

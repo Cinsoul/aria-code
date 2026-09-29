@@ -255,7 +255,7 @@ class AriaSSEProvider:
         *,
         cancel_event: Optional[asyncio.Event] = None,
     ) -> AsyncGenerator[LLMEvent, None]:
-        from aria_code.apps.cli.providers.llm.sse_stream import stream_chat
+        from apps.cli.providers.llm.sse_stream import stream_chat
 
         history = [m for m in messages if not (m.get("role") == "user" and m is messages[-1])]
         prompt = messages[-1].get("content", "") if messages else ""
@@ -353,7 +353,7 @@ class ConfiguredProvider:
         system_override: Optional[str] = None,
     ) -> None:
         self.config = dict(config or {})
-        from aria_code.apps.cli.providers.chat_routing import (
+        from apps.cli.providers.chat_routing import (
             model_provider,
             normalize_provider_name,
         )
@@ -408,13 +408,13 @@ class ConfiguredProvider:
             return
 
         if self.backend in self.LOCAL_OPENAI_BACKENDS | self.GENERIC_OPENAI_BACKENDS:
-            from aria_code.local_llm_provider import LocalLLMProvider
+            from local_llm_provider import LocalLLMProvider
 
             cfg = dict(self.config)
             cfg["model"] = self.model
             if self.backend in self.GENERIC_OPENAI_BACKENDS:
                 import os
-                from aria_code.providers.llm.registry import _load_provider_cfg_from_file
+                from providers.llm.registry import _load_provider_cfg_from_file
 
                 file_cfg = _load_provider_cfg_from_file(self.backend)
                 api_key = (
@@ -453,8 +453,8 @@ class ConfiguredProvider:
             source = self.backend
             event_stream = provider.stream(prepared, tools=tools, cancel_event=cancel_event)
         else:
-            from aria_code.providers.llm.base import Message
-            from aria_code.providers.llm.registry import get_provider
+            from providers.llm.base import Message
+            from providers.llm.registry import get_provider
 
             try:
                 provider = get_provider(f"{self.backend}/{self.model}")

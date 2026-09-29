@@ -92,7 +92,7 @@ async def test_confirm_order_refuses_when_chat_confirm_not_enabled(monkeypatch):
         broker_id = "some_broker"
 
     monkeypatch.setattr(server_mod, "_get_broker", lambda broker_id="": _FakeBroker())
-    monkeypatch.setattr("brokers.config.is_chat_confirm_enabled", lambda broker_id: False)
+    monkeypatch.setattr("aria_code.brokers.config.is_chat_confirm_enabled", lambda broker_id: False)
 
     result = await _call_broker_confirm_order(
         {"preview_id": "tp_x", "broker_id": "some_broker", "confirmed": True}
@@ -109,7 +109,7 @@ async def test_confirm_order_executes_only_when_both_gates_pass(monkeypatch):
         broker_id = "some_broker"
 
     monkeypatch.setattr(server_mod, "_get_broker", lambda broker_id="": _FakeBroker())
-    monkeypatch.setattr("brokers.config.is_chat_confirm_enabled", lambda broker_id: True)
+    monkeypatch.setattr("aria_code.brokers.config.is_chat_confirm_enabled", lambda broker_id: True)
 
     called = {}
 
@@ -119,7 +119,7 @@ async def test_confirm_order_executes_only_when_both_gates_pass(monkeypatch):
         called["source"] = source
         return {"success": True, "order_id": "o1"}
 
-    monkeypatch.setattr("brokers.trading.execute_order_preview", fake_execute)
+    monkeypatch.setattr("aria_code.brokers.trading.execute_order_preview", fake_execute)
 
     result = await _call_broker_confirm_order(
         {"preview_id": "tp_x", "broker_id": "some_broker", "confirmed": True}
@@ -157,7 +157,7 @@ async def test_generate_submit_rejects_unknown_provider_even_when_confirmed():
 
 @pytest.mark.asyncio
 async def test_generate_submit_calls_provider_only_when_confirmed(monkeypatch):
-    import kling_video_client
+    from aria_code import kling_video_client
 
     called = {}
 
@@ -190,7 +190,7 @@ async def test_generate_image_refuses_with_confirmed_false():
 
 @pytest.mark.asyncio
 async def test_generate_image_calls_client_only_when_confirmed(monkeypatch):
-    import openai_image_client
+    from aria_code import openai_image_client
 
     called = {}
 
@@ -215,7 +215,7 @@ async def test_edit_image_refuses_without_confirmed():
 
 @pytest.mark.asyncio
 async def test_edit_image_calls_client_only_when_confirmed(monkeypatch):
-    import openai_image_client
+    from aria_code import openai_image_client
 
     called = {}
 
@@ -233,7 +233,7 @@ async def test_edit_image_calls_client_only_when_confirmed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_edit_image_omits_mask_path_by_default(monkeypatch):
-    import openai_image_client
+    from aria_code import openai_image_client
 
     called = {}
 
@@ -248,7 +248,7 @@ async def test_edit_image_omits_mask_path_by_default(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_edit_image_passes_through_mask_path_for_inpainting(monkeypatch):
-    import openai_image_client
+    from aria_code import openai_image_client
 
     called = {}
 
@@ -289,12 +289,12 @@ async def test_indicator_chart_requires_symbol():
 @requires_charts
 async def test_indicator_chart_writes_artifact_on_success(monkeypatch, tmp_path):
     df = _fake_ohlcv_df()
-    import report_generator
+    from aria_code import report_generator
     monkeypatch.setattr(report_generator, "_fetch_report_data_sync", lambda symbol: (df, None, {}))
 
     fake_path = tmp_path / "out.png"
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
+        mp.setattr("aria_code.artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
         result = await _call_indicator_chart({"symbol": "aapl"})
     assert result["success"] is True
     assert result["path"] == str(fake_path)
@@ -304,7 +304,7 @@ async def test_indicator_chart_writes_artifact_on_success(monkeypatch, tmp_path)
 @pytest.mark.asyncio
 async def test_indicator_chart_no_data_reports_error(monkeypatch):
     import pandas as pd
-    import report_generator
+    from aria_code import report_generator
     monkeypatch.setattr(report_generator, "_fetch_report_data_sync", lambda symbol: (pd.DataFrame(), None, {}))
 
     result = await _call_indicator_chart({"symbol": "AAPL"})
@@ -322,12 +322,12 @@ async def test_comparison_chart_requires_at_least_two_symbols():
 @requires_charts
 async def test_comparison_chart_writes_artifact_on_success(monkeypatch, tmp_path):
     df = _fake_ohlcv_df()
-    import report_generator
+    from aria_code import report_generator
     monkeypatch.setattr(report_generator, "_fetch_report_data_sync", lambda symbol: (df, None, {}))
 
     fake_path = tmp_path / "out.png"
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
+        mp.setattr("aria_code.artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
         result = await _call_comparison_chart({"symbols": ["AAPL", "MSFT"]})
     assert result["success"] is True
     assert fake_path.exists()
@@ -336,7 +336,7 @@ async def test_comparison_chart_writes_artifact_on_success(monkeypatch, tmp_path
 @pytest.mark.asyncio
 async def test_comparison_chart_no_usable_data_reports_error(monkeypatch):
     import pandas as pd
-    import report_generator
+    from aria_code import report_generator
     monkeypatch.setattr(report_generator, "_fetch_report_data_sync", lambda symbol: (pd.DataFrame(), None, {}))
 
     result = await _call_comparison_chart({"symbols": ["AAPL", "MSFT"]})
@@ -357,7 +357,7 @@ async def test_allocation_chart_writes_artifact_on_success(monkeypatch, tmp_path
 
     fake_path = tmp_path / "out.png"
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
+        mp.setattr("aria_code.artifacts.create_user_artifact", lambda *a, **kw: type("A", (), {"path": fake_path})())
         result = await _call_allocation_chart({})
     assert result["success"] is True
     assert fake_path.exists()
@@ -447,6 +447,32 @@ async def test_skill_list_surfaces_integrity(monkeypatch):
                         lambda *a, **kw: [_fake_skill("a", "cat:a", integrity="unlocked")])
     result = await _call_skill_list({})
     assert result["skills"][0]["integrity"] == "unlocked"
+
+
+@pytest.mark.asyncio
+async def test_skill_list_surfaces_declared_policy_and_source(monkeypatch):
+    from packages.aria_skills import loader
+
+    skill = _fake_skill("a", "cat:a")
+    skill.policy = type("P", (), {
+        "allowed_tools": ("read_file",),
+        "permissions": ("workspace-read",),
+        "agents": ("research",),
+        "script_execution": "approval",
+        "script_network": False,
+        "script_workspace_write": False,
+    })()
+    skill.plugin_version = "1.2.3"
+    skill.repository = "https://github.com/artherahq/aria-skills"
+    skill.content_sha256 = "abc123"
+    monkeypatch.setattr(loader, "discover_external_skills", lambda *a, **kw: [skill])
+
+    result = await _call_skill_list({})
+    item = result["skills"][0]
+    assert item["policy"]["permissions"] == ["workspace-read"]
+    assert item["policy"]["allowed_tools"] == ["read_file"]
+    assert item["repository"].endswith("aria-skills")
+    assert item["content_sha256"] == "abc123"
 
 
 @pytest.mark.asyncio

@@ -9,7 +9,7 @@ Responsibilities:
 
 Usage::
 
-    from aria_code.model_capability import get_model_capability, build_ollama_tool_payload
+    from model_capability import get_model_capability, build_ollama_tool_payload
 
     caps = get_model_capability("qwen2.5-coder:7b")
     # {"tool_calls": True, "format": "ollama_native", "context_window": 32768, ...}

@@ -19,7 +19,7 @@ try:
 except ImportError:
     DistributedCacheManager = None
 
-from aria_code.packages.aria_services.provider_health import (
+from packages.aria_services.provider_health import (
     GLOBAL_PROVIDER_HEALTH,
     ProviderHealthRegistry,
     ProviderIssue,

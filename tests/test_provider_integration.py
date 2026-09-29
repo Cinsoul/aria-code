@@ -28,10 +28,10 @@ if _CLI_DIR not in sys.path:
 # every patch.object(_reg, ...) in this file was applying to a copy nobody
 # called. ci.yml deselects this file, so only test.yml's pytest job saw it.
 import aria_code.providers.llm.registry as _reg
-from aria_code.providers.llm.base import Message, ProviderConfig
-from aria_code.providers.llm.openai_compat import DeepSeekProvider, SiliconFlowProvider
-from aria_code.providers.llm.registry import _try_provider, stream_cloud_fallback
-from aria_code.packages.aria_services.provider_health import ProviderIssue, ProviderHealthRegistry
+from providers.llm.base import Message, ProviderConfig
+from providers.llm.openai_compat import DeepSeekProvider, SiliconFlowProvider
+from providers.llm.registry import _try_provider, stream_cloud_fallback
+from packages.aria_services.provider_health import ProviderIssue, ProviderHealthRegistry
 
 
 @pytest.fixture(autouse=True)

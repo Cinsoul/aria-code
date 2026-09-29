@@ -2,7 +2,7 @@
 tests/test_code_audit_tools.py — Unit tests for code audit and diff generation tools
 """
 
-from aria_code.tools.code_audit_tools import (
+from tools.code_audit_tools import (
     tool_audit_code_diagnostics,
     tool_generate_code_diff,
     register_code_audit_tools,

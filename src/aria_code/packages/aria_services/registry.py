@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from aria_code.packages.aria_core import CapabilityManifest, PackageLink, PermissionLevel, ServiceKind
+from packages.aria_core import CapabilityManifest, PackageLink, PermissionLevel, ServiceKind
 
 
 @dataclass(frozen=True)

@@ -20,7 +20,7 @@ from .elo         import EloRatingSystem, get_elo
 from .dixon_coles import compute_match_probabilities, estimate_rho_from_results
 from .form        import analyze_form, parse_api_results
 from .h2h         import analyze_h2h, _neutral_h2h
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 # ── 联赛场均进球（每队每场，后备默认值）──────────────────────────────────────

@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import re
 from typing import Iterable, Sequence
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 #: Basic file I/O and deliverable-export tools that stay available no matter

@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 __all__ = ["find_skill_script", "missing_script_message", "ensure_arthera_sdk", "ensure_arthera_root"]
 

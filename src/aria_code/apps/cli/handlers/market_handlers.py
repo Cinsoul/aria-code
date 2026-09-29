@@ -1,7 +1,7 @@
 """Market data handlers extracted from aria_cli.py.
 
 Handles market data prefetching, snapshot rows, and full snapshot analysis.
-Imports market detection helpers from apps.cli.utils.market_detect.
+Imports market detection helpers from aria_code.apps.cli.utils.market_detect.
 _HAS_MDC and _get_mdc are resolved via lazy import to avoid circular deps.
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from aria_code.apps.cli.utils.market_detect import (
+from apps.cli.utils.market_detect import (
     _re_sym, _STOCK_PATTERN,
     _CRYPTO_WORDS, _COMPANY_TO_TICKER,
     _FINANCIAL_TERMS_BLOCKLIST,
@@ -23,7 +23,7 @@ from aria_code.apps.cli.utils.market_detect import (
     _PRIVATE_COMPANY_PROFILES,
 )
 from aria_code.apps.cli.market_metadata import enrich_market_quote, market_display_label
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 _PROVIDERS_FILE = aria_home() / "providers.json"
 
@@ -538,8 +538,8 @@ def _get_provider_key(provider: str) -> str:
 
 # Lazy MDC accessor (mirrors the pattern in market_tools.py)
 def _get_mdc_lazy():
-    aria_cli = sys.modules.get("aria_cli")
-    injected = getattr(aria_cli, "_get_mdc", None) if aria_cli else None
+    from aria_code import aria_cli
+    injected = getattr(aria_cli, "_get_mdc", None)
     if callable(injected):
         try:
             return injected()
@@ -552,11 +552,11 @@ def _get_mdc_lazy():
         return None
 
 def _has_mdc_lazy() -> bool:
-    aria_cli = sys.modules.get("aria_cli")
-    if aria_cli is not None and hasattr(aria_cli, "_HAS_MDC"):
+    from aria_code import aria_cli
+    if hasattr(aria_cli, "_HAS_MDC"):
         return bool(getattr(aria_cli, "_HAS_MDC"))
     try:
-        import market_data_client  # noqa
+        from aria_code import market_data_client  # noqa
         return True
     except ImportError:
         return False

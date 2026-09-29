@@ -25,7 +25,7 @@ import math
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 _PRED_PATH   = aria_home() / "football_predictions.json"
 _SYNCED_PATH = aria_home() / "elo_synced_matches.json"

@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Type
 
-from aria_code.agents.base import BaseAgent
-from aria_code.agents.registry import get_registry
-from aria_code.packages.aria_core import CapabilityManifest, PermissionLevel, ServiceKind
+from agents.base import BaseAgent
+from agents.registry import get_registry
+from packages.aria_core import CapabilityManifest, PermissionLevel, ServiceKind
 
 
 _CAPABILITIES_BY_AGENT = {

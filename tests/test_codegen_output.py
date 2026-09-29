@@ -14,7 +14,7 @@ if _CLI_DIR not in sys.path:
 
 class _CodeTerminal:
     def __init__(self, response: str):
-        from aria_code.apps.cli.context import AriaContext
+        from apps.cli.context import AriaContext
 
         self.config = {"model": "qwen2.5:7b"}
         self.conversation = []
@@ -29,10 +29,11 @@ class _CodeTerminal:
 
 @pytest.mark.asyncio
 async def test_cmd_code_saves_to_user_generated_dir_by_default(monkeypatch, tmp_path):
-    import aria_cli
+    from aria_code import aria_cli
 
     monkeypatch.setenv("ARIA_USER_OUTPUT_ROOT", str(tmp_path))
     terminal = _CodeTerminal("```python\nprint('hello')\n```")
+    terminal.context = type("AriaContextMock", (), {"console": None, "has_rich": False, "save_config": lambda: None})()
     commands = aria_cli.SlashCommands(terminal)
 
     await commands.cmd_code("build a simple strategy script")

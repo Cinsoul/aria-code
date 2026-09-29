@@ -9,7 +9,7 @@ import asyncio
 import os
 import sys
 
-from aria_code.ui.console import _HAS_TERMIOS, _esc_watcher
+from ui.console import _HAS_TERMIOS, _esc_watcher
 
 if _HAS_TERMIOS:
     import termios

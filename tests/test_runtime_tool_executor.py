@@ -3,7 +3,7 @@ import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from aria_code.runtime import AgentTurnState, RuntimeTrace, ToolExecutor
+from runtime import AgentTurnState, RuntimeTrace, ToolExecutor
 from aria_code.safety.permissions import evaluate_command_policy
 
 

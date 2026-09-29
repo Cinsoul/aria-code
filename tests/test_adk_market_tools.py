@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from aria_code.packages.adk_bridge.market_tools import MarketResearchTools
-from aria_code.packages.aria_services.provider_health import GLOBAL_PROVIDER_HEALTH
+from packages.aria_services.provider_health import GLOBAL_PROVIDER_HEALTH
 
 
 @dataclass

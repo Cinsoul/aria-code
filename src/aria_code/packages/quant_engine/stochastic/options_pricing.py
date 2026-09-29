@@ -24,6 +24,13 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 import numpy as np
 
+if TYPE_CHECKING:
+    # pandas is a real (optional) runtime dependency, imported lazily inside
+    # iv_surface() below so this module stays importable without it. This
+    # guarded import exists only so the "pd.DataFrame" annotation resolves
+    # for the type checker, not to force pandas onto module import.
+    import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 try:

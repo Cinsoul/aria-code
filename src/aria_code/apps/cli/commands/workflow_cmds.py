@@ -26,7 +26,7 @@ def _load_hooks(*args, **kwargs):
     return fn(*args, **kwargs)
 # display_path lives in ui.render.output; aria_cli only re-exports it under a
 # private alias, so going through aria_cli was a pointless second hop.
-from aria_code.ui.render.output import display_path as _display_path
+from ui.render.output import display_path as _display_path
 def _get_MODELS():
     from aria_code.apps.cli.model_catalog import MODELS as val
     return val

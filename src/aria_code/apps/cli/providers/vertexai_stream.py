@@ -11,7 +11,7 @@ import json
 import os
 from typing import AsyncGenerator, Optional
 
-from aria_code.apps.cli.providers.base import (
+from apps.cli.providers.base import (
     LLMDone,
     LLMEvent,
     LLMProvider,

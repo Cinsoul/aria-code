@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from aria_code.apps.cli.commands.catalog import DIRECT_COMMAND_MAP, WATCHABLE_DIRECT_COMMANDS
+from apps.cli.commands.catalog import DIRECT_COMMAND_MAP, WATCHABLE_DIRECT_COMMANDS
 
 
 def is_watchable_direct_command(command: str) -> bool:

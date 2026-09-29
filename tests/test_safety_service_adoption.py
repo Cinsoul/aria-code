@@ -74,12 +74,12 @@ class ServiceReturnsTheSameClassesItsCallersUse(unittest.TestCase):
 
     def test_privacy_matches_the_packaged_form(self):
         from aria_code.privacy import PrivacySettings
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
         self.assertIs(type(SafetyService({}).privacy()), PrivacySettings)
 
     def test_trading_matches_the_bare_form(self):
         from brokers.trading import TradingPolicy
-        from aria_code.safety import SafetyService
+        from safety import SafetyService
         self.assertIs(type(SafetyService({}).trading_policy()), TradingPolicy)
 
 

@@ -1,6 +1,6 @@
 import asyncio
 
-from aria_code.apps.cli.providers.collaboration import (
+from apps.cli.providers.collaboration import (
     collaboration_readiness,
     consult,
     resolve_collaborator,

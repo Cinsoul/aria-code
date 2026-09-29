@@ -3,7 +3,7 @@ pytest.importorskip("prompt_toolkit")
 from pathlib import Path
 from prompt_toolkit.document import Document
 
-from aria_code.ui.completer import AriaPTCompleter
+from ui.completer import AriaPTCompleter
 
 
 def _values(completer: AriaPTCompleter, text: str) -> list[str]:

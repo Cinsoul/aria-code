@@ -13,7 +13,7 @@ import shlex
 import shutil
 from typing import Callable, Iterable, Mapping
 
-from aria_code.apps.cli.intent_router import build_intent_route, detect_intents
+from apps.cli.intent_router import build_intent_route, detect_intents
 
 
 ModuleChecker = Callable[[str], bool]

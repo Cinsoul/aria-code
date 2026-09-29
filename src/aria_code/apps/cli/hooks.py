@@ -36,7 +36,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from aria_code.apps.cli.config_paths import resolve_config_dir
+from apps.cli.config_paths import resolve_config_dir
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from aria_code.agents.team import TeamResult
+from agents.team import TeamResult
 
 _SIGNAL_COLOR = {
     "GOOD":    "#2ea043",

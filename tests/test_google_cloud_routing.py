@@ -19,8 +19,8 @@ Hermetic — no network, no model calls, no credentials required.
 import os
 import unittest
 
-from aria_code.apps.cli.providers.base import ConfiguredProvider
-from aria_code.apps.cli.providers.chat_routing import first_round_route, model_provider
+from apps.cli.providers.base import ConfiguredProvider
+from apps.cli.providers.chat_routing import first_round_route, model_provider
 
 DEFAULT_CONFIG = {"local_provider": "ollama"}
 
@@ -160,19 +160,19 @@ class VertexCredentialDetectionTests(unittest.TestCase):
 
 class ProviderRegistryTests(unittest.TestCase):
     def test_google_is_a_registered_provider(self):
-        from aria_code.providers.llm.registry import _PROVIDER_CLASSES
+        from providers.llm.registry import _PROVIDER_CLASSES
 
         self.assertIn("google", _PROVIDER_CLASSES)
         self.assertIn("gemini", _PROVIDER_CLASSES)
 
     def test_google_participates_in_the_fallback_chain(self):
-        from aria_code.providers.llm.registry import _DEFAULT_FALLBACK_CHAIN
+        from providers.llm.registry import _DEFAULT_FALLBACK_CHAIN
 
         self.assertIn("google", [name for name, _, _ in _DEFAULT_FALLBACK_CHAIN])
 
     def test_google_provider_reads_the_standard_env_keys(self):
-        from aria_code.providers.llm.base import ProviderConfig
-        from aria_code.providers.llm.openai_compat import GoogleProvider
+        from providers.llm.base import ProviderConfig
+        from providers.llm.openai_compat import GoogleProvider
 
         saved = os.environ.get("GEMINI_API_KEY")
         os.environ["GEMINI_API_KEY"] = "test-key"

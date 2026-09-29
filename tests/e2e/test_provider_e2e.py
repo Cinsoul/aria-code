@@ -25,8 +25,8 @@ _CLI_DIR = str(pathlib.Path(__file__).parents[2])
 if _CLI_DIR not in sys.path:
     sys.path.insert(0, _CLI_DIR)
 
-from aria_code.providers.llm.base import Message
-from aria_code.providers.llm.registry import _build_cfg, stream_cloud_fallback, _PROVIDER_CLASSES
+from providers.llm.base import Message
+from providers.llm.registry import _build_cfg, stream_cloud_fallback, _PROVIDER_CLASSES
 
 
 # ── 辅助 ──────────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ def _provider_for_test(request: pytest.FixtureRequest) -> str | None:
 
 async def _call_provider(provider_name: str, prompt: str) -> dict:
     """用指定 provider 发起一次 stream_cloud_fallback 调用，返回结果 dict。"""
-    from aria_code.providers.llm.registry import _load_provider_cfg_from_file
+    from providers.llm.registry import _load_provider_cfg_from_file
     from unittest.mock import patch
 
     # 仅让指定 provider 有 key（避免其他 provider 干扰顺序）

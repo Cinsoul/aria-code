@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aria_code.data_service import DataBundle, DataService, DataServiceResult
+from data_service import DataBundle, DataService, DataServiceResult
 
 __all__ = [
     "DataBundle",

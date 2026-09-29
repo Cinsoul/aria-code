@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from aria_code.artifacts import create_user_artifact, write_artifact_metadata, write_artifact_raw_data
+from artifacts import create_user_artifact, write_artifact_metadata, write_artifact_raw_data
 
 try:
     import pandas as pd

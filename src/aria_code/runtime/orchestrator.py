@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 import json
 import logging
-from aria_code.agents.registry import get_registry
+from agents.registry import get_registry
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's names
 by _rebind_mixin_globals() called at module load time.
 """
 from __future__ import annotations
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 import logging
@@ -17,6 +17,60 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# Import path → the name you actually type after `pip install`. Namespace
+# packages make these differ, and guessing from the module name produces
+# advice that fails: `google.genai` is shipped as `google-genai`, so the
+# obvious `pip install google` installs an unrelated stub.
+_PIP_NAMES = {
+    "google.genai": "google-genai",
+    "google.generativeai": "google-generativeai",
+    "google.cloud": "google-cloud",
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "mistralai": "mistralai",
+    "cohere": "cohere",
+    "yfinance": "yfinance",
+    "akshare": "akshare",
+    "ccxt": "ccxt",
+}
+
+
+def _pip_name(module: str) -> str:
+    """Best installable name for *module*, longest known prefix first."""
+    if module in _PIP_NAMES:
+        return _PIP_NAMES[module]
+    for known, package in sorted(_PIP_NAMES.items(), key=lambda kv: -len(kv[0])):
+        if module.startswith(known + "."):
+            return package
+    # Unknown: the top-level name is the best available guess, and it is right
+    # for the ordinary single-package case.
+    return module.split(".")[0].replace("_", "-")
+
+
+def _actionable(provider: str, error: str) -> str:
+    """Turn a probe failure into something the user can act on.
+
+    The picker used to show ``ollama_err[:40]``, which for the most common
+    failure produced ``[ollama: <urlopen error [Errno 61] Connection ref]`` —
+    a raw Python exception, truncated mid-word, naming neither the cause nor
+    the remedy. A connection refused on the local runtime port has exactly one
+    meaning and one fix, so say them.
+    """
+    text = str(error or "")
+    low = text.lower()
+    if "errno 61" in low or "connection refused" in low:
+        return "未运行 · 先执行 ollama serve" if provider == "ollama" else f"{provider} 未运行"
+    if "timed out" in low or "timeout" in low:
+        return "连接超时 · 检查服务地址与网络"
+    if "name or service not known" in low or "nodename nor servname" in low:
+        return "地址无法解析 · 检查 ollama_url 配置"
+    if "no module named" in low:
+        module = text.split("'")[1] if "'" in text else text.strip()
+        return f"缺少 {module} · pip install {_pip_name(module)}"
+    collapsed = " ".join(text.split())
+    return collapsed if len(collapsed) <= 48 else collapsed[:47] + "…"
+
 
 def detect_ollama_models_rich(*args, **kwargs):
     from aria_code.apps.cli.helpers import detect_ollama_models_rich as fn
@@ -70,7 +124,7 @@ def _get__DATA_SIGNUP_URLS():
     return val
 def _arrow_select(*args, **kwargs):
     # Re-exported by aria_cli; taken from its own module here.
-    from aria_code.ui.picker import arrow_select as fn
+    from ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get_SKILLS():
     from aria_code.apps.cli.skills_catalog import SKILLS as val
@@ -252,7 +306,7 @@ class ModelCommandsMixin:
         _sel_model = _i18n("select_model")
         _installed = _i18n("installed")
         if ollama_err:
-            _picker_title = f"{_sel_model}  [{current_provider}: {ollama_err[:40]}]"
+            _picker_title = f"{_sel_model}  [{current_provider}: {_actionable(current_provider, ollama_err)}]"
         else:
             n_local = sum(1 for m in rich_models if m.get("execution") != "remote")
             n_remote = len(rich_models) - n_local
@@ -427,7 +481,8 @@ class ModelCommandsMixin:
 
         if not any(model_id is not None for model_id in all_ids):
             message = (
-                f"{current_provider}: {ollama_err or 'no models available'}"
+                f"{current_provider}: "
+                f"{_actionable(current_provider, ollama_err) if ollama_err else 'no models available'}"
             )
             self.context.console.print(f"[yellow]{message}[/yellow]") if self.context.has_rich else print(message)
             return

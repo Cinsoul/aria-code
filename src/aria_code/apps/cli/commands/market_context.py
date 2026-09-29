@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Any, Callable, Optional
 
-from aria_code.apps.cli.prompts.system_prompts import build_response_style_rule
+from apps.cli.prompts.system_prompts import build_response_style_rule
 
 
 TA_SESSION_CACHE: dict[str, dict[str, Any]] = {}

@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from aria_code.apps.cli.market_universe import resolve_market_mentions
+from apps.cli.market_universe import resolve_market_mentions
 
 
 @dataclass(frozen=True)

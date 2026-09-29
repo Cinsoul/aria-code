@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from aria_code.apps.cli.utils.market_detect import (
+from apps.cli.utils.market_detect import (
     _extract_market_symbol,
     _extract_market_symbols,
     _is_blocked_market_symbol_candidate,

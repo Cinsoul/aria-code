@@ -93,7 +93,7 @@ def _handler(console):
     methods read aria_cli's module globals, which the monkeypatching set up.
     """
     from aria_code.apps.cli.commands import broker_cmds
-    from aria_code.apps.cli.context import AriaContext
+    from apps.cli.context import AriaContext
 
     handler = broker_cmds.BrokerCommandsMixin()
     handler.context = AriaContext(console=console, has_rich=True)

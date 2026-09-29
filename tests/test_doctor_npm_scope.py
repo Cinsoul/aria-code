@@ -19,7 +19,7 @@ import pathlib
 import tempfile
 import unittest
 
-from aria_code.doctor import npm_runtime_checks
+from doctor import npm_runtime_checks
 
 
 class NonNpmInstallSkipsTheGroup(unittest.TestCase):

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from aria_code.artifacts import slugify_topic, user_generated_dir
+from artifacts import slugify_topic, user_generated_dir
 
 
 # ── Webhook security ──────────────────────────────────────────────────────────

@@ -1,13 +1,13 @@
 import pytest
 
-from aria_code.apps.cli.providers.base import ConfiguredProvider, LLMDone, LLMToken
-from aria_code.providers.llm.openai_compat import chat_completions_url
-from aria_code.apps.cli.providers.chat_routing import normalize_provider_name
+from apps.cli.providers.base import ConfiguredProvider, LLMDone, LLMToken
+from providers.llm.openai_compat import chat_completions_url
+from apps.cli.providers.chat_routing import normalize_provider_name
 
 
 @pytest.mark.asyncio
 async def test_configured_provider_uses_non_ollama_local_runtime(monkeypatch):
-    import local_llm_provider
+    from aria_code import local_llm_provider
 
     seen = {}
 

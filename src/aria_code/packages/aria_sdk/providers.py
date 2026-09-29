@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aria_code.apps.cli.providers.base import AriaSSEProvider, LLMProvider, OllamaProvider
+from apps.cli.providers.base import AriaSSEProvider, LLMProvider, OllamaProvider
 
 from .types import AriaAgentOptions
 

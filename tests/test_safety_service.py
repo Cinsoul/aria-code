@@ -5,7 +5,7 @@ the three underlying domains can't drift apart from the facade."""
 
 import unittest
 
-from aria_code.safety import SafetyService
+from safety import SafetyService
 
 
 class CommandPolicyTests(unittest.TestCase):
@@ -90,7 +90,7 @@ class TradingRiskTests(unittest.TestCase):
         import subprocess
         import sys
         code = (
-            "import sys; import safety; "
+            "import sys; import aria_code.safety; "
             "bad = [m for m in sys.modules if m.startswith('brokers') or m.startswith('privacy')]; "
             "sys.exit(1 if bad else 0)"
         )

@@ -30,7 +30,7 @@ from conftest import make_providers_file
 # `aria_code.providers.…` via src), which are distinct module objects — patching
 # one while the function under test reads the other silently does nothing.
 import aria_code.providers.llm.registry as _reg
-from aria_code.providers.llm.registry import (
+from providers.llm.registry import (
     _DEFAULT_FALLBACK_CHAIN,
     _PROVIDER_CLASSES,
     _build_cfg,
@@ -248,7 +248,7 @@ class TestNewProvidersRegistered(unittest.TestCase):
 
     def test_deepseek_first_in_cloud_chain(self):
         """DeepSeek 应是 fallback 链里第一个云端 provider。"""
-        from aria_code.providers.llm.registry import _PROVIDER_CLASSES
+        from providers.llm.registry import _PROVIDER_CLASSES
         cloud_names = [
             name for name, _, _ in _DEFAULT_FALLBACK_CHAIN
             if not _PROVIDER_CLASSES[name].local

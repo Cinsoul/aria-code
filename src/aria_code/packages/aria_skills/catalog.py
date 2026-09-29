@@ -11,7 +11,7 @@ import subprocess
 from typing import Callable, Sequence
 
 from .loader import LoadedSkill, discover_external_skills
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 
 _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")

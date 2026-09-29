@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseDataSource, HistoryResult, QuoteResult
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 logger = logging.getLogger(__name__)
 

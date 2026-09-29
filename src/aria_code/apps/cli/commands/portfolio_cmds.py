@@ -36,7 +36,7 @@ def team_agent_names(*args, **kwargs):
     return fn(*args, **kwargs)
 # execute_aria_tool lives in apps/cli/tool_executor.py and needs nothing from
 # aria_cli — the cache it reads is owned there now, so the hop was pointless.
-from aria_code.apps.cli.tool_executor import execute_aria_tool
+from apps.cli.tool_executor import execute_aria_tool
 def export_report_pdf(*args, **kwargs):
     from aria_cli import export_report_pdf as fn
     return fn(*args, **kwargs)
@@ -921,7 +921,7 @@ class PortfolioCommandsMixin:
             # Only .risk was read (and risk is mode-independent), so nothing
             # executed that shouldn't have; the service closes the gap before
             # anyone reads .allowed here and gets a wrong answer.
-            from aria_code.safety import SafetyService
+            from safety import SafetyService
             step_decision = SafetyService(self.terminal.config).evaluate_command(step, policy)
             if step_decision.risk == "high":
                 if not self._confirm_high_risk_command(step_decision.normalized_command, step_decision.risk, policy):

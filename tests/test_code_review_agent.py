@@ -1,5 +1,5 @@
-from aria_code.agents.base import BaseAgent
-from aria_code.agents.code_review import CodeReviewAgent
+from agents.base import BaseAgent
+from agents.code_review import CodeReviewAgent
 from aria_code.packages.adk_bridge import CodeReviewTools
 
 

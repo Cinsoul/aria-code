@@ -1,4 +1,4 @@
-from aria_code.packages.aria_services.research_protocol import (
+from packages.aria_services.research_protocol import (
     grounding_tool_names,
     requires_financial_evidence,
 )

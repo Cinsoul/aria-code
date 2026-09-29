@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-from aria_code.packages.aria_core import CapabilityManifest, PermissionLevel, ServiceKind
+from packages.aria_core import CapabilityManifest, PermissionLevel, ServiceKind
 
 
 @dataclass(frozen=True)

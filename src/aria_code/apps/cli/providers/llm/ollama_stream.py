@@ -55,7 +55,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-from aria_code.apps.cli.deterministic import _is_broker_intent
+from apps.cli.deterministic import _is_broker_intent
 from aria_code.apps.cli.helpers import detect_ollama_models_rich
 from aria_code.apps.cli.model_catalog import (
     _HAS_MODEL_CAP,
@@ -64,8 +64,8 @@ from aria_code.apps.cli.model_catalog import (
 )
 from aria_code.apps.cli.prompts.coding import CODING_SYSTEM_PROMPT
 from aria_code.apps.cli.tool_registry import LOCAL_TOOL_SCHEMAS
-from aria_code.apps.cli.tools.market_tools import _HAS_MDC
-from aria_code.ui.console import HAS_RICH, Panel, console
+from apps.cli.tools.market_tools import _HAS_MDC
+from ui.console import HAS_RICH, Panel, console
 
 # Second batch. Same rule as above — each verified to be the object aria_cli
 # holds, which is why _format_tool_summary is still absent: apps.cli.
@@ -84,7 +84,7 @@ from aria_code.apps.cli.intent import (
     is_general_knowledge as _is_general_knowledge,
     is_sports_query as _is_sports_query,
 )
-from aria_code.apps.cli.message_processing import (
+from apps.cli.message_processing import (
     compact_messages as _compact_messages,
     parse_text_tool_calls as _parse_text_tool_calls,
     strip_tool_call_tags as _strip_tool_call_tags,
@@ -102,10 +102,10 @@ from aria_code.apps.cli.handlers.market_handlers import _try_prefetch_market_dat
 from aria_code.apps.cli.handlers.sports_handlers import (
     try_prefetch_sports_data as _try_prefetch_sports_data,
 )
-from aria_code.apps.cli.message_processing import (
+from apps.cli.message_processing import (
     build_broker_context_block as _build_broker_context_block,
 )
-from aria_code.apps.cli.prompts.system_prompts import (
+from apps.cli.prompts.system_prompts import (
     build_analysis_prompt_lite as _build_analysis_prompt_lite,
     build_analysis_system_prompt as _build_analysis_system_prompt,
     build_coding_prompt_lite as _build_coding_prompt_lite,

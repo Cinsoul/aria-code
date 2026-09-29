@@ -21,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 _NPM_URL       = "https://registry.npmjs.org/aria-code/latest"
 _CACHE_FILE    = aria_home() / "update_check.json"

@@ -39,7 +39,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import requests
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 logger = logging.getLogger(__name__)
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)

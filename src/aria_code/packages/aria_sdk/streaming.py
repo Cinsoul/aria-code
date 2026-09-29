@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Callable
 
-from aria_code.apps.cli.providers.base import (
+from apps.cli.providers.base import (
     LLMDone,
     LLMProvider,
     LLMStatus,

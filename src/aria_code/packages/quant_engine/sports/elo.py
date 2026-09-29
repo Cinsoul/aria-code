@@ -24,7 +24,7 @@ import math
 import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-from aria_code.packages.aria_core.paths import aria_home
+from packages.aria_core.paths import aria_home
 
 # ── 默认初始 Elo（基于 FIFA 排名，幂律映射）──────────────────────────────────
 # 公式: elo = BASE - SCALE * (ranking ^ POWER)

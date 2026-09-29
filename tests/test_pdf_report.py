@@ -1,4 +1,4 @@
-from aria_code.apps.cli.pdf_report import (
+from apps.cli.pdf_report import (
     Document,
     Section,
     THEMES,
