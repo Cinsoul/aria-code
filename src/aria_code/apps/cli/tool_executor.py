@@ -33,8 +33,17 @@ _ARIA_BOT_MODE = False
 _CONFIRM_TOOLS: set[str] = set()
 _HAS_JSON_HOOKS = False
 _JSON_HOOKS: dict[str, object] = {}
-_CACHE_TTL: dict[str, int] = {}
-_TOOL_CACHE: dict[str, tuple] = {}
+# Real values, not placeholders. These two used to be empty stubs here and were
+# defined for real in aria_cli.py, so execute_aria_tool only cached when it ran
+# as the rebound copy with aria_cli's globals — and a direct import of it
+# silently got a TTL table with nothing in it, i.e. no caching at all. aria_cli
+# imports them from here now, so both copies share one cache and one config.
+_CACHE_TTL: dict[str, int] = {
+    "get_market_data": 30, "get_market_history": 300, "get_crypto_data": 30, "get_forex_data": 30,
+    "get_commodities_data": 60, "get_bonds_data": 60, "get_futures_data": 60,
+    "get_news": 300, "get_sector_performance": 60, "get_market_overview": 60,
+}
+_TOOL_CACHE: dict[str, tuple] = {}  # key -> (result, timestamp)
 _auto_approve_session = False
 _session_always_allow: set[str] = set()
 _session_command_prefixes: set[tuple[str, ...]] = set()

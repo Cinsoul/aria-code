@@ -1507,12 +1507,14 @@ def _run_hook(hook_type: str, tool_name: str, params: dict, result: dict = None)
 
 
 # TTL cache for read-only tool responses
-_TOOL_CACHE: Dict[str, tuple] = {}  # key -> (result, timestamp)
-_CACHE_TTL = {
-    "get_market_data": 30, "get_market_history": 300, "get_crypto_data": 30, "get_forex_data": 30,
-    "get_commodities_data": 60, "get_bonds_data": 60, "get_futures_data": 60,
-    "get_news": 300, "get_sector_performance": 60, "get_market_overview": 60,
-}
+# Owned by apps/cli/tool_executor.py, which is where execute_aria_tool lives.
+# Defining a second pair here meant the rebound copy cached into this module's
+# dict while the original cached into that one — two caches, and whichever
+# module a caller reached decided which it got.
+from aria_code.apps.cli.tool_executor import (  # noqa: F401
+    _CACHE_TTL,
+    _TOOL_CACHE,
+)
 
 
 

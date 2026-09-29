@@ -261,9 +261,9 @@ def print_quote_result(*args, **kwargs):
 def _football_fixtures(*args, **kwargs):
     from aria_cli import _football_fixtures as fn
     return fn(*args, **kwargs)
-def execute_aria_tool(*args, **kwargs):
-    from aria_cli import execute_aria_tool as fn
-    return fn(*args, **kwargs)
+# execute_aria_tool lives in apps/cli/tool_executor.py and needs nothing from
+# aria_cli — the cache it reads is owned there now, so the hop was pointless.
+from aria_code.apps.cli.tool_executor import execute_aria_tool
 def _is_ashare_symbol(*args, **kwargs):
     from aria_code.apps.cli.helpers import _is_ashare_symbol as fn
     return fn(*args, **kwargs)
