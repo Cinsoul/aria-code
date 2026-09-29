@@ -28,9 +28,6 @@ from typing import Dict, Any, Optional
 def parse_team_args(*args, **kwargs):
     from aria_cli import parse_team_args as fn
     return fn(*args, **kwargs)
-def evaluate_command_policy(*args, **kwargs):
-    from aria_code.safety import evaluate_command_policy as fn
-    return fn(*args, **kwargs)
 def resolve_team_symbols(*args, **kwargs):
     from aria_cli import resolve_team_symbols as fn
     return fn(*args, **kwargs)
@@ -918,7 +915,14 @@ class PortfolioCommandsMixin:
             else:
                 print(f"Step {i}/{len(plan)}: {step}")
 
-            step_decision = evaluate_command_policy(step, policy)
+            # Was evaluate_command_policy(step, policy) — which silently
+            # evaluated every step as workspace-write with networking on,
+            # ignoring the session's permission_mode and network_enabled.
+            # Only .risk was read (and risk is mode-independent), so nothing
+            # executed that shouldn't have; the service closes the gap before
+            # anyone reads .allowed here and gets a wrong answer.
+            from aria_code.safety import SafetyService
+            step_decision = SafetyService(self.terminal.config).evaluate_command(step, policy)
             if step_decision.risk == "high":
                 if not self._confirm_high_risk_command(step_decision.normalized_command, step_decision.risk, policy):
                     failed = (i, step, "Cancelled by user at high-risk step confirmation")

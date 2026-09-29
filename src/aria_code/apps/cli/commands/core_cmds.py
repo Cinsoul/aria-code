@@ -723,7 +723,7 @@ class CoreCommandsMixin:
     def cmd_run(self, args: str):
         """Run a command: /run <command>"""
         from aria_cli import _SYNTAX_THEME, _tool_run_command
-        from aria_code.safety import evaluate_command_policy
+        from aria_code.safety import SafetyService
         from ._ui import Syntax
         if not args.strip():
             self.context.console.print("[dim]Usage: /run [--dry-run] <command>[/dim]" if self.context.has_rich
@@ -740,14 +740,11 @@ class CoreCommandsMixin:
             return
 
         policy = self.terminal.config.get("command_policy", "safe")
-        decision = evaluate_command_policy(
-            text,
-            policy,
-            mode=self.terminal.config.get("permission_mode", "workspace-write"),
-            network_enabled=bool(self.terminal.config.get("network_enabled", True)),
-        )
+        # Built per call, not held: self.terminal.config is mutated in place by
+        # /config set, so a cached service would answer with a stale mode.
+        decision = SafetyService(self.terminal.config).evaluate_command(text, policy)
         if not dry_run and decision.allowed and decision.risk == "high":
-            if not self._confirm_high_risk_command(decision.normalized_command, decision.risk, decision.policy):
+            if not self._confirm_high_risk_command(decision.normalized_command, decision.risk, policy):
                 msg = "Cancelled by user."
                 self.context.console.print(f"[dim]{msg}[/dim]" if self.context.has_rich else msg)
                 return
@@ -920,7 +917,6 @@ class CoreCommandsMixin:
         from aria_cli import CONFIG_DIR
         from aria_code.privacy import FeedbackRecord
         from aria_code.privacy import FeedbackStore
-        from aria_code.privacy import PrivacySettings
         from aria_code.ui.render.output import display_path as _display_path
         parts = args.strip().split(maxsplit=1)
         vote = parts[0].lower() if parts else ""
@@ -949,7 +945,8 @@ class CoreCommandsMixin:
             self.context.console.print("[dim]No AI response to rate[/dim]" if self.context.has_rich else "No response to rate")
             return
 
-        settings = PrivacySettings.from_config(self.terminal.config)
+        from aria_code.safety import SafetyService
+        settings = SafetyService(self.terminal.config).privacy()
         record = FeedbackRecord.create(
             rating=rating,
             message=last_msg,
@@ -1022,10 +1019,10 @@ class CoreCommandsMixin:
         sub = parts[0].lower() if parts else "status"
         rest = parts[1].strip() if len(parts) > 1 else ""
         store = FeedbackStore(CONFIG_DIR)
-        settings = PrivacySettings.from_config(self.terminal.config)
+        from aria_code.safety import SafetyService
+        settings = SafetyService(self.terminal.config).privacy()
 
         def _save_settings(new_settings: PrivacySettings):
-            from aria_code.privacy import PrivacySettings
             new_settings.apply_to_config(self.terminal.config)
             self.context.save_config(self.terminal.config)
 

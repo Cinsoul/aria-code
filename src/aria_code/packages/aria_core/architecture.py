@@ -149,20 +149,33 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         responsibility="Filesystem, shell, network, broker, and privacy guardrails.",
         target_state="Every risky action is classified, previewed when needed, audited, and blocked by default for live trading.",
         current_state=(
-            "safety/service.py SafetyService already unifies evaluate_tool, evaluate_command, "
-            "classify_risk, privacy and trading policy — but nothing constructs it. Callers still "
-            "reach evaluate_command_policy and the broker helpers directly, so the unification "
-            "exists on paper only. Broker preview/confirm and the two-gate chat-confirm gate are "
-            "real and in use; credential files are written owner-only via "
+            "safety/service.py SafetyService unifies evaluate_tool, evaluate_command, "
+            "classify_risk, privacy and trading policy, and is now constructed at its "
+            "config-holding call sites: /run and /apply-plan for command policy, /feedback "
+            "and /privacy for privacy settings. tests/test_safety_service_adoption.py keeps "
+            "apps/cli/commands/ from reaching past it. Two defects were closed on the way: "
+            "evaluate_command_policy resolved an unrecognised mode to workspace-write rather "
+            "than read-only (so apps/cli/tools/system_tools.py, which defaulted the argument "
+            "to the *policy* name \"safe\", silently ran at workspace-write), and the service "
+            "returned a PrivacySettings from the bare `privacy` root that was a different "
+            "class object from the aria_code.privacy one its callers use. "
+            "Still direct, on purpose: apps/cli/tools/ takes explicit params and holds no "
+            "config, and apps/cli/tool_executor.py calls the stateless classify_command_risk. "
+            "Still direct, not yet done: the broker paths in broker_cmds.py and "
+            "brokers/automation.py. Broker preview/confirm and the two-gate chat-confirm gate "
+            "are real and in use; credential files are written owner-only via "
             "packages/aria_core/secure_file.py."
         ),
         status=LayerStatus.PARTIAL,
         source_paths=("safety/", "brokers/", "apps/cli/commands/broker_cmds.py"),
         depends_on=("settings", "tools"),
         next_steps=(
-            "Adopt SafetyService at its call sites — it is written and has zero callers. "
-            "Constructing it is not the work; routing apps/cli/tools/system_tools.py, "
-            "command_safety.py and the broker paths through it is.",
+            "Route the broker paths (broker_cmds.py global_dry_run/policy_from_config, "
+            "brokers/automation.py) through SafetyService.trading_policy/trading_dry_run — "
+            "the command-policy and privacy sites are done.",
+            "Give SafetyService a privacy setter so /privacy on|off stops constructing "
+            "PrivacySettings itself; until it has one, the adoption guard can only forbid "
+            "deriving settings from config, not constructing them.",
         ),
     ),
     ArchitectureLayer(
