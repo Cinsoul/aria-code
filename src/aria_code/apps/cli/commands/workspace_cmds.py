@@ -7,7 +7,7 @@ by _rebind_mixin_globals() called at module load time.
 
 from __future__ import annotations
 
-from ._ui import print_error
+from ._ui import print_error, rich_box
 from aria_code.packages.aria_core.paths import aria_home
 
 
@@ -37,8 +37,8 @@ def _get_provider_key(*args, **kwargs):
     from aria_cli import _get_provider_key as fn
     return fn(*args, **kwargs)
 def _get_rich_box():
-    from aria_cli import rich_box as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return rich_box
 def _arrow_select(*args, **kwargs):
     from aria_cli import _arrow_select as fn
     return fn(*args, **kwargs)

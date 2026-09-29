@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._ui import print_error
+from ._ui import Panel, print_error, rich_box
 
 import asyncio
 import json
@@ -77,14 +77,14 @@ def _get___version__():
     from aria_cli import __version__ as val
     return val
 def _get_Panel():
-    from aria_cli import Panel as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return Panel
 def _get_provider_key(*args, **kwargs):
     from aria_cli import _get_provider_key as fn
     return fn(*args, **kwargs)
 def _get_rich_box():
-    from aria_cli import rich_box as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return rich_box
 def _get__HAS_MCP():
     from aria_cli import _HAS_MCP as val
     return val

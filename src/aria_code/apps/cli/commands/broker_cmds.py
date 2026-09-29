@@ -6,7 +6,7 @@ imported lazily inside each method body to avoid circular imports at load time.
 
 from __future__ import annotations
 
-from ._ui import print_error
+from ._ui import Panel, print_error, rich_box
 from aria_code.packages.aria_core.paths import aria_home
 
 
@@ -25,7 +25,7 @@ class BrokerCommandsMixin:
 
     async def cmd_broker(self, args: str):
         """券商账户管理: /broker list | guide | doctor | services | connect <id> | add <type>"""
-        from aria_cli import Panel, rich_box, _HAS_BROKERS
+        from aria_cli import _HAS_BROKERS
         if not _HAS_BROKERS:
             print_error(self.context, "brokers 模块未加载", "请确认 brokers/ 目录存在")
             return
@@ -76,7 +76,7 @@ class BrokerCommandsMixin:
                 ))
 
     async def _cmd_broker_list(self):
-        from aria_cli import (Panel, rich_box, _list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry)
+        from aria_cli import (_list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry)
         cfgs = _list_broker_configs()
         if not cfgs:
             await self._prompt_no_broker_action()
@@ -160,7 +160,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_guide(self, broker_type: str = ""):
         """Show broker capability matrix or a single broker setup plan."""
-        from aria_cli import Panel, rich_box
+
         from brokers.capabilities import (
             broker_connection_plan, broker_dependency_state,
             get_broker_capability, list_broker_capabilities,
@@ -249,7 +249,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_doctor(self, args: str = ""):
         """Check configured broker fields, SDK availability, and connection state."""
-        from aria_cli import Panel, rich_box
+
         from brokers.capabilities import broker_dependency_state, get_broker_capability
         from brokers.config import BROKERS_CONFIG_PATH, list_broker_configs, validate_broker_config
         from aria_cli import _get_broker_registry
@@ -347,7 +347,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_services(self):
         """Show how broker data flows into Aria services."""
-        from aria_cli import rich_box
+
         from brokers.capabilities import broker_service_playbook
 
         rows = broker_service_playbook()
@@ -459,7 +459,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_add(self, broker_type: str):
         from aria_cli import _arrow_select
-        from aria_cli import (Panel, rich_box, _supported_broker_types, _get_broker_template, _add_broker_cfg, _BROKERS_CONFIG_PATH)
+        from aria_cli import (_supported_broker_types, _get_broker_template, _add_broker_cfg, _BROKERS_CONFIG_PATH)
         from ui.picker import arrow_select
 
         supported = _supported_broker_types()
@@ -807,7 +807,7 @@ class BrokerCommandsMixin:
             print_error(self.context, f"未找到券商: {broker_id}", "请先用 /broker add 添加")
 
     async def _cmd_broker_init(self):
-        from aria_cli import Panel, rich_box, _BROKERS_CONFIG_PATH
+        from aria_cli import _BROKERS_CONFIG_PATH
         from brokers.config import print_all_templates
         if self.context.has_rich:
             self.context.console.print(Panel(
@@ -989,7 +989,7 @@ class BrokerCommandsMixin:
                 f"单笔上限: {policy.max_order_value_weight:.1%}  单票仓位上限: {policy.max_single_position_weight:.1%}"
             )
             if self.context.has_rich:
-                from aria_cli import Panel, rich_box
+
                 color = "red" if policy.mode == "live" else "green" if policy.mode == "paper" else "yellow"
                 self.context.console.print(Panel(msg, title="[bold]Trade Mode[/bold]", border_style=color, box=rich_box.ROUNDED))
             else:
@@ -1041,7 +1041,7 @@ class BrokerCommandsMixin:
             rows = list_order_previews(limit=10)
             if self.context.has_rich:
                 from rich.table import Table
-                from aria_cli import rich_box
+
                 tbl = Table(title="[bold]Trade Previews[/bold]", box=rich_box.ROUNDED, border_style="dim")
                 tbl.add_column("ID")
                 tbl.add_column("Mode")
@@ -1123,7 +1123,7 @@ class BrokerCommandsMixin:
         )
         blockers = preview.get("execution_blockers") or []
         if self.context.has_rich:
-            from aria_cli import Panel, rich_box
+
             status = "可执行" if preview.get("can_execute") else "不可执行"
             body = (
                 f"preview_id: [bold]{preview.get('preview_id')}[/bold]\n"
@@ -1141,7 +1141,7 @@ class BrokerCommandsMixin:
     async def _prompt_no_broker_action(self) -> None:
         """未配置券商时显示可导航的操作菜单，选择后直接路由到对应功能。"""
         from aria_cli import _arrow_select
-        from aria_cli import (Panel, rich_box, _BROKERS_CONFIG_PATH)
+        from aria_cli import (_BROKERS_CONFIG_PATH)
         from ui.picker import arrow_select
         import subprocess
         import sys as _sys

@@ -45,7 +45,7 @@ _BASELINE_ARIA_CLI_IMPORTERS = 28
 # 这个刻度数的是 import 语句行数，不是调用点。一行 `from aria_cli import a, b, c`
 # 只算 1。所以它会低估进展：把 73 处 _print_error 调用改成 context 适配器后，
 # 模块数只掉了 1、行数只掉了 14。它仍然是对的方向指示，但别拿它当工作量。
-_BASELINE_ARIA_CLI_REFERENCES = 262
+_BASELINE_ARIA_CLI_REFERENCES = 238
 
 
 def _module_name(path: pathlib.Path) -> str:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._ui import print_error
+from ._ui import Panel, print_error, rich_box
 
 import base64
 import io
@@ -32,14 +32,14 @@ def _get__HAS_MODEL_CAP():
     from aria_cli import _HAS_MODEL_CAP as val
     return val
 def _get_rich_box():
-    from aria_cli import rich_box as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return rich_box
 def get_model_cfg(*args, **kwargs):
     from aria_cli import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_Panel():
-    from aria_cli import Panel as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return Panel
 
 import json
 import asyncio

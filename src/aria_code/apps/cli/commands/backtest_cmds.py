@@ -5,7 +5,7 @@ Extracted from aria_cli.py. Module globals imported lazily inside method bodies.
 
 from __future__ import annotations
 
-from ._ui import print_error
+from ._ui import has_rich, print_error
 
 
 def format_backtest_data_error(
@@ -167,7 +167,7 @@ class BacktestCommandsMixin:
           /backtest momentum AAPL --period 1y
           /backtest momentum AAPL --period 6m
         """
-        from aria_cli import HAS_RICH
+
         import re as _re_bt
         today = __import__("datetime").date.today()
 
@@ -496,7 +496,7 @@ class BacktestCommandsMixin:
                 bars=_yf_bars[0],
             )}
 
-        if HAS_RICH:
+        if self.context.has_rich:
             with self.context.console.status(f"[dim]{label}...[/dim]", spinner="dots"):
                 result = await _do_backtest()
         else:
@@ -514,7 +514,7 @@ class BacktestCommandsMixin:
                 print_error(self.context, f"回测结果格式异常: {type(d)}", "tool")
                 return
             src = result.get("_source", "aria")
-            if HAS_RICH:
+            if self.context.has_rich:
                 from rich.table import Table
                 tbl = Table(title=f"[bold]{symbol} · {strategy.upper()}[/bold]", show_header=True, header_style="bold")
                 tbl.add_column("Metric", style="#57606a")
@@ -598,7 +598,7 @@ class BacktestCommandsMixin:
 
     async def _print_backtest_broker_plan(self, backtest_result: dict):
         """Print an account-aware order plan for a successful backtest, if a broker is connected."""
-        from aria_cli import HAS_RICH
+
         if not _get__HAS_BROKERS() or not isinstance(backtest_result, dict):
             return
         try:
@@ -620,7 +620,7 @@ class BacktestCommandsMixin:
             data = plan.to_dict()
             order = data.get("estimated_order") or {}
             risk = data.get("risk") or {}
-            if HAS_RICH:
+            if self.context.has_rich:
                 from rich.table import Table
                 t = Table(title=f"Broker Plan — {snapshot.broker_label}", show_header=False, box=None)
                 t.add_column("Field", style="dim")
@@ -653,7 +653,7 @@ class BacktestCommandsMixin:
 
     async def cmd_walk_forward(self, args: str):
         """Walk-Forward 滚动回测 → /api/v1/backtest/walk-forward"""
-        from aria_cli import HAS_RICH
+
         parts = args.split() if args else ["SPY"]
         symbol = parts[0].upper() if parts else "SPY"
         strategy = parts[1] if len(parts) > 1 else "momentum"
@@ -677,7 +677,7 @@ class BacktestCommandsMixin:
                     body = await resp.json()
                     return body.get("data", body)
 
-        if HAS_RICH:
+        if self.context.has_rich:
             with self.context.console.status(f"[dim]{label}...[/dim]", spinner="dots"):
                 try:
                     data = await _do_wf()
@@ -695,7 +695,7 @@ class BacktestCommandsMixin:
         verdict = summary.get("verdict", "?")
         verdict_color = "green" if verdict == "PASS" else "red"
 
-        if HAS_RICH:
+        if self.context.has_rich:
             from rich.table import Table
             # Summary
             self.context.console.print(f"\n[bold]{symbol} · {strategy} · {method}[/bold]  Verdict: [bold {verdict_color}]{verdict}[/bold {verdict_color}]")
@@ -734,7 +734,7 @@ class BacktestCommandsMixin:
             /auto-strategy momentum SPY --target sharpe=1.5
             /auto-strategy meanrev AAPL --target sharpe=1.2 --rounds 3
         """
-        from aria_cli import HAS_RICH
+
         import re as _re
         import time as _time
 
@@ -751,7 +751,7 @@ class BacktestCommandsMixin:
             if m:
                 max_rounds = int(m.group(1))
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             self.context.console.print(f"  [bold cyan]🔄 策略自动优化[/bold cyan]  [dim]{strategy_type} / {symbol}  目标 Sharpe≥{target_sharpe}  最多{max_rounds}轮[/dim]")
             self.context.console.print()
@@ -848,7 +848,7 @@ class BacktestCommandsMixin:
 
             # Display round result
             sharpe_color = "green" if sharpe >= target_sharpe else ("yellow" if sharpe > 0 else "red")
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(
                     f"  [dim]回测结果:[/dim]  "
                     f"Sharpe=[{sharpe_color}]{sharpe:.2f}[/{sharpe_color}]  "
@@ -870,7 +870,7 @@ class BacktestCommandsMixin:
                 self.context.console.print(f"  [dim]Sharpe={sharpe:.2f} < 目标{target_sharpe}，继续优化...[/dim]\n") if self.context.has_rich else print(f"  Sharpe={sharpe:.2f} < {target_sharpe}, optimizing...\n")
 
         # ── Summary ──────────────────────────────────────────────────────────
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             self.context.console.print(f"  [bold]优化完成[/bold]  最佳 Sharpe=[{'green' if best_sharpe >= target_sharpe else 'yellow'}]{best_sharpe:.2f}[/{'green' if best_sharpe >= target_sharpe else 'yellow'}]")
             if best_version:
@@ -888,7 +888,7 @@ class BacktestCommandsMixin:
             /factor-lab QQQ --days 252
             /factor-lab SPY --factors momentum,value,quality
         """
-        from aria_cli import HAS_RICH
+
         import re as _re
 
         parts = args.split()
@@ -899,7 +899,7 @@ class BacktestCommandsMixin:
             if m:
                 days = int(m.group(1))
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             self.context.console.print(f"  [bold cyan]🔬 因子分析工作台[/bold cyan]  [dim]{symbol}  {days}天数据[/dim]")
             self.context.console.print()
@@ -987,7 +987,7 @@ class BacktestCommandsMixin:
                       for fname, fseries in factors.items()}
 
             # ── Display results ───────────────────────────────────────────────
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"  [bold]{symbol}[/bold]  [dim]当前价: {close.iloc[-1]:.2f}  数据: {len(df)}天[/dim]")
                 self.context.console.print()
                 self.context.console.print("  [bold]因子分析[/bold]")
@@ -1035,7 +1035,7 @@ class BacktestCommandsMixin:
 
     def _scaffold_with_llm(self, project_name: str, description: str, base_dir) -> None:
         """Call the configured LLM to generate a custom project structure and write files."""
-        from aria_cli import HAS_RICH
+
         import json
         import urllib.request
         import textwrap
@@ -1065,7 +1065,7 @@ class BacktestCommandsMixin:
             "Generate the complete file structure."
         )
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print(f"\n  [#C08050]⏺[/#C08050]  [bold]LLM 生成项目结构[/bold]  [dim]{description}[/dim]")
         else:
             print(f"\n⏺ 生成项目结构: {description}")
@@ -1145,7 +1145,7 @@ class BacktestCommandsMixin:
         entry       = structure.get("entry", "main.py")
 
         # ── Preview ───────────────────────────────────────────────────────────
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print(f"  [green]✓[/green]  [dim]{proj_desc}[/dim]")
             self.context.console.print(f"\n  [dim]{base_dir.name}/[/dim]")
             for fname, fcontent in files.items():
@@ -1174,7 +1174,7 @@ class BacktestCommandsMixin:
             target.parent.mkdir(parents=True, exist_ok=True)
 
             if approve_each:
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print(f"\n  [dim]{fname}[/dim]  ({fcontent.count(chr(10))+1} lines)")
                     sub = self.context.console.input("  [dim]写入? [y/n] [/dim]").strip().lower()
                 else:
@@ -1191,7 +1191,7 @@ class BacktestCommandsMixin:
                 err = result.get("error", "?")
                 self.context.console.print(f"  [red]Failed {fname}: {err}[/red]") if self.context.has_rich else print(f"  Failed {fname}: {err}")
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             if created:
                 self.context.console.print(f"  [green]✓[/green] 创建 {len(created)} 个文件 → [bold]{base_dir}[/bold]")
@@ -1221,12 +1221,12 @@ class BacktestCommandsMixin:
           /scaffold price-alert CLI tool that monitors stock prices and sends alerts
           /scaffold aapl-analysis --template analysis
         """
-        from aria_cli import HAS_RICH
+
         import textwrap
 
         parts = args.strip().split()
         if not parts:
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print("[dim]Usage: /scaffold <name> [description] | [--template analysis|strategy|pipeline|blank][/dim]")
                 self.context.console.print("[dim]Examples:[/dim]")
                 self.context.console.print("[dim]  /scaffold my-api  FastAPI REST API with JWT auth[/dim]")
@@ -1578,7 +1578,7 @@ class BacktestCommandsMixin:
         }
 
         # ── Preview: show tree + file summaries ──────────────────────────────
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             self.context.console.print(f"  [bold]Scaffold:[/bold] [cyan]{project_name}[/cyan]  "
                           f"[dim]({tmpl['description']}, {template} template)[/dim]")
@@ -1605,7 +1605,7 @@ class BacktestCommandsMixin:
         if not sys.stdin.isatty():
             choice = "y"
             self.context.console.print("  [dim](非交互模式：自动确认创建所有文件)[/dim]") if self.context.has_rich else print("  (Auto-approved: non-interactive mode)")
-        elif HAS_RICH:
+        elif self.context.has_rich:
             choice = self.context.console.input(
                 "  [bold]Create these files?[/bold] "
                 "[dim]\\[y=all / n=cancel / r=review each][/dim] "
@@ -1623,7 +1623,7 @@ class BacktestCommandsMixin:
         for fname, fcontent in files.items():
             target = base_dir / fname
             if approve_each:
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print(f"\n  [dim]{fname}[/dim]  ({fcontent.count(chr(10))+1} lines)")
                     sub = self.context.console.input(
                         "  [dim]Write this file? [y/n] [/dim]"
@@ -1640,13 +1640,13 @@ class BacktestCommandsMixin:
                 created.append(fname)
             else:
                 err = result.get("error", "?")
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print(f"  [red]Failed {fname}: {err}[/red]")
                 else:
                     print(f"  Failed {fname}: {err}")
 
         # ── Summary ───────────────────────────────────────────────────────────
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print()
             if created:
                 self.context.console.print(f"  [green]✓[/green] Created {len(created)} file(s) in [bold]{base_dir}[/bold]")
@@ -1665,7 +1665,7 @@ class BacktestCommandsMixin:
 
     async def _strategy_overview(self, vault):
         """所有策略一览看板：版本数 / 最新 / 回测 Sharpe·收益 / 审查 / 是否部署实盘。"""
-        from aria_cli import HAS_RICH
+
         names = vault.list_all_names()
         if not names:
             self.context.console.print("  [dim]还没有保存任何策略。用 /strategy save 开始。[/dim]" if self.context.has_rich
@@ -1679,7 +1679,7 @@ class BacktestCommandsMixin:
         except Exception:
             pass
 
-        if HAS_RICH:
+        if self.context.has_rich:
             from rich.table import Table
             self.context.console.print()
             self.context.console.print("  [bold cyan]策略总览[/bold cyan]")
@@ -1811,7 +1811,7 @@ class BacktestCommandsMixin:
         交易自动打标记 reason="deploy <策略> @<版本>"，从而被
         /strategy show（实盘 vs 回测）与 /portfolio holdings（分组看板）关联。
         """
-        from aria_cli import HAS_RICH
+
         if not _get__HAS_VAULT():
             self.context.console.print("[yellow]strategy_vault.py 未找到[/yellow]" if self.context.has_rich else "strategy_vault not found")
             return
@@ -1846,7 +1846,7 @@ class BacktestCommandsMixin:
 
         # /deploy <策略>  → 回测摘要 + 用法（你将对照它部署）
         if not rest:
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"\n  [bold cyan]部署 · {name}[/bold cyan]  [dim]最新 {latest.version_tag} · {latest.created_at[:10]}[/dim]")
                 if bt:
                     def _g(*ks):
@@ -1876,7 +1876,7 @@ class BacktestCommandsMixin:
                 tid = ledger.add_trade(p["symbol"], "SELL", p["net_qty"], px,
                                        reason=f"deploy {name} close @{latest.version_tag}")
                 done.append((tid, p["symbol"], p["net_qty"], px))
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"\n  [green]✓ 已平仓 {name}[/green]  [dim]{len(done)} 笔[/dim]")
                 for tid, s, q, px in done:
                     self.context.console.print(f"   [red]SELL[/red] {s} × {q:g} @ {px:,.2f}  [dim]#{tid}[/dim]")
@@ -1958,7 +1958,7 @@ class BacktestCommandsMixin:
             if not plan:
                 self.context.console.print(f"  [green]{name} 已接近目标权重，无需调仓。[/green]" if self.context.has_rich else "balanced")
                 return
-            if HAS_RICH:
+            if self.context.has_rich:
                 from rich.table import Table
                 self.context.console.print()
                 head = "执行再平衡" if do_apply else "再平衡预览"
@@ -2032,7 +2032,7 @@ class BacktestCommandsMixin:
         if total_weight > 1.0001:
             errors.append(f"权重合计 {total_weight*100:.0f}% > 100%（已按各自比例建仓，注意超配）")
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print(f"\n  [bold cyan]部署 {name} {latest.version_tag} → 实盘[/bold cyan]")
             total = 0.0
             for tid, s, q, px in deployed:
@@ -2060,7 +2060,7 @@ class BacktestCommandsMixin:
         /strategy load [name] [tag/id]    — 加载版本到上下文
         /strategy review                  — AI审查+静态检测
         """
-        from aria_cli import HAS_RICH
+
         if not _get__HAS_VAULT():
             self.context.console.print("  [yellow]strategy_vault.py 未找到[/yellow]" if self.context.has_rich
                           else "  strategy_vault.py not found")
@@ -2076,7 +2076,7 @@ class BacktestCommandsMixin:
             # 从对话历史中提取最后一段 Python 代码
             code = self._extract_last_code()
             if not code:
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print("  [yellow]未在对话中找到代码块。先让 Aria 生成策略代码。[/yellow]")
                 else:
                     print("  No code found in conversation. Generate strategy code first.")
@@ -2084,7 +2084,7 @@ class BacktestCommandsMixin:
             name    = parts[1] if len(parts) > 1 and not parts[1].startswith('"') else "strategy"
             message = " ".join(parts[2:]).strip('"') if len(parts) > 2 else ""
             sv = vault.save(code, name=name, message=message)
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(
                     f"\n  [green]✓[/green] 策略已保存  "
                     f"[bold]{sv.name}[/bold] [dim]{sv.version_tag}[/dim]  "
@@ -2106,7 +2106,7 @@ class BacktestCommandsMixin:
                     self.context.console.print("  [dim]策略金库为空。使用 /strategy save 保存策略。[/dim]" if self.context.has_rich
                                   else "  Vault is empty.")
                     return
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print("\n  [bold]策略金库[/bold]\n")
                     for n in all_names:
                         vs = vault.list(n, limit=3)
@@ -2128,7 +2128,7 @@ class BacktestCommandsMixin:
             if not versions:
                 self.context.console.print(f"  [dim]没有找到策略 '{name}'[/dim]" if self.context.has_rich else f"  Not found: {name}")
                 return
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"\n  [bold]{title}[/bold]\n")
                 for v in versions:
                     bt = ""
@@ -2194,7 +2194,7 @@ class BacktestCommandsMixin:
                     return blocks[0] * len(s)
                 return "".join(blocks[int((v - lo) / (hi - lo) * 7)] for v in s)
 
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print()
                 reviewed = "✓ 已审查" if latest.review_result else "未审查"
                 self.context.console.print(f"  [bold cyan]策略工作台 · {name}[/bold cyan]")
@@ -2334,7 +2334,7 @@ class BacktestCommandsMixin:
             tag_a = parts[2] if len(parts) > 2 else None
             tag_b = parts[3] if len(parts) > 3 else None
             diff_text = vault.diff(name, tag_a, tag_b)
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print()
                 # Simple color: + lines green, - lines red
                 for line in diff_text.splitlines():
@@ -2364,7 +2364,7 @@ class BacktestCommandsMixin:
             # Inject code into conversation context as a user message
             code_msg = f"以下是策略 {version.name} {version.version_tag} 的代码：\n\n```python\n{version.code}\n```"
             self.terminal.conversation.append({"role": "assistant", "content": code_msg})
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(
                     f"\n  [green]✓[/green] 已加载 [bold]{version.name} {version.version_tag}[/bold]  "
                     f"[dim]{len(version.code)} chars  {version.created_at[:16]}[/dim]"
@@ -2391,7 +2391,7 @@ class BacktestCommandsMixin:
                 code   = version.code
                 ver_id = version.id
 
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print()
                 self.context.console.print("  [bold]🔬 策略审查中...[/bold]")
                 self.context.console.print()
@@ -2409,7 +2409,7 @@ class BacktestCommandsMixin:
 
             # Print static results
             static = review.get("static", {})
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print()
                 self.context.console.print(f"\n  [bold]静态检测[/bold]  评级:{static.get('grade','?')}  "
                               f"{static.get('summary','')}")
@@ -2425,11 +2425,11 @@ class BacktestCommandsMixin:
 
             if ver_id:
                 vault.save_review(ver_id, review)
-                if HAS_RICH:
+                if self.context.has_rich:
                     self.context.console.print("  [dim]审查结果已保存到策略金库[/dim]")
 
         else:
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(
                     "\n  [bold]Strategy Vault 命令[/bold]\n\n"
                     "  /strategy save [name] [message]   保存当前代码快照\n"
@@ -2456,7 +2456,7 @@ class BacktestCommandsMixin:
         # ML signal backtest is part of the private Arthera engine (alpha IP).
         # If a local Arthera checkout is present (dev), make it importable;
         # otherwise the import below fails and we show a Pro-feature notice.
-        from aria_cli import HAS_RICH
+
         import sys
         import os
         _arthera_pkgs = os.environ.get("ARTHERA_ROOT") or os.path.expanduser("~/Desktop/Arthera")
@@ -2464,7 +2464,7 @@ class BacktestCommandsMixin:
         if os.path.isdir(_arthera_pkgs) and _arthera_pkgs not in sys.path:
             sys.path.insert(0, _arthera_pkgs)
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print("\n  [bold cyan]ML 信号组合回测[/bold cyan]  三策略对比\n")
         else:
             print("\n  ML 信号组合回测  三策略对比\n")
@@ -2473,10 +2473,10 @@ class BacktestCommandsMixin:
         symbols = [s.upper() for s in symbol_args if not s.startswith("--")]
         if not symbols:
             symbols = ["600519", "300750", "NVDA", "AAPL"]
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"  [dim]未指定标的，使用默认组合: {symbols}[/dim]")
 
-        if HAS_RICH:
+        if self.context.has_rich:
             self.context.console.print(f"  标的: [yellow]{' | '.join(symbols)}[/yellow]")
             self.context.console.print(f"  区间: {start_date} → {end_date or '今日'}")
             self.context.console.print(f"  初始资金: {capital:,.0f}\n")
@@ -2493,7 +2493,7 @@ class BacktestCommandsMixin:
             report = bt.run(start=start_date, end=end_date or "")
             report.print_report()
 
-            if HAS_RICH:
+            if self.context.has_rich:
                 # 额外渲染净值图（纯 ASCII sparkline）
                 ml_nav  = report.ml_strategy.nav_series
                 ew_nav  = report.ew_strategy.nav_series
@@ -2507,7 +2507,7 @@ class BacktestCommandsMixin:
             # Arthera platform, not the open CLI. Degrade with a clear notice.
             _msg = ("ML 信号回测属于 Arthera 高级引擎（含 ML 选股/alpha 因子），"
                     "开源 CLI 未内置。\n  基础回测可用：/backtest momentum <symbol>")
-            if HAS_RICH:
+            if self.context.has_rich:
                 self.context.console.print(f"  [#C08050]◆ Pro 功能[/#C08050]  [dim]{_msg}[/dim]")
             else:
                 print(f"  ◆ Pro 功能  {_msg}")
@@ -2530,7 +2530,7 @@ def _print_sparkline(label: str, nav: "pd.Series", color: str = "white", width: 
         spark  = "".join(chars[min(7, int((v - lo) / (hi - lo + 1e-9) * 8))] for v in vals)
         change = (vals[-1] / vals[0] - 1) * 100
         sign   = "+" if change >= 0 else ""
-        if HAS_RICH:
+        if has_rich():
             from rich.console import Console as _C
             _C().print(f"  [{color}]{label:<8}[/{color}] {spark}  [{color}]{sign}{change:.2f}%[/{color}]")
         else:

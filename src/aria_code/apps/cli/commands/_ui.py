@@ -1,39 +1,49 @@
-"""Rendering helpers that take an AriaContext instead of borrowing aria_cli's.
+"""Rendering helpers for the command mixins.
 
-Command mixins used to call ``_print_error`` as a bare name, resolved out of
-aria_cli's module globals — which is why 20 call sites across this package had
-to reach back into a 7000-line module holding live console state just to print
-a line of red text.
+Two different things used to come from aria_cli's module globals, and only one
+of them was ever state:
 
-aria_cli's own ``_print_error`` is a three-line wrapper that injects
-``console`` / ``HAS_RICH`` / ``rich_box`` into ui.render.output.print_error.
-The mixins already carry all three on ``self.context``, so they can call the
-renderer directly and the detour disappears.
+* ``console`` / ``HAS_RICH`` are per-session state. They belong on
+  ``self.context`` — which 40f23c8 started and this package is finishing.
+* ``rich_box`` and ``Panel`` are not state at all. They are ``rich.box`` and
+  ``rich.panel.Panel``, sitting behind aria_cli's guarded import purely because
+  that is where the try/except happened to live. Reaching into a 7000-line
+  module for them bought nothing, so they are resolved here instead.
+
+``print_error`` takes the context explicitly rather than reading a global, so a
+mixin can render without knowing anything about aria_cli.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["print_error", "rich_box"]
+__all__ = ["Panel", "print_error", "rich_box", "has_rich"]
+
+try:  # Optional: the CLI degrades to plain print when rich is absent.
+    from rich import box as rich_box
+    from rich.panel import Panel
+except ImportError:  # pragma: no cover - exercised only without rich installed
+    rich_box = None  # type: ignore[assignment]
+    Panel = None  # type: ignore[assignment]
 
 
-def rich_box() -> Any:
-    """``rich.box`` when rich is installed, else None — what print_error expects."""
-    try:
-        from rich import box
+def has_rich() -> bool:
+    """Whether rich is importable.
 
-        return box
-    except ImportError:
-        return None
+    For module-level helpers that have no ``self`` and so cannot read
+    ``self.context.has_rich``. Anything with a context should use that instead —
+    a session can be configured without a console even where rich is installed.
+    """
+    return rich_box is not None
 
 
 def print_error(context: Any, msg: str, hint: str = "") -> None:
     """Render an error through the context's console.
 
-    ``context`` is an AriaContext (or anything exposing ``console`` and
-    ``has_rich``); print_error already handles console=None by falling back to
-    plain print, so a context built without one still works.
+    ``context`` is an AriaContext, or anything exposing ``console`` and
+    ``has_rich``; the renderer already falls back to plain print when console is
+    None, so a context built without one still works.
     """
     from aria_code.ui.render.output import print_error as _render
 
@@ -42,5 +52,5 @@ def print_error(context: Any, msg: str, hint: str = "") -> None:
         hint,
         console=getattr(context, "console", None),
         has_rich=bool(getattr(context, "has_rich", False)),
-        rich_box=rich_box(),
+        rich_box=rich_box,
     )
