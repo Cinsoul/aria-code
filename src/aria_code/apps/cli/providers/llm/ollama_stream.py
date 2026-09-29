@@ -95,6 +95,33 @@ from .offline_responses import (
     ollama_unavailable_result as _ollama_unavailable_result,
 )
 
+# Third batch. aria_cli held wrappers around all of these; converting those to
+# aliases is what makes the import safe, because a wrapper is a different
+# function object from the thing it wraps.
+from aria_code.apps.cli.handlers.market_handlers import _try_prefetch_market_data
+from aria_code.apps.cli.handlers.sports_handlers import (
+    try_prefetch_sports_data as _try_prefetch_sports_data,
+)
+from aria_code.apps.cli.message_processing import (
+    build_broker_context_block as _build_broker_context_block,
+)
+from aria_code.apps.cli.prompts.system_prompts import (
+    build_analysis_prompt_lite as _build_analysis_prompt_lite,
+    build_analysis_system_prompt as _build_analysis_system_prompt,
+    build_coding_prompt_lite as _build_coding_prompt_lite,
+    build_finance_prompt as _build_finance_prompt,
+    build_prefetched_analysis_prompt as _build_prefetched_analysis_prompt,
+)
+
+# Not an import: build_analysis_system_prompt() stamps today's date at call
+# time, so this is a snapshot, and aria_cli holds its own taken when *it* was
+# imported. The two are equal strings on the same day but never the same
+# object, which is why the identity guard lists this name as a documented
+# value-equality exception rather than skipping it. On the CLI path aria_cli's
+# snapshot wins the rebind merge anyway; this one exists so the fallback path
+# has one at all.
+ANALYSIS_SYSTEM_PROMPT = _build_analysis_system_prompt()
+
 
 def _try_inject_file_paths(_message: str) -> str:
     """Legacy hook retained for the extracted stream implementation.

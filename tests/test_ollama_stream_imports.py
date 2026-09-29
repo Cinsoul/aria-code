@@ -57,6 +57,23 @@ class ImportedNamesMatchAriaCli(unittest.TestCase):
             f"the CLI path: {diverged}",
         )
 
+    def test_the_computed_constant_matches_by_value(self):
+        """ANALYSIS_SYSTEM_PROMPT cannot be checked by identity, so check value.
+
+        It is assigned, not imported: build_analysis_system_prompt() stamps
+        today's date at call time, so ollama_stream's snapshot and aria_cli's
+        are equal strings on the same day and never the same object. Leaving it
+        out of the identity test entirely would hide a real divergence, so the
+        exception is asserted rather than assumed.
+        """
+        import aria_cli
+        import aria_code.apps.cli.providers.llm.ollama_stream as mod
+
+        self.assertIsNot(mod.ANALYSIS_SYSTEM_PROMPT, aria_cli.ANALYSIS_SYSTEM_PROMPT,
+                         "now the same object — drop this exception and let the "
+                         "identity test cover it")
+        self.assertEqual(mod.ANALYSIS_SYSTEM_PROMPT, aria_cli.ANALYSIS_SYSTEM_PROMPT)
+
     def test_the_stub_trap_is_still_a_trap(self):
         """Documents why _CONFIRM_TOOLS is excluded, and fails if that changes.
 
@@ -90,9 +107,9 @@ class FallbackPathResolvesMoreNames(unittest.TestCase):
     """
 
     # Names stream_ollama cannot resolve from its own module globals and must
-    # therefore receive from aria_cli's rebind. 45 → 30 → 20. Decrease this,
-    # never increase it.
-    BORROW_BUDGET = 20
+    # therefore receive from aria_cli's rebind. 45 → 30 → 20 → 12. Decrease
+    # this, never increase it.
+    BORROW_BUDGET = 12
 
     @staticmethod
     def _borrowed() -> list:
