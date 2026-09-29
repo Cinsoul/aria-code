@@ -289,7 +289,7 @@ def _render_property_val(*args, **kwargs):
     from aria_cli import _render_property_val as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 def _load_data_keys(*args, **kwargs):
     from aria_cli import _load_data_keys as fn
@@ -319,7 +319,7 @@ def _ashare_code_to_name(*args, **kwargs):
     from aria_cli import _ashare_code_to_name as fn
     return fn(*args, **kwargs)
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def parse_symbols(*args, **kwargs):
     from aria_cli import parse_symbols as fn

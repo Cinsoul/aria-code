@@ -26,7 +26,9 @@ Usage:
     python3 apps/cli/aria_cli.py -p "AAPL PE" --json     # JSON 输出
 """
 
-__version__ = "4.4.1"
+# Defined in aria_code/_version.py so the version can be read without
+# importing the whole CLI. Re-exported here; aria_cli.__version__ still works.
+from aria_code._version import __version__  # noqa: F401
 
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
 # Stateless helpers now live in apps/cli/helpers.py; re-exported here so

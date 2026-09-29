@@ -64,7 +64,7 @@ def _print_verdict_banner(*args, **kwargs):
     from aria_cli import _print_verdict_banner as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 def report_agent_names(*args, **kwargs):
     from aria_cli import report_agent_names as fn
@@ -85,7 +85,7 @@ def generate_html_report(*args, **kwargs):
     from aria_cli import generate_html_report as fn
     return fn(*args, **kwargs)
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def _sanitize_team_result_with_market_data(*args, **kwargs):
     from aria_cli import _sanitize_team_result_with_market_data as fn

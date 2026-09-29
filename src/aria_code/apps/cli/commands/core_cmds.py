@@ -1188,7 +1188,8 @@ class CoreCommandsMixin:
     async def _fetch_and_display_finance(self, tool_name: str, params: dict, label: str,
                                           mdc_fallback_symbol: str = "") -> bool:
         """Try tool → local finance tool → market_data_client fallback. Returns True if data shown."""
-        from aria_cli import LOCAL_TOOLS, _HAS_MDC, _get_mdc, _print_finance_result, execute_aria_tool
+        from aria_cli import LOCAL_TOOLS, _print_finance_result, execute_aria_tool
+        from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         result = None
         # 1. LOCAL_TOOLS (ccxt / local finance)
         if tool_name in LOCAL_TOOLS:
@@ -1273,7 +1274,8 @@ class CoreCommandsMixin:
             self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
     async def cmd_market(self, args: str):
         """Market overview: /market [indices|sectors]"""
-        from aria_cli import _HAS_MDC, _get_mdc, execute_aria_tool
+        from aria_cli import execute_aria_tool
+        from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         sub = args.strip().lower()
         if sub == "sectors":
             await self._run_tool_cmd("get_sector_performance", {}, "sector performance")
@@ -2207,7 +2209,7 @@ class CoreCommandsMixin:
             print_error(self.context, "长线分析执行失败，请检查 research/longterm/")
     async def cmd_indices(self, args: str):
         """全球主要指数实时行情."""
-        from aria_cli import _HAS_MDC, _get_mdc
+        from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         from aria_code.apps.cli.helpers import _clean_tool_error_message
         if not _HAS_MDC:
             self.context.console.print("  [dim]market_data_client 未加载[/dim]" if self.context.has_rich else "market_data_client not loaded")
@@ -2247,7 +2249,7 @@ class CoreCommandsMixin:
                 print(f"  {name:<16} {str(d.get('price','')):<12} {sign}{chg:.2f}%")
     async def cmd_hot(self, args: str):
         """热门/活跃股票榜单.  Usage: /hot [cn|us] [top=20]"""
-        from aria_cli import _HAS_MDC, _get_mdc
+        from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         if not _HAS_MDC:
             self.context.console.print("  [dim]market_data_client 未加载[/dim]" if self.context.has_rich else "market_data_client not loaded")
             return

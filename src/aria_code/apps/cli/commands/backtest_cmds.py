@@ -120,7 +120,7 @@ def _get__HAS_VAULT():
     return val
 import pandas as pd
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 import pathlib
 def _get_vault(*args, **kwargs):
@@ -133,7 +133,7 @@ def _ai_review(*args, **kwargs):
     from aria_cli import _ai_review as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 
 import json

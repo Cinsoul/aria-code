@@ -1,11 +1,13 @@
 """FxCommodityCommandsMixin — /crypto, /forex, /commodity.
 
-Method bodies use aria_cli module globals (self.context.console, self.context.has_rich, _get__HAS_MDC(),
-_get_mdc), bound at import time by
-aria_cli._rebind_mixin_globals(FxCommodityCommandsMixin). They also call
-self._run_in_executor / self._run_parallel / self._fetch_and_display_finance,
-which are resolved through the SlashCommands MRO at call time (defined
-elsewhere on the class), not module globals.
+Rendering goes through self.context; the market-data client comes from
+apps/cli/_optional.py. The note that used to be here described binding by
+aria_cli._rebind_mixin_globals, which 40f23c8 stopped calling — this module no
+longer reaches into aria_cli at all.
+
+self._run_in_executor / self._run_parallel / self._fetch_and_display_finance
+are still resolved through the SlashCommands MRO at call time, not as module
+globals.
 """
 
 from __future__ import annotations
@@ -19,10 +21,10 @@ import shlex
 from typing import Dict, Any, Optional
 
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 
 import json

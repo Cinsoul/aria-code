@@ -38,9 +38,11 @@ def _npm_version() -> str:
 
 
 def _cli_version() -> str:
-    text = (REPO_ROOT / "src" / "aria_code" / "aria_cli.py").read_text(encoding="utf-8")
+    # 版本号现在只在 aria_code/_version.py 里写一次；aria_cli 从那里 re-export。
+    # 这条守卫在意的是"有几处手写"，所以它跟着唯一那处走。
+    text = (REPO_ROOT / "src" / "aria_code" / "_version.py").read_text(encoding="utf-8")
     m = re.search(r'^__version__\s*=\s*"([^"]+)"', text, re.M)
-    assert m, "aria_cli.py 缺少 __version__"
+    assert m, "aria_code/_version.py 缺少 __version__"
     return m.group(1)
 
 
@@ -48,7 +50,7 @@ def test_pyproject_npm_and_cli_report_the_same_version():
     versions = {
         "pyproject.toml": _pyproject_version(),
         "npm/package.json": _npm_version(),
-        "aria_cli.py": _cli_version(),
+        "aria_code/_version.py": _cli_version(),
     }
     assert len(set(versions.values())) == 1, (
         "三处版本号不一致，发布出去会是两个同名不同内容的包、"
