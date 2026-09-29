@@ -20,7 +20,7 @@ import os
 from typing import Dict, Any, Optional
 
 def get_model_capability(*args, **kwargs):
-    from aria_cli import get_model_capability as fn
+    from aria_code.apps.cli._optional import get_model_capability as fn
     return fn(*args, **kwargs)
 def _get__HAS_COMPUTER_USE():
     from aria_cli import _HAS_COMPUTER_USE as val
@@ -29,7 +29,7 @@ def _get__PROJECT_CONTEXT():
     from aria_cli import _PROJECT_CONTEXT as val
     return val
 def _get__HAS_MODEL_CAP():
-    from aria_cli import _HAS_MODEL_CAP as val
+    from aria_code.apps.cli._optional import HAS_MODEL_CAP as val
     return val
 def _get_rich_box():
     # Resolved locally now — see ._ui; no aria_cli round-trip.

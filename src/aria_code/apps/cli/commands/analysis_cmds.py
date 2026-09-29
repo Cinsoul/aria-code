@@ -5,6 +5,7 @@ from __future__ import annotations
 from aria_code.apps.cli.commands.market import parse_analysis_args
 
 
+import logging
 import json
 import asyncio
 import datetime
@@ -34,9 +35,6 @@ def build_analyze_context(*args, **kwargs):
     return fn(*args, **kwargs)
 def _render_funding_rates(*args, **kwargs):
     from aria_cli import _render_funding_rates as fn
-    return fn(*args, **kwargs)
-def logger(*args, **kwargs):
-    from aria_cli import logger as fn
     return fn(*args, **kwargs)
 def _get_broker_registry(*args, **kwargs):
     from .._optional import get_registry as fn
@@ -80,6 +78,12 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# A real logger. This was a `def logger(*args, **kwargs)` forwarding to
+# aria_cli, so every `logger.debug(...)` raised AttributeError — and all but
+# one of them sit in an except block, where the failure replaced whatever
+# error was being reported.
+logger = logging.getLogger(__name__)
 
 
 class AnalysisCommandsMixin:

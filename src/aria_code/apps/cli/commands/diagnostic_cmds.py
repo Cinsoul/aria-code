@@ -21,14 +21,14 @@ def get_model_cfg(*args, **kwargs):
     from ..model_catalog import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_MODELS():
-    from aria_cli import MODELS as val
+    from aria_code.apps.cli.model_catalog import MODELS as val
     return val
 def _get_LOCAL_TOOLS():
     # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
     from ..tool_registry import LOCAL_TOOLS as val
     return val
 def _get_SKILLS():
-    from aria_cli import SKILLS as val
+    from aria_code.apps.cli.skills_catalog import SKILLS as val
     return val
 def _get_Syntax():
     from ._ui import Syntax as val

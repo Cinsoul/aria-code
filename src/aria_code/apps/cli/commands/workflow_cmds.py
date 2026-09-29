@@ -28,7 +28,7 @@ def _load_hooks(*args, **kwargs):
 # private alias, so going through aria_cli was a pointless second hop.
 from aria_code.ui.render.output import display_path as _display_path
 def _get_MODELS():
-    from aria_cli import MODELS as val
+    from aria_code.apps.cli.model_catalog import MODELS as val
     return val
 def _get__HAS_JSON_HOOKS():
     from aria_cli import _HAS_JSON_HOOKS as val

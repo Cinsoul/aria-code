@@ -248,6 +248,7 @@ def _parse_nl_team_pair(text: str) -> Optional[Tuple[str, str]]:
     return None
 
 
+import logging
 import json
 import asyncio
 import datetime
@@ -283,9 +284,6 @@ def _get_LOCAL_TOOLS():
     # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
     from ..tool_registry import LOCAL_TOOLS as val
     return val
-def logger(*args, **kwargs):
-    from aria_cli import logger as fn
-    return fn(*args, **kwargs)
 def _render_property_val(*args, **kwargs):
     from aria_cli import _render_property_val as fn
     return fn(*args, **kwargs)
@@ -344,6 +342,12 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# A real logger. This was a `def logger(*args, **kwargs)` forwarding to
+# aria_cli, so every `logger.debug(...)` raised AttributeError — and all but
+# one of them sit in an except block, where the failure replaced whatever
+# error was being reported.
+logger = logging.getLogger(__name__)
 
 
 class MarketCommandsMixin:

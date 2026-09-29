@@ -52,7 +52,7 @@ def _get_LOCAL_TOOLS():
     from ..tool_registry import LOCAL_TOOLS as val
     return val
 def get_model_capability(*args, **kwargs):
-    from aria_cli import get_model_capability as fn
+    from aria_code.apps.cli._optional import get_model_capability as fn
     return fn(*args, **kwargs)
 def _get_MCP_CONFIG_PATH():
     from aria_cli import MCP_CONFIG_PATH as val
@@ -61,7 +61,7 @@ def _get_SESSIONS_DIR():
     from aria_cli import SESSIONS_DIR as val
     return val
 def _get__HAS_MODEL_CAP():
-    from aria_cli import _HAS_MODEL_CAP as val
+    from aria_code.apps.cli._optional import HAS_MODEL_CAP as val
     return val
 def _strip_markdown_fences(*args, **kwargs):
     from aria_cli import _strip_markdown_fences as fn

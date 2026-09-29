@@ -22,6 +22,7 @@ __all__ = [
     "add_broker_config", "remove_broker_config", "set_default_broker",
     "validate_broker_config", "supported_broker_types", "get_config_template",
     "BROKERS_CONFIG_PATH",
+    "HAS_MODEL_CAP", "get_model_capability",
 ]
 
 try:
@@ -91,3 +92,16 @@ except ImportError:  # pragma: no cover - exercised only without the broker stac
 
     def get_config_template(broker_type: str):  # type: ignore[misc]
         return None
+
+
+# ── Model capability registry ────────────────────────────────────────────────
+# Another guarded import that happened to live in aria_cli. Used by the model
+# and UI commands to describe a community Ollama model that is not in the
+# MODELS table.
+try:
+    from model_capability import get_model_capability  # noqa: F401
+
+    HAS_MODEL_CAP = True
+except ImportError:  # pragma: no cover - exercised only without model_capability
+    get_model_capability = None  # type: ignore[assignment]
+    HAS_MODEL_CAP = False
