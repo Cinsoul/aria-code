@@ -450,7 +450,14 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
     return checks
 
 
-def _check_ollama(url: str, timeout: float = 1.5) -> DoctorCheck:
+def _check_ollama(url: str, timeout: float = 1.5, *, required: bool = True) -> DoctorCheck:
+    """Report on the local Ollama server.
+
+    ``required`` says whether this install actually depends on it. Ollama is one
+    of several ways to get a model, and reporting its absence as a warning meant
+    a perfectly healthy cloud-only install could never show green — so the
+    signal people were meant to read stopped meaning anything.
+    """
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(f"{url.rstrip('/')}/api/tags", timeout=timeout) as response:
@@ -458,9 +465,14 @@ def _check_ollama(url: str, timeout: float = 1.5) -> DoctorCheck:
         models = [str(model.get("name", "")) for model in data.get("models", []) if model.get("name")]
         if models:
             return _check("ollama", "ok", f"{len(models)} models: {', '.join(models[:4])}")
-        return _check("ollama", "warn", "running but no models installed", "ollama pull qwen2.5-coder:7b")
+        if required:
+            return _check("ollama", "warn", "running but no models installed", "ollama pull qwen2.5-coder:7b")
+        return _check("ollama", "skip", "running, no models installed (not this install's provider)")
     except Exception as exc:
-        return _check("ollama", "warn", f"not reachable at {url}: {exc}", "Start Ollama or configure a cloud provider.")
+        if required:
+            return _check("ollama", "warn", f"not reachable at {url}: {exc}",
+                          "Start Ollama, or switch provider with /model.")
+        return _check("ollama", "skip", "not running (offline mode unused — this install uses another provider)")
 
 
 def provider_health_checks(snapshot: Optional[List[Dict[str, Any]]] = None) -> List[DoctorCheck]:
@@ -651,10 +663,23 @@ def run_doctor(
     checks.append(provider_health_summary())
     checks.extend(provider_health_checks())
 
+    # Ollama only matters when this install routes through it. A user on the
+    # gateway or a cloud key never wants it, and flagging that as a warning is
+    # how a green report becomes unreachable.
+    _uses_ollama = (
+        str(config.get("local_provider") or "").lower() == "ollama"
+        or not str(config.get("model") or "").strip()
+        or ":" in str(config.get("model") or "")  # bare Ollama-style tag, e.g. qwen2.5-coder:1.5b
+    )
     if check_network:
-        checks.append(_check_ollama(str(config.get("ollama_url") or "http://localhost:11434")))
+        checks.append(_check_ollama(
+            str(config.get("ollama_url") or "http://localhost:11434"),
+            required=_uses_ollama,
+        ))
     else:
-        checks.append(_check("ollama", "warn", "network check skipped", "Run /doctor --network to verify local Ollama."))
+        # A check that did not run is not a warning about the thing it checks.
+        checks.append(_check("ollama", "skip", "network check not requested",
+                             "Run /doctor --network to probe the local server."))
 
     if (cwd / ".ariarc").exists():
         checks.append(_check("project_config", "ok", str(cwd / ".ariarc")))
@@ -665,12 +690,14 @@ def run_doctor(
 
 
 def format_doctor_plain(report: DoctorReport) -> str:
-    marks = {"ok": "OK", "warn": "WARN", "err": "ERR"}
+    marks = {"ok": "OK", "warn": "WARN", "err": "ERR", "skip": "--"}
     lines = ["Aria Code doctor"]
     for check in report.checks:
         suffix = f" — {check.detail}" if check.detail else ""
         if check.suggestion:
             suffix += f" ({check.suggestion})"
         lines.append(f"{marks.get(check.status, check.status.upper()):<4} {check.name}{suffix}")
-    lines.append(f"{report.passed} passed · {report.warnings} warnings · {report.errors} errors")
+    skipped = sum(1 for check in report.checks if check.status == "skip")
+    tail = f" · {skipped} skipped" if skipped else ""
+    lines.append(f"{report.passed} passed · {report.warnings} warnings · {report.errors} errors{tail}")
     return "\n".join(lines)

@@ -23,8 +23,11 @@ def test_run_doctor_reports_core_checks(monkeypatch, tmp_path):
     assert names["artifact_inventory"].status == "warn"
     assert "0 artifacts" in names["artifact_inventory"].detail
     assert names["privacy"].detail == "data_sharing=False, feedback_upload=False"
-    assert names["ollama"].status == "warn"
-    assert "network check skipped" in names["ollama"].detail
+    # A check that did not run is not a warning about the thing it checks —
+    # otherwise /doctor without --network always shows a warning that means
+    # nothing, and a cloud-only install can never report green.
+    assert names["ollama"].status == "skip"
+    assert "not requested" in names["ollama"].detail
 
 
 def test_format_doctor_plain_includes_summary(monkeypatch, tmp_path):
@@ -348,3 +351,35 @@ def test_integration_checks_included_in_run_doctor(monkeypatch, tmp_path):
     names = {c.name for c in report.checks}
     assert "integration:ffmpeg" in names
     assert "integration:openai_images" in names
+
+
+def test_ollama_absence_is_only_a_warning_when_this_install_uses_it(monkeypatch, tmp_path):
+    """Ollama is one route to a model, not the route.
+
+    Reporting its absence as a warning meant a healthy cloud-only install could
+    never show green, which is how a signal stops being read.
+    """
+    from aria_code.doctor import _check_ollama
+
+    def _unreachable(*_a, **_k):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *a, **k: type(
+        "O", (), {"open": staticmethod(_unreachable)})())
+
+    required = _check_ollama("http://localhost:11434", required=True)
+    optional = _check_ollama("http://localhost:11434", required=False)
+
+    assert required.status == "warn"
+    assert optional.status == "skip"
+
+
+def test_skipped_checks_do_not_colour_the_overall_status():
+    from aria_code.doctor import DoctorCheck, DoctorReport
+
+    report = DoctorReport(checks=[
+        DoctorCheck(name="python", status="ok"),
+        DoctorCheck(name="ollama", status="skip", detail="not this install's provider"),
+    ])
+    assert report.status == "ok"
+    assert report.warnings == 0

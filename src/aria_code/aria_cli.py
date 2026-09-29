@@ -2529,16 +2529,7 @@ def _try_handle_stock_chart_analysis(message: str) -> dict:
     )
 
 
-from aria_code.apps.cli.providers.llm.ollama_stream import stream_ollama as _stream_ollama_src
-import types as _types_rebind
-_ollama_stream_globals = dict(_stream_ollama_src.__globals__)
-_ollama_stream_globals.update(globals())
-stream_ollama = _types_rebind.FunctionType(
-    _stream_ollama_src.__code__, _ollama_stream_globals, "stream_ollama",
-    _stream_ollama_src.__defaults__, _stream_ollama_src.__closure__
-)
-del _ollama_stream_globals
-del _types_rebind
+# stream_ollama is rebound at the end of this module — see _rebind_stream_ollama().
 
 # ============================================================================
 # Aria SSE Stream Client — cancel + auth + user context
@@ -6709,3 +6700,35 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print()
         sys.exit(0)
+
+
+# ── stream_ollama rebind ──────────────────────────────────────────────────────
+# Deliberately last. Unlike _rebind_module_function_globals, which hands the
+# function this module's *live* globals dict, stream_ollama needs a merge of two
+# namespaces — its own module's and this one's — so it gets a new dict, and a new
+# dict is a snapshot.
+#
+# That snapshot used to be taken around line 2532, which left out the 79 names
+# defined below it. One of them, _print_tool_result, is called unconditionally
+# after every local tool execution in the streaming loop, so that line raised
+# NameError with nothing to warn you at import. Taking the snapshot here, after
+# every definition, is what makes the merge safe.
+#
+# tests/test_rebind_contract.py asserts the result: every global name
+# stream_ollama reads has to exist in the namespace it was rebound into.
+def _rebind_stream_ollama():
+    import types
+
+    from aria_code.apps.cli.providers.llm.ollama_stream import (
+        stream_ollama as _source,
+    )
+
+    merged = dict(_source.__globals__)
+    merged.update(globals())
+    return types.FunctionType(
+        _source.__code__, merged, "stream_ollama",
+        _source.__defaults__, _source.__closure__,
+    )
+
+
+stream_ollama = _rebind_stream_ollama()
