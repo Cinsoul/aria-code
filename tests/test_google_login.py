@@ -198,3 +198,59 @@ class RunGoogleLoginTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CmdLoginRoutingTests(unittest.IsolatedAsyncioTestCase):
+    """Bare ``/login`` opens the browser, the way Claude Code and Codex do.
+
+    Before this, ``/login`` with no argument prompted for an email and password
+    and the browser flow was reachable only as ``/login google`` — so the
+    default path was the one that needs an account the user does not have yet,
+    and the path that also covers signing up was the one nobody would guess.
+    """
+
+    def _handler(self):
+        from aria_code.apps.cli.commands.auth_cmds import AuthCommandsMixin
+        from aria_code.apps.cli.context import AriaContext
+
+        handler = AuthCommandsMixin()
+        handler.context = AriaContext(console=None, has_rich=False)
+        handler.terminal = mock.Mock(api_url="https://example.invalid")
+        return handler
+
+    async def _routes_to_web(self, args: str) -> bool:
+        handler = self._handler()
+        called = {}
+
+        async def fake_web_login():
+            called["web"] = True
+
+        handler._login_with_google = fake_web_login
+        # Any email/password attempt would need stdin and the network; if the
+        # routing is wrong this raises instead of quietly taking that path.
+        await handler.cmd_login(args)
+        return bool(called.get("web"))
+
+    async def test_bare_login_opens_the_browser(self):
+        self.assertTrue(await self._routes_to_web(""))
+
+    async def test_whitespace_only_argument_is_still_bare(self):
+        self.assertTrue(await self._routes_to_web("   "))
+
+    async def test_explicit_aliases_still_work(self):
+        for alias in ("google", "--google", "-g", "web", "--web", "GOOGLE"):
+            with self.subTest(alias=alias):
+                self.assertTrue(await self._routes_to_web(alias))
+
+    async def test_an_email_still_takes_the_password_path(self):
+        import contextlib
+
+        handler = self._handler()
+        handler._login_with_google = mock.AsyncMock()
+        # The password branch wants a terminal and the network. Whether it gets
+        # far enough to fail on one of those is beside the point — the claim
+        # here is only that it did not silently take the browser path instead.
+        with contextlib.suppress(Exception):
+            with mock.patch("getpass.getpass", side_effect=KeyboardInterrupt):
+                await handler.cmd_login("someone@example.com")
+        handler._login_with_google.assert_not_awaited()

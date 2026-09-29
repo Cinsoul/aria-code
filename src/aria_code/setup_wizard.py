@@ -79,6 +79,11 @@ _WZ: dict[str, dict[str, str]] = {
                               "en": "Skipping download. Run later: ollama pull {name}"},
     "lang_detected":         {"zh": "检测到系统语言：中文（可用 /config set ui_lang=en 切换）",
                               "en": "Detected system language: English (use /config set ui_lang=zh to switch)"},
+    "signin_section":        {"zh": "登录", "en": "Sign in"},
+    "signin_info":           {"zh": "启动后运行 /login —— 在浏览器里登录或注册，模型由服务端提供，不需要自备 API Key。",
+                              "en": "Run /login after startup — sign in or sign up in the browser. The model is served for you; no API key needed."},
+    "signin_byok":           {"zh": "想用自己的 API Key（或完全离线）？运行 aria-setup --keys，或启动 Ollama 后用 /model 选本地模型。",
+                              "en": "Prefer your own API key, or fully offline? Run aria-setup --keys, or start Ollama and pick a local model with /model."},
     "api_keys_section":      {"zh": "API 密钥配置（可选）", "en": "API Keys (Optional)"},
     "api_keys_info":         {"zh": "配置后可使用云端模型（Claude / GPT-4 / DeepSeek 等）",
                               "en": "Configure to use cloud models (Claude / GPT-4 / DeepSeek etc.)"},
@@ -279,6 +284,13 @@ def setup_model(env: dict[str, str]) -> None:
 
 
 # ── Step 2: API keys (optional) ──────────────────────────────────────────────
+
+def setup_signin_notice() -> None:
+    """Point at /login instead of collecting keys. Writes nothing."""
+    _section(_wz("signin_section"))
+    _info(_wz("signin_info"))
+    _info(_wz("signin_byok"))
+
 
 def setup_api_keys(env: dict[str, str]) -> None:
     _section(_wz("api_keys_section"))
@@ -629,7 +641,15 @@ def main() -> None:
     if run_all or args.model:
         setup_model(env)
 
-    if run_all or args.keys:
+    # Sign-in is the default path now: the gateway serves the model, so a new
+    # user needs no key at all. Walking nineteen providers before they have
+    # even started the app was the single longest step in this wizard, and for
+    # most people every answer to it is "no".
+    if run_all:
+        setup_signin_notice()
+
+    # Bring-your-own-key is still supported, but has to be asked for.
+    if args.keys:
         setup_api_keys(env)
 
     if run_all or args.feishu:

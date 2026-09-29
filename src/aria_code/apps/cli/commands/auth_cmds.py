@@ -47,20 +47,28 @@ class AuthCommandsMixin:
     """Mixin: authentication commands (/login, /logout, /whoami)."""
 
     async def cmd_login(self, args: str):
-        """Login to Arthera backend.
+        """Sign in to Arthera.
 
-        Usage: /login google            — sign in with Google in the browser
-               /login <email>           — prompts for password securely
-               /login                   — prompts for both email and password
+        Usage: /login                    — sign in or sign up in the browser
+               /login <email>            — email + password, prompted securely
+
+        Bare ``/login`` opens the browser, the way Claude Code and Codex do it.
+        Signing in there covers signing up too: the gateway serves the model, so
+        a new account has a working setup without configuring any API key. The
+        email/password path stays for accounts that predate it and for machines
+        with no browser.
         """
         import getpass as _getpass
         import aiohttp
 
         parts = args.split()
 
-        if parts and parts[0].lower() in {"google", "--google", "-g"}:
+        if not parts or parts[0].lower() in {"google", "--google", "-g", "web", "--web"}:
             await self._login_with_google()
             return
+
+        if parts[0].lower() in {"email", "--email", "password", "--password"}:
+            parts = parts[1:]
 
         if parts:
             email = parts[0]
@@ -143,8 +151,8 @@ class AuthCommandsMixin:
 
         rich = self.context.has_rich
         self.context.console.print(
-            "[dim]Opening your browser to sign in with Google…[/dim]"
-            if rich else "Opening your browser to sign in with Google…"
+            "[dim]Opening your browser to sign in or create an account…[/dim]"
+            if rich else "Opening your browser to sign in or create an account…"
         )
 
         try:

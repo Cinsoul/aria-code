@@ -612,20 +612,21 @@ class AgentErrorPresentation:
                 lines=(
                     [
                         "没有可用的 AI 模型",
-                        "  Ollama 未运行，且未配置云端 API Key。",
+                        "  尚未登录，Ollama 也没有运行。",
                         "  解决方案（任选其一）：",
-                        "    • 启动 Ollama:  ollama serve",
-                        "    • 配置云端 Key: /apikey set deepseek <your-key>",
+                        "    • 登录即用:     /login  —— 在浏览器里登录或注册，模型由服务端提供，不需要自备 API Key",
+                        "    • 本地离线:     ollama serve",
+                        "    • 自备 Key:     /apikey set deepseek <your-key>",
                         "    • 导出环境变量: export DEEPSEEK_API_KEY=sk-...",
                     ]
                     if is_zh else
                     [
                         "No AI model is available.",
-                        "  Ollama is offline and no cloud API key is configured.",
+                        "  You are not signed in, and Ollama is offline.",
                         "  Choose one:",
-                        "    • Start Ollama: ollama serve",
-                        "    • Configure a key: /apikey set deepseek <your-key>",
-                        "    • Export an environment variable: export DEEPSEEK_API_KEY=sk-...",
+                        "    • Sign in:  /login  — in the browser; the model is served for you, no API key needed",
+                        "    • Offline:  ollama serve",
+                        "    • Your own key: /apikey set deepseek <your-key>",
                     ]
                 ),
             )
