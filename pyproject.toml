@@ -70,6 +70,11 @@ crypto = ["ccxt>=4.4.0"]           # crypto exchanges (large dep tree)
 
 # ── Feature add-ons ────────────────────────────────────────────────────────────
 charts = ["mplfinance>=0.12.10b0"]    # candlestick charts in /report /chart
+
+# Gemini / Vertex AI. Needed by the Google sign-in path, where the gateway
+# serves the model and the user configures no API key of their own — so a
+# default install that cannot import this has no working model at all.
+google = ["google-genai>=1.0.0"]
 data = ["duckdb>=0.10.3"]          # in-process SQL: /data sql "SELECT …"
 files = [                          # /file load + /file analyze document parsing
     "pdfplumber>=0.11.0",
@@ -141,6 +146,7 @@ dev = [
 # Everything a normal user wants — all data sources + files + charts + SQL —
 # but no brokers / dev / backtest extras.
 full = [
+    "google-genai>=1.0.0",
     "akshare>=1.14.68",
     "ccxt>=4.4.0",
     "mplfinance>=0.12.10b0",
@@ -157,6 +163,7 @@ full = [
 
 # ── Everything (full + brokers + backtest + automation + dev) ─────────────────
 all = [
+    "google-genai>=1.0.0",
     "akshare>=1.14.68",
     "ccxt>=4.4.0",
     "mplfinance>=0.12.10b0",
