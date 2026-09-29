@@ -22,7 +22,8 @@ def _get__HAS_LOCAL_FINANCE():
     from aria_cli import _HAS_LOCAL_FINANCE as val
     return val
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def _render_corr_matrix(*args, **kwargs):
     from aria_cli import _render_corr_matrix as fn

@@ -105,12 +105,9 @@ async def test_allow_chat_confirm_requires_exact_broker_id_not_yes(monkeypatch, 
     _patch_config_path(monkeypatch, tmp_path)
     add_broker_config({"id": "ths1", "type": "easytrader", "label": "同花顺"})
 
-    import aria_cli
-    from aria_code.apps.cli.commands import broker_cmds
+    from aria_code.apps.cli import _optional
 
     fake_console = _FakeConsole(answer="yes")
-    monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
-    monkeypatch.setattr(aria_cli, "HAS_RICH", True, raising=False)
 
     class _Registry:
         def active(self):
@@ -119,7 +116,9 @@ async def test_allow_chat_confirm_requires_exact_broker_id_not_yes(monkeypatch, 
         def connect_default(self):
             return None
 
-    monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
+    # cmd_trade now takes the registry from apps/cli/_optional, so that is where
+    # the patch has to go — the aria_cli alias it used to read is gone.
+    monkeypatch.setattr(_optional, "get_registry", lambda: _Registry())
 
     handler = _handler(fake_console)
     await handler.cmd_trade("allow-chat-confirm ths1")
@@ -132,12 +131,9 @@ async def test_allow_chat_confirm_succeeds_with_exact_broker_id(monkeypatch, tmp
     _patch_config_path(monkeypatch, tmp_path)
     add_broker_config({"id": "ths1", "type": "easytrader", "label": "同花顺"})
 
-    import aria_cli
-    from aria_code.apps.cli.commands import broker_cmds
+    from aria_code.apps.cli import _optional
 
     fake_console = _FakeConsole(answer="ths1")
-    monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
-    monkeypatch.setattr(aria_cli, "HAS_RICH", True, raising=False)
 
     class _Registry:
         def active(self):
@@ -146,7 +142,9 @@ async def test_allow_chat_confirm_succeeds_with_exact_broker_id(monkeypatch, tmp
         def connect_default(self):
             return None
 
-    monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
+    # cmd_trade now takes the registry from apps/cli/_optional, so that is where
+    # the patch has to go — the aria_cli alias it used to read is gone.
+    monkeypatch.setattr(_optional, "get_registry", lambda: _Registry())
 
     handler = _handler(fake_console)
     await handler.cmd_trade("allow-chat-confirm ths1")
@@ -160,12 +158,9 @@ async def test_disallow_chat_confirm_turns_it_back_off(monkeypatch, tmp_path):
     add_broker_config({"id": "ths1", "type": "easytrader", "label": "同花顺"})
     set_chat_confirm_enabled("ths1", True)
 
-    import aria_cli
-    from aria_code.apps.cli.commands import broker_cmds
+    from aria_code.apps.cli import _optional
 
     fake_console = _FakeConsole(answer="")
-    monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
-    monkeypatch.setattr(aria_cli, "HAS_RICH", True, raising=False)
 
     class _Registry:
         def active(self):
@@ -174,7 +169,9 @@ async def test_disallow_chat_confirm_turns_it_back_off(monkeypatch, tmp_path):
         def connect_default(self):
             return None
 
-    monkeypatch.setattr(aria_cli, "_get_broker_registry", lambda: _Registry(), raising=False)
+    # cmd_trade now takes the registry from apps/cli/_optional, so that is where
+    # the patch has to go — the aria_cli alias it used to read is gone.
+    monkeypatch.setattr(_optional, "get_registry", lambda: _Registry())
 
     handler = _handler(fake_console)
     await handler.cmd_trade("disallow-chat-confirm ths1")

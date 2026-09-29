@@ -280,7 +280,8 @@ def _football_team(*args, **kwargs):
     from aria_cli import _football_team as fn
     return fn(*args, **kwargs)
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def logger(*args, **kwargs):
     from aria_cli import logger as fn

@@ -36,7 +36,8 @@ def _get__PROVIDER_BASE_URLS():
     from aria_cli import _PROVIDER_BASE_URLS as val
     return val
 def _get_ARIA_TOOLS():
-    from aria_cli import ARIA_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import ARIA_TOOLS as val
     return val
 def _get_THINKING_MODES():
     from aria_cli import THINKING_MODES as val
@@ -70,13 +71,15 @@ def _get__DATA_SIGNUP_URLS():
     from aria_cli import _DATA_SIGNUP_URLS as val
     return val
 def _arrow_select(*args, **kwargs):
-    from aria_cli import _arrow_select as fn
+    # Re-exported by aria_cli; taken from its own module here.
+    from aria_code.ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get_SKILLS():
     from aria_cli import SKILLS as val
     return val
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def get_model_capability(*args, **kwargs):
     from aria_cli import get_model_capability as fn
@@ -91,7 +94,7 @@ def load_config(*args, **kwargs):
     from aria_cli import load_config as fn
     return fn(*args, **kwargs)
 def _null_ctx(*args, **kwargs):
-    from aria_cli import _null_ctx as fn
+    from ._ui import null_ctx as fn
     return fn(*args, **kwargs)
 def _get__PROVIDER_DESC():
     from aria_cli import _PROVIDER_DESC as val
@@ -1050,7 +1053,8 @@ class ModelCommandsMixin:
                         raw = json.loads(_get_PROVIDERS_FILE().read_text(encoding="utf-8"))
                         if provider in raw.get("data", {}):
                             del raw["data"][provider]
-                            _get_PROVIDERS_FILE().write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+                            from aria_code.packages.aria_core.secure_file import write_secret_json
+                            write_secret_json(_get_PROVIDERS_FILE(), raw)
                 except Exception as _e:
                     logger.debug("apikey delete from file failed: %s", _e)
             # Clear from env

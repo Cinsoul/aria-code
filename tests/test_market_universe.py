@@ -63,7 +63,7 @@ def test_same_name_symbols_require_explicit_selection():
 
 
 def test_ambiguity_probe_is_cache_only(monkeypatch):
-    import apps.cli.market_universe as universe
+    import aria_code.apps.cli.market_universe as universe
 
     monkeypatch.setattr(universe, "_load_cache", lambda: [])
     monkeypatch.setattr(

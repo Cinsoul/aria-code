@@ -33,6 +33,12 @@ from aria_code._version import __version__  # noqa: F401
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
 # Stateless helpers now live in apps/cli/helpers.py; re-exported here so
 # aria_cli's own callers keep working unchanged.
+from aria_code.packages.aria_core.secure_file import write_secret_json
+from aria_code.apps.cli.tool_registry import (  # noqa: F401 — re-exported
+    ARIA_TOOLS,
+    LOCAL_TOOLS,
+    LOCAL_TOOL_SCHEMAS,
+)
 from aria_code.apps.cli.helpers import (  # noqa: F401
     _load_project_context,
     _display_value,
@@ -765,7 +771,7 @@ def _save_providers_json(llm_section: Dict[str, Any]) -> None:
         except Exception:
             pass
     existing["llm"] = llm_section
-    PROVIDERS_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_secret_json(PROVIDERS_FILE, existing)
 
 
 def _save_data_key(service: str, key: str) -> None:
@@ -780,7 +786,7 @@ def _save_data_key(service: str, key: str) -> None:
     data_section = existing.get("data", {})
     data_section[service] = {"api_key": key}
     existing["data"] = data_section
-    PROVIDERS_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_secret_json(PROVIDERS_FILE, existing)
 
 
 def _load_data_keys() -> Dict[str, str]:
@@ -862,7 +868,10 @@ def save_config(cfg: dict):
 # Aria Tool Executor — calls /api/aria/execute-tool
 # ============================================================================
 
-ARIA_TOOLS = [
+# Populated in place — the container is owned by apps/cli/tool_registry.py.
+# Rebinding it here instead would leave every reader over there with an
+# empty registry and no error.
+ARIA_TOOLS.extend([
     ("get_market_data",         "Stock quotes, prices, chart data"),
     ("get_crypto_data",         "Cryptocurrency market data"),
     ("get_forex_data",          "Foreign exchange rates"),
@@ -885,7 +894,7 @@ ARIA_TOOLS = [
     ("assess_portfolio_risk",   "Portfolio risk assessment"),
     ("get_sector_performance",  "Sector performance heatmap"),
     ("get_market_indices",      "Global market indices"),
-]
+])
 
 
 # ============================================================================
@@ -895,7 +904,10 @@ ARIA_TOOLS = [
 # MODELS / MODEL_ALIASES / _MODEL_FALLBACK_PREFIXES 已移到
 # apps/cli/model_catalog.py（纯数据，约 390 行）。同 skills_catalog，普通
 # import 即可满足 mixin 的裸名引用。
-from aria_code.apps.cli.model_catalog import MODELS, MODEL_ALIASES, _MODEL_FALLBACK_PREFIXES
+from aria_code.apps.cli.model_catalog import (
+    MODELS, MODEL_ALIASES, _MODEL_FALLBACK_PREFIXES,
+    get_model_cfg, resolve_model_key,  # noqa: F401 — re-exported for existing callers
+)
 
 
 
@@ -1053,46 +1065,8 @@ def _ollama_unavailable_result(ollama_url: str, err: str = "") -> dict:
     }
 
 
-def resolve_model_key(model_str: str) -> str:
-    """Resolve any model alias/ID/key to a MODELS key.
-
-    For community Ollama models (qwen2.5-coder, llama3.2, deepseek-r1, etc.)
-    that are NOT in the MODELS registry, returns the sentinel "_community_"
-    so callers know to use model_capability.get_model_capability() instead
-    of falling back to hardcoded "prelude" settings.
-    """
-    if model_str in MODELS:
-        return model_str
-    if model_str in MODEL_ALIASES:
-        return MODEL_ALIASES[model_str]
-    # Community/custom Ollama model — not in registry
-    return "_community_"
 
 
-def get_model_cfg(model_str: str) -> dict:
-    """Return the best available config dict for *model_str*.
-
-    For registered models (MODELS table): returns the table entry.
-    For community Ollama models: synthesizes a config from model_capability.
-    Never silently falls back to 'prelude' settings for an unrelated model.
-    """
-    key = resolve_model_key(model_str)
-    if key in MODELS:
-        return MODELS[key]
-    # Community model — build config from model_capability registry
-    if _HAS_MODEL_CAP:
-        cap = get_model_capability(model_str)
-        return {
-            "id":          model_str,
-            "name":        model_str,
-            "num_ctx":     cap.context_window,
-            "temperature": cap.temperature,
-            "max_tokens":  min(cap.context_window // 4, 8192),
-            "thinking":    cap.thinking,
-            "tools":       cap.tool_calls,
-        }
-    # Last resort fallback — use qwen7b (sonata) settings as a safe default
-    return MODELS.get("sonata", MODELS.get("qwen7b", next(iter(MODELS.values()))))
 
 THINKING_MODES = {
     "auto":     {"label": "Auto",     "description": "Let Aria decide when to think deeply"},
@@ -1175,7 +1149,10 @@ from aria_code.apps.cli.tool_executor import *
 
 
 # Local tool registry: name → (handler, description, for display)
-LOCAL_TOOLS = {
+# Populated in place — the container is owned by apps/cli/tool_registry.py.
+# Rebinding it here instead would leave every reader over there with an
+# empty registry and no error.
+LOCAL_TOOLS.update({
     # ── Core file tools ──────────────────────────────────────────────────────
     "read_file":      (_tool_read_file,      "Read a file's contents"),
     "analyze_file":   (_tool_analyze_file,   "Parse & analyze a local document/image (pdf/docx/xlsx/csv/json/image/…); images go to the vision model"),
@@ -1200,7 +1177,7 @@ LOCAL_TOOLS = {
     # ── Broker account data ──────────────────────────────────────────────────
     "broker_query": (_tool_broker_query, "Query connected broker: account balance, positions, or orders"),
     "broker_order": (_tool_broker_order, "Propose a trade order — requires explicit user confirmation before execution"),
-}
+})
 
 # ── Register subagent tools ──────────────────────────────────────────────────
 try:
@@ -1232,7 +1209,7 @@ except ImportError:
 
 # Pre-initialize so finance/plugin registrations can append schemas to it.
 # The bulk static schemas are extended below; this empty list must exist first.
-LOCAL_TOOL_SCHEMAS: list = []
+# Owned by apps/cli/tool_registry.py; filled in place below.
 
 # ── Register local finance fallback tools (yfinance / akshare / ccxt) ──────
 # These fill in for remote Aria tools when local_mode=True or backend offline.
@@ -4039,66 +4016,10 @@ class SlashCommands(
 # ── 经营权共创平台：Agent 输出辅助函数（模块级，SlashCommands 内外均可用）────────────
 
 
-def _print_realty_result(result, agent_name: str):
-    """格式化打印 realty Agent 结果（地产健康度词汇，见 agents/signal_scheme.py::REALTY_SCHEME）"""
-    _SIGNAL_LABELS = {
-        "GOOD": "[green]正常/推荐[/green]",
-        "WATCH": "[yellow]需观察[/yellow]",
-        "CONCERN": "[red]警示[/red]",
-        "SEVERE": "[bold red]极高风险[/bold red]",
-    }
-    if not HAS_RICH:
-        print(f"\n[{agent_name}] Signal: {result.signal}  Confidence: {result.confidence:.0%}")
-        print(result.analysis)
-        return
-
-    console.print()
-    console.print(f"  [bold]{agent_name.upper().replace('_',' ')}[/bold]"
-                  f"  {_SIGNAL_LABELS.get(result.signal, result.signal)}"
-                  f"  [dim]置信度 {result.confidence:.0%}[/dim]")
-    console.print()
-    for pt in (result.key_points or []):
-        console.print(f"    • {pt}")
-    if result.analysis:
-        console.print()
-        text = result.analysis[:1200] + ("…" if len(result.analysis) > 1200 else "")
-        console.print(f"  [dim]{text}[/dim]")
-    console.print()
 
 
-def _print_risk_scan(data: dict):
-    """格式化打印风险扫描结果"""
-    if not HAS_RICH:
-        print(f"Risk scan: {data.get('overall_level','?')} "
-              f"(score={data.get('risk_score',0)})")
-        for alert in data.get("alerts", []):
-            print(f"  [{alert['level']}] {alert['desc']}")
-        return
-
-    level = data.get("overall_level", "未知")
-    score = data.get("risk_score", 0)
-    color = {"低": "green", "中": "yellow", "高": "red", "极高": "bold red"}.get(level, "white")
-    console.print()
-    console.print(f"  风险等级: [{color}]{level}[/{color}]  "
-                  f"风险分值: {score}  "
-                  f"预警项: {data.get('alert_count',0)}")
-    console.print()
-    for alert in data.get("alerts", []):
-        ac = {"低": "dim", "中": "yellow", "高": "red", "极高": "bold red"}.get(
-            alert["level"], "white")
-        console.print(f"    [{ac}][{alert['level']}][/{ac}] {alert['desc']}")
-    if data.get("suggestion"):
-        console.print(f"\n  [dim]建议: {data['suggestion']}[/dim]")
-    console.print()
 
 
-def _p(msg: str, style: str = ""):
-    """快速打印辅助（rich 可用时带样式）"""
-    if HAS_RICH:
-        tag = {"dim": "dim", "error": "red", "ok": "green"}.get(style, style)
-        console.print(f"[{tag}]{msg}[/{tag}]" if tag else msg)
-    else:
-        print(msg)
 
 
 # ============================================================================

@@ -588,7 +588,8 @@ class CoreCommandsMixin:
         then replaces conversation with [system summary] + last 2 message pairs.
         Falls back to hard trim if the summary call fails.
         """
-        from aria_cli import OllamaProvider, get_model_cfg, stream_provider_result
+        from aria_cli import OllamaProvider, stream_provider_result
+        from aria_code.apps.cli.model_catalog import get_model_cfg
         conv = self.terminal.conversation
         if len(conv) <= 4:
             if not silent:
@@ -679,7 +680,8 @@ class CoreCommandsMixin:
         return created
     def cmd_verify(self, args: str):
         """Infer and run focused verification checks."""
-        from aria_cli import Syntax, VerificationPlanner, _SYNTAX_THEME, _tool_run_command
+        from aria_cli import VerificationPlanner, _SYNTAX_THEME, _tool_run_command
+        from ._ui import Syntax
         parts = args.split()
         dry_run = "--dry-run" in parts
         paths = [p for p in parts if p != "--dry-run"]
@@ -720,7 +722,8 @@ class CoreCommandsMixin:
         self.context.console.print(f"[green]{msg}[/green]" if self.context.has_rich else msg)
     def cmd_run(self, args: str):
         """Run a command: /run <command>"""
-        from aria_cli import Syntax, _SYNTAX_THEME, _tool_run_command, evaluate_command_policy
+        from aria_cli import _SYNTAX_THEME, _tool_run_command, evaluate_command_policy
+        from ._ui import Syntax
         if not args.strip():
             self.context.console.print("[dim]Usage: /run [--dry-run] <command>[/dim]" if self.context.has_rich
                           else "Usage: /run [--dry-run] <command>")
@@ -781,7 +784,8 @@ class CoreCommandsMixin:
     def cmd_apply(self, args: str):
         """Extract code from last AI response and save to file."""
         from aria_code.apps.cli.helpers import _extract_code_block
-        from aria_cli import Syntax, _SYNTAX_THEME, _tool_write_file
+        from aria_cli import _SYNTAX_THEME, _tool_write_file
+        from ._ui import Syntax
         filename = args.strip()
         last_response = ""
         for msg in reversed(self.terminal.conversation):
@@ -1108,7 +1112,8 @@ class CoreCommandsMixin:
           2. Remote Aria backend (AWS) — if local not available
           3. Graceful error if both fail
         """
-        from aria_cli import LOCAL_TOOLS, Text, execute_aria_tool
+        from aria_cli import Text, execute_aria_tool
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         display = label or tool_name
 
         # ── 1. Try LOCAL_TOOLS first (run in executor to avoid blocking) ──
@@ -1168,7 +1173,8 @@ class CoreCommandsMixin:
                              param_list: list,
                              label_fn=None):
         """Run a tool in parallel for multiple param dicts, display each result."""
-        from aria_cli import LOCAL_TOOLS, _print_finance_result, execute_aria_tool
+        from aria_cli import _print_finance_result, execute_aria_tool
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         tasks = [
             asyncio.create_task(
                 asyncio.get_event_loop().run_in_executor(
@@ -1188,7 +1194,8 @@ class CoreCommandsMixin:
     async def _fetch_and_display_finance(self, tool_name: str, params: dict, label: str,
                                           mdc_fallback_symbol: str = "") -> bool:
         """Try tool → local finance tool → market_data_client fallback. Returns True if data shown."""
-        from aria_cli import LOCAL_TOOLS, _print_finance_result, execute_aria_tool
+        from aria_cli import _print_finance_result, execute_aria_tool
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         result = None
         # 1. LOCAL_TOOLS (ccxt / local finance)
@@ -1229,7 +1236,8 @@ class CoreCommandsMixin:
             return False
     async def cmd_risk(self, args: str):
         """Risk metrics: /risk AAPL or /risk portfolio"""
-        from aria_cli import LOCAL_TOOLS, execute_aria_tool
+        from aria_cli import execute_aria_tool
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         target = args.strip().upper() or "AAPL"
         if target == "PORTFOLIO":
             await self._run_tool_cmd("assess_portfolio_risk", {
@@ -1444,7 +1452,8 @@ class CoreCommandsMixin:
             print(f"  Local mode {state}  model={model}")
     async def cmd_mcp(self, args: str):
         """Manage MCP servers: /mcp status | /mcp tools | /mcp reload [server]"""
-        from aria_cli import CONFIG_DIR, LOCAL_TOOLS, LOCAL_TOOL_SCHEMAS, MCP_CONFIG_PATH, _HAS_MCP
+        from aria_cli import CONFIG_DIR, MCP_CONFIG_PATH, _HAS_MCP
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS, LOCAL_TOOL_SCHEMAS
         if not _HAS_MCP:
             self.context.console.print("  [dim]mcp_client.py not available[/dim]" if self.context.has_rich else "MCP not available")
             return
@@ -1693,7 +1702,7 @@ class CoreCommandsMixin:
                 print(f"    Install: {rec['install']}")
     async def cmd_optimize_port(self, args: str):
         """Portfolio weight optimisation."""
-        from aria_cli import LOCAL_TOOLS
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         symbols = [s.strip().upper() for s in args.split() if s.strip()]
         if not symbols:
             self.context.console.print("  [dim]Usage: /optimize-port AAPL MSFT GOOGL [method=max_sharpe][/dim]" if self.context.has_rich
@@ -1715,7 +1724,8 @@ class CoreCommandsMixin:
             )
     async def _run_local_tool(self, tool_name: str, params: dict, label: str = ""):
         """Run a LOCAL_TOOLS entry, display result with Rich formatting."""
-        from aria_cli import LOCAL_TOOLS, _print_tool_result
+        from aria_cli import _print_tool_result
+        from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         from aria_code.apps.cli.helpers import _clean_tool_error_message
         if tool_name not in LOCAL_TOOLS:
             if self.context.has_rich:

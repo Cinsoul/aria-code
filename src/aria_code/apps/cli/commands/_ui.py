@@ -16,16 +16,31 @@ mixin can render without knowing anything about aria_cli.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
-__all__ = ["Panel", "print_error", "rich_box", "has_rich"]
+__all__ = ["Panel", "Syntax", "null_ctx", "print_error", "rich_box", "has_rich"]
 
 try:  # Optional: the CLI degrades to plain print when rich is absent.
     from rich import box as rich_box
     from rich.panel import Panel
+    from rich.syntax import Syntax
 except ImportError:  # pragma: no cover - exercised only without rich installed
     rich_box = None  # type: ignore[assignment]
     Panel = None  # type: ignore[assignment]
+    Syntax = None  # type: ignore[assignment]
+
+
+@contextmanager
+def null_ctx():
+    """No-op context manager, for `with x if cond else null_ctx():`.
+
+    Three lines with no dependencies, defined in aria_cli only because that is
+    where the first caller was. Note the *theme* these renderers use
+    (_SYNTAX_THEME) is deliberately not here: it is read from user config and
+    changes with /theme, so it is session state and belongs on the context.
+    """
+    yield
 
 
 def has_rich() -> bool:

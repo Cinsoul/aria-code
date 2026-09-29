@@ -86,9 +86,11 @@ class SettingsService:
     def save(self, cfg: dict) -> None:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         payload = {k: v for k, v in cfg.items() if k not in NEVER_PERSIST}
-        self.config_file.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        # config.json holds auth_token / refresh_token from /login, so it is
+        # written owner-only like the other credential files.
+        from aria_code.packages.aria_core.secure_file import write_secret_json
+
+        write_secret_json(self.config_file, payload)
         self._snapshot = dict(cfg)
 
     def get(self, key: str, default: Any = None) -> Any:

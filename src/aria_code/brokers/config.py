@@ -111,10 +111,14 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(cfg: Dict[str, Any]) -> None:
-    """保存配置到 brokers.json，自动创建目录。"""
-    BROKERS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(BROKERS_CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    """保存配置到 brokers.json（0600，仅本人可读）。
+
+    这个文件存的是券商密码 / api_secret / access_token —— 本仓库里价值最高的
+    凭据。此前它按进程 umask 写出，通常是 0644，同机器上任何账号可读。
+    """
+    from aria_code.packages.aria_core.secure_file import write_secret_json
+
+    write_secret_json(BROKERS_CONFIG_PATH, cfg)
 
 
 def list_broker_configs() -> List[Dict[str, Any]]:

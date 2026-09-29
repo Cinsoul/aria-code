@@ -120,7 +120,7 @@ async def test_make_provider_fn_threads_system_override(monkeypatch):
     monkeypatch.setattr(base_mod, "AriaSSEProvider", _FakeAriaSSE)
     monkeypatch.setattr(streaming_mod, "stream_provider_result", _fake_stream)
 
-    from apps.cli.providers.runtime_bridge import make_provider_fn
+    from aria_code.apps.cli.providers.runtime_bridge import make_provider_fn
 
     # local_mode → ollama route → override goes to the provider constructor
     pf_local = make_provider_fn(

@@ -65,13 +65,15 @@ def _test_datasource(*args, **kwargs):
     from aria_cli import _test_datasource as fn
     return fn(*args, **kwargs)
 def _get_ARIA_TOOLS():
-    from aria_cli import ARIA_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import ARIA_TOOLS as val
     return val
 def get_model_cfg(*args, **kwargs):
-    from aria_cli import get_model_cfg as fn
+    from ..model_catalog import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def _get___version__():
     from aria_code._version import __version__ as val
