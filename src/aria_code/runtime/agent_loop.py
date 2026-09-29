@@ -819,11 +819,12 @@ async def run_serial_tool(
     *,
     remote_runner: RemoteToolRunner | None = None,
     hook: Hook | None = None,
+    approval: ApprovalDecision | None = None,
 ) -> Tuple[dict, float]:
     """Execute one tool call and return (result, elapsed_seconds)."""
     started = time.time()
     if tool_name in tool_executor.local_tools:
-        result = tool_executor.execute_local(tool_name, tool_params)
+        result = tool_executor.execute_local(tool_name, tool_params, approval=approval)
     elif remote_runner is not None:
         if hook is not None:
             hook("pre_tool", tool_name, tool_params, None)
@@ -908,14 +909,19 @@ async def execute_tool_turn(
             ))
             continue
 
-        if tool_name in confirm and approval_callback is not None:
+        approval = None
+        if tool_name in confirm:
+            if approval_callback is None:
+                tool_batch.cancel()
+                break
             decision = await _maybe_await(approval_callback(tool_name, tool_params))
             if decision is None:
-                decision = ApprovalDecision.allow()
+                decision = ApprovalDecision.deny("approval unavailable")
             if not decision.approved:
                 tool_batch.cancel()
                 break
             approval_applier(tool_params, decision)
+            approval = decision
 
         tr, tool_elapsed = await run_serial_tool(
             tool_name,
@@ -923,6 +929,7 @@ async def execute_tool_turn(
             tool_executor,
             remote_runner=remote_runner,
             hook=hook,
+            approval=approval,
         )
         tool_batch.add_result(tool_name, tr, formatter, elapsed=tool_elapsed)
         activities.append(ToolExecutionActivity(

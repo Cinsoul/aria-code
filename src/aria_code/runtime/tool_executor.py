@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
 
+from .approval import ApprovalDecision, apply_approval_decision
 from .events import RuntimeTrace, ToolCallRecord
 
 ToolHandler = Callable[[dict], dict]
@@ -35,7 +36,9 @@ class ToolExecutor:
         self.config = config or {}
         self.execution_context = execution_context
 
-    def execute_local(self, tool_name: str, params: dict) -> dict:
+    def execute_local(
+        self, tool_name: str, params: dict, *, approval: ApprovalDecision | None = None
+    ) -> dict:
         """Execute a local tool synchronously."""
         if tool_name not in self.local_tools:
             return {"success": False, "error": f"Unknown local tool: {tool_name}"}
@@ -45,6 +48,7 @@ class ToolExecutor:
             params,
             include_execution_context=True,
             bind_research_context=True,
+            approval=approval,
         )
         context_error = params.pop("_execution_context_error", None)
         if context_error:
@@ -107,8 +111,17 @@ class ToolExecutor:
         *,
         include_execution_context: bool = False,
         bind_research_context: bool = False,
+        approval: ApprovalDecision | None = None,
     ) -> dict:
         prepared = dict(params or {})
+        if tool_name == "run_command":
+            # Tool arguments come from the model. Only the host configuration and
+            # a typed approval decision may set execution controls.
+            for key in (
+                "policy", "permission_mode", "network_enabled",
+                "user_approved", "_upgrade_policy", "sandbox",
+            ):
+                prepared.pop(key, None)
         if self.execution_context is not None and (
             include_execution_context or bind_research_context
         ):
@@ -117,16 +130,22 @@ class ToolExecutor:
                 if include_execution_context:
                     for key, value in context.items():
                         if str(key).startswith("_") and value is not None:
-                            prepared.setdefault(str(key), value)
+                            prepared[str(key)] = value
                     self._bind_workspace(tool_name, prepared, context)
                 if bind_research_context:
                     self._bind_research_run(tool_name, prepared, context)
-            except Exception:
-                pass
+            except Exception as exc:
+                if include_execution_context:
+                    prepared["_execution_context_error"] = (
+                        f"Execution context unavailable: {exc}"
+                    )
         if tool_name == "run_command":
-            prepared.setdefault("policy", self.config.get("command_policy", "safe"))
-            prepared.setdefault("permission_mode", self.config.get("permission_mode", "workspace-write"))
-            prepared.setdefault("network_enabled", bool(self.config.get("network_enabled", True)))
+            prepared["policy"] = self.config.get("command_policy", "safe")
+            prepared["permission_mode"] = self.config.get("permission_mode", "workspace-write")
+            prepared["network_enabled"] = bool(self.config.get("network_enabled", True))
+            prepared["sandbox"] = bool(self.config.get("command_sandbox", False))
+            if approval is not None and approval.approved:
+                apply_approval_decision(prepared, approval)
         return prepared
 
     @staticmethod

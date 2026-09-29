@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg" width="100">
-    <img src="docs/assets/logo-light.svg" alt="Aria Code" width="100">
-  </picture>
+  <img src="docs/assets/aria-code-icon.png" alt="Aria Code icon" width="100">
 </p>
 
 <p align="center">
@@ -24,8 +21,8 @@
 <h1 align="center">Aria Code</h1>
 
 <p align="center">
-  <b>AI-powered financial terminal for the command line</b><br>
-  <sub>Runs fully offline · 19+ cloud providers · Auto language detection · Built for investors & quant researchers</sub>
+  <b>AI coding and research workspace for the command line</b><br>
+  <sub>Code · connected business workflows · finance · local or cloud models</sub>
 </p>
 
 <p align="center">
@@ -46,7 +43,7 @@
 
 ## What is Aria Code?
 
-Aria Code is a **terminal-first AI financial agent** — think of it as Claude Code, but with deep finance domain knowledge and full offline capability. Ask it about stocks, portfolio optimization, quantitative strategies, or code, and it replies with real data, formulas, and analysis right in your terminal.
+Aria Code is a **terminal-first AI coding and research agent**. It can work with project files and developer tools, and it also offers domain tools for financial research and connected business workflows such as warehouse analysis. Local models are an option for tasks that can run offline; live data and cloud models require network access.
 
 ```
 $ aria-code
@@ -914,9 +911,9 @@ pytest tests/ -v
 
 ## Relation to Arthera
 
-Aria Code is the open-source CLI component of [Arthera](https://arthera.finance) — an AI-powered quantitative investment platform. The full Arthera platform includes a web dashboard, desktop terminal, iOS app, and institutional quant engine.
+Aria Code is the open-source CLI component of [Arthera](https://arthera.finance). Arthera is expanding beyond its original financial tools into coding, research, and connected business workflows. The wider product includes a desktop terminal and other application surfaces.
 
-Aria Code is designed to work as a **standalone tool** — it does not require the Arthera backend. All financial calculations run locally. Cloud features are optional.
+Arthera supports Google sign-in and first-use account creation. The CLI also offers `/login google` for signing in to the Arthera backend. The hosted product uses Google Cloud models; signing in to Arthera is separate from configuring direct model access from a standalone CLI. For direct Vertex AI calls, install `aria-code[google]` and configure Google Cloud Application Default Credentials, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. The CLI can also use a Gemini API key, local Ollama, or other configured providers. Google sign-in does not itself grant a user's machine Vertex AI API access.
 
 ---
 
