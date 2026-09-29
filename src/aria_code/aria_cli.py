@@ -33,6 +33,11 @@ from aria_code._version import __version__  # noqa: F401
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
 # Stateless helpers now live in apps/cli/helpers.py; re-exported here so
 # aria_cli's own callers keep working unchanged.
+from aria_code.apps.cli.tool_registry import (  # noqa: F401 — re-exported
+    ARIA_TOOLS,
+    LOCAL_TOOLS,
+    LOCAL_TOOL_SCHEMAS,
+)
 from aria_code.apps.cli.helpers import (  # noqa: F401
     _load_project_context,
     _display_value,
@@ -862,7 +867,10 @@ def save_config(cfg: dict):
 # Aria Tool Executor — calls /api/aria/execute-tool
 # ============================================================================
 
-ARIA_TOOLS = [
+# Populated in place — the container is owned by apps/cli/tool_registry.py.
+# Rebinding it here instead would leave every reader over there with an
+# empty registry and no error.
+ARIA_TOOLS.extend([
     ("get_market_data",         "Stock quotes, prices, chart data"),
     ("get_crypto_data",         "Cryptocurrency market data"),
     ("get_forex_data",          "Foreign exchange rates"),
@@ -885,7 +893,7 @@ ARIA_TOOLS = [
     ("assess_portfolio_risk",   "Portfolio risk assessment"),
     ("get_sector_performance",  "Sector performance heatmap"),
     ("get_market_indices",      "Global market indices"),
-]
+])
 
 
 # ============================================================================
@@ -1140,7 +1148,10 @@ from aria_code.apps.cli.tool_executor import *
 
 
 # Local tool registry: name → (handler, description, for display)
-LOCAL_TOOLS = {
+# Populated in place — the container is owned by apps/cli/tool_registry.py.
+# Rebinding it here instead would leave every reader over there with an
+# empty registry and no error.
+LOCAL_TOOLS.update({
     # ── Core file tools ──────────────────────────────────────────────────────
     "read_file":      (_tool_read_file,      "Read a file's contents"),
     "analyze_file":   (_tool_analyze_file,   "Parse & analyze a local document/image (pdf/docx/xlsx/csv/json/image/…); images go to the vision model"),
@@ -1165,7 +1176,7 @@ LOCAL_TOOLS = {
     # ── Broker account data ──────────────────────────────────────────────────
     "broker_query": (_tool_broker_query, "Query connected broker: account balance, positions, or orders"),
     "broker_order": (_tool_broker_order, "Propose a trade order — requires explicit user confirmation before execution"),
-}
+})
 
 # ── Register subagent tools ──────────────────────────────────────────────────
 try:
@@ -1197,7 +1208,7 @@ except ImportError:
 
 # Pre-initialize so finance/plugin registrations can append schemas to it.
 # The bulk static schemas are extended below; this empty list must exist first.
-LOCAL_TOOL_SCHEMAS: list = []
+# Owned by apps/cli/tool_registry.py; filled in place below.
 
 # ── Register local finance fallback tools (yfinance / akshare / ccxt) ──────
 # These fill in for remote Aria tools when local_mode=True or backend offline.

@@ -36,7 +36,8 @@ def _get__PROVIDER_BASE_URLS():
     from aria_cli import _PROVIDER_BASE_URLS as val
     return val
 def _get_ARIA_TOOLS():
-    from aria_cli import ARIA_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import ARIA_TOOLS as val
     return val
 def _get_THINKING_MODES():
     from aria_cli import THINKING_MODES as val
@@ -76,7 +77,8 @@ def _get_SKILLS():
     from aria_cli import SKILLS as val
     return val
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def get_model_capability(*args, **kwargs):
     from aria_cli import get_model_capability as fn

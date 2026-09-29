@@ -17,7 +17,8 @@ def _tool_github(*args, **kwargs):
     from aria_cli import _tool_github as fn
     return fn(*args, **kwargs)
 def _get_LOCAL_TOOLS():
-    from aria_cli import LOCAL_TOOLS as val
+    # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
+    from ..tool_registry import LOCAL_TOOLS as val
     return val
 def _get_provider_key(*args, **kwargs):
     from aria_cli import _get_provider_key as fn
