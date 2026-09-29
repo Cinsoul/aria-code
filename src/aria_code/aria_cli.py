@@ -122,7 +122,13 @@ from aria_code.safety import evaluate_command_policy
 from aria_code.plan_utils import parse_plan_steps
 from aria_code.privacy import FeedbackRecord, FeedbackStore, PrivacySettings
 from aria_code.apps.cli.session_store import SessionManager
-from aria_code.apps.cli.turn_planning import is_complex_task, round_budget_for, should_decompose
+from aria_code.apps.cli.turn_planning import (
+    estimate_context_tokens,
+    is_complex_task,
+    post_turn_context_decision,
+    round_budget_for,
+    should_decompose,
+)
 from aria_code.apps.cli.prompt_assembly import build_base_message, should_prepend_file_tool_hint, with_ml_signal_prefix
 from aria_code.runtime import (
     AgentErrorPresentation,
@@ -5510,10 +5516,20 @@ class ArtheraTerminal:
 
             # Auto-warn when context approaches the limit; auto-compact before
             # the prompt is already at the edge and tool traces become noisy.
-            _est = sum(len(m.get("content", "")) for m in self.conversation) // 3
+            # The decision is in apps/cli/turn_planning.py, which is also where
+            # the other two compaction paths' rules are documented: this one
+            # used to ignore auto_compact_context and auto_compact_threshold
+            # entirely, so turning auto-compaction off did not turn it off.
+            _est = estimate_context_tokens(self.conversation)
             _max = get_model_cfg(self.config.get("model", "qwen2.5:7b")).get("num_ctx", 16384)
-            _pct = min(100, int(_est / _max * 100))
-            if _pct >= 90 and not _context_compacted_from_usage:
+            _ctx = post_turn_context_decision(
+                _est, _max,
+                auto_compact_enabled=bool(self.config.get("auto_compact_context", True)),
+                threshold=self.config.get("auto_compact_threshold", 0.78),
+                already_compacted=_context_compacted_from_usage,
+            )
+            _pct = _ctx["fill_pct"]
+            if _ctx["should_compact"]:
                 # Auto-compact: silently summarise and truncate
                 try:
                     await self.commands._smart_compact_async(silent=True)
@@ -5521,8 +5537,8 @@ class ArtheraTerminal:
                     # Fallback: hard trim
                     self.conversation = self.conversation[-10:]
                 if HAS_RICH:
-                    console.print("  [dim]↩ Auto-compacted context (was 90%+ full)[/dim]")
-            elif _pct >= 70 and HAS_RICH and not _context_compacted_from_usage:
+                    console.print(f"  [dim]↩ Auto-compacted context (was {_pct}% full)[/dim]")
+            elif _ctx["should_warn"] and HAS_RICH:
                 _color = "yellow" if _pct < 85 else "red"
                 console.print(
                     f"  [{_color}]⚠ Context {_pct}% full "
