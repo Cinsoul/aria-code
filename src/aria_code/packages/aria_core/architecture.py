@@ -161,8 +161,16 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
             "class object from the aria_code.privacy one its callers use. "
             "Still direct, on purpose: apps/cli/tools/ takes explicit params and holds no "
             "config, and apps/cli/tool_executor.py calls the stateless classify_command_risk. "
-            "Still direct, not yet done: the broker paths in broker_cmds.py and "
-            "brokers/automation.py. Broker preview/confirm and the two-gate chat-confirm gate "
+            "The broker paths are now routed too: /broker status and /trade mode go through "
+            "trading_dry_run/trading_policy. brokers/ itself stays direct on purpose — it IS "
+            "the trading domain and SafetyService is the facade over it, so a call the other "
+            "way would invert the layering. A third defect surfaced here: trading_dry_run "
+            "documented the kill switch under a variable name nothing reads, and that "
+            "docstring was its only documentation, so following it froze nothing and raised "
+            "nothing. tests/test_env_switch_docs.py now checks all 27 ARIA_* names appearing "
+            "in docstrings against what the tree actually reads (it also caught aria_daemon.py "
+            "advertising an ARIA_API_BASE that never existed; the backend URL is the api_url "
+            "config key). Broker preview/confirm and the two-gate chat-confirm gate "
             "are real and in use; credential files are written owner-only via "
             "packages/aria_core/secure_file.py."
         ),
@@ -170,9 +178,6 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         source_paths=("safety/", "brokers/", "apps/cli/commands/broker_cmds.py"),
         depends_on=("settings", "tools"),
         next_steps=(
-            "Route the broker paths (broker_cmds.py global_dry_run/policy_from_config, "
-            "brokers/automation.py) through SafetyService.trading_policy/trading_dry_run — "
-            "the command-policy and privacy sites are done.",
             "Give SafetyService a privacy setter so /privacy on|off stops constructing "
             "PrivacySettings itself; until it has one, the adoption guard can only forbid "
             "deriving settings from config, not constructing them.",
