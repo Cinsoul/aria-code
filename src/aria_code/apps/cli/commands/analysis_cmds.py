@@ -48,10 +48,10 @@ def _render_funding_compare(*args, **kwargs):
     from aria_cli import _render_funding_compare as fn
     return fn(*args, **kwargs)
 def _is_ashare_symbol(*args, **kwargs):
-    from aria_cli import _is_ashare_symbol as fn
+    from aria_code.apps.cli.helpers import _is_ashare_symbol as fn
     return fn(*args, **kwargs)
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def _ashare_code_to_name(*args, **kwargs):
     from aria_cli import _ashare_code_to_name as fn
@@ -69,7 +69,7 @@ def _render_ichimoku(*args, **kwargs):
     from aria_cli import _render_ichimoku as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 
 import json

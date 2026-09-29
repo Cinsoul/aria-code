@@ -126,16 +126,20 @@ async def test_cmd_canvas_stop_tears_down_running_session(monkeypatch):
 
 
 async def test_cmd_canvas_start_failure_reports_error(monkeypatch):
-    import aria_cli
     import preview_server
+    from aria_code.apps.cli.commands import canvas_cmds
 
     fake_console = _FakeConsole()
-    monkeypatch.setattr(aria_cli, "console", fake_console, raising=False)
-    monkeypatch.setattr(aria_cli, "HAS_RICH", True, raising=False)
     monkeypatch.setattr(preview_server, "get_active_session", lambda: None)
 
     errors = []
-    monkeypatch.setattr(aria_cli, "_print_error", lambda msg, hint="": errors.append(msg), raising=False)
+    # The mixin renders through the context-taking adapter now, not through
+    # aria_cli's module-global _print_error, so the patch goes on the name this
+    # module imported.
+    monkeypatch.setattr(
+        canvas_cmds, "print_error",
+        lambda context, msg, hint="": errors.append(msg),
+    )
 
     async def failing_start_session():
         raise RuntimeError("no free port")

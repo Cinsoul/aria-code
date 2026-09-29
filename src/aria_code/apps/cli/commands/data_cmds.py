@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._ui import print_error
+
 
 import json
 import asyncio
@@ -12,9 +14,6 @@ from typing import Dict, Any, Optional
 
 def _render_portfolio_bt(*args, **kwargs):
     from aria_cli import _render_portfolio_bt as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def _render_alerts(*args, **kwargs):
     from aria_cli import _render_alerts as fn
@@ -415,17 +414,17 @@ class DataCommandsMixin:
                 try:
                     data = await _do_with_fallback()
                 except Exception as e:
-                    _print_error(str(e), "tool")
+                    print_error(self.context, str(e), "tool")
                     return
         else:
             print(f"Comparing strategies on {symbol}...")
             try:
                 data = await _do_with_fallback()
             except Exception as e:
-                _print_error(str(e), "tool")
+                print_error(self.context, str(e), "tool")
                 return
         if not data.get("strategies"):
-            _print_error("策略对比无结果", "本地回测引擎未返回数据，检查标的代码是否正确")
+            print_error(self.context, "策略对比无结果", "本地回测引擎未返回数据，检查标的代码是否正确")
             return
 
         strategies = data.get("strategies", [])

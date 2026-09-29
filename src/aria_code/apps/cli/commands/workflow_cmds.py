@@ -24,9 +24,9 @@ def _run_event_hook(*args, **kwargs):
 def _load_hooks(*args, **kwargs):
     from aria_cli import _load_hooks as fn
     return fn(*args, **kwargs)
-def _display_path(*args, **kwargs):
-    from aria_cli import _display_path as fn
-    return fn(*args, **kwargs)
+# display_path lives in ui.render.output; aria_cli only re-exports it under a
+# private alias, so going through aria_cli was a pointless second hop.
+from aria_code.ui.render.output import display_path as _display_path
 def _get_MODELS():
     from aria_cli import MODELS as val
     return val
@@ -40,7 +40,7 @@ def resolve_model_key(*args, **kwargs):
     from aria_cli import resolve_model_key as fn
     return fn(*args, **kwargs)
 def _load_project_context(*args, **kwargs):
-    from aria_cli import _load_project_context as fn
+    from aria_code.apps.cli.helpers import _load_project_context as fn
     return fn(*args, **kwargs)
 def _fire_json_hook(*args, **kwargs):
     from aria_cli import _fire_json_hook as fn

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._ui import Panel, print_error, rich_box
+
 import base64
 import io
 import pathlib
@@ -26,21 +28,18 @@ def _get__HAS_COMPUTER_USE():
 def _get__PROJECT_CONTEXT():
     from aria_cli import _PROJECT_CONTEXT as val
     return val
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
-    return fn(*args, **kwargs)
 def _get__HAS_MODEL_CAP():
     from aria_cli import _HAS_MODEL_CAP as val
     return val
 def _get_rich_box():
-    from aria_cli import rich_box as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return rich_box
 def get_model_cfg(*args, **kwargs):
     from aria_cli import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_Panel():
-    from aria_cli import Panel as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return Panel
 
 import json
 import asyncio
@@ -160,7 +159,7 @@ class UiCommandsMixin:
         try:
             payload = self._load_image_source(path_str)
         except Exception as e:
-            _print_error(str(e), "vision")
+            print_error(self.context, str(e), "vision")
             return
 
         self.terminal._pending_image = {
@@ -182,7 +181,7 @@ class UiCommandsMixin:
     async def cmd_browser(self, args: str):
         """Open a URL in a headless browser."""
         if not _get__HAS_COMPUTER_USE():
-            _print_error(
+            print_error(self.context, 
                 "computer_use_tools not available.",
                 "Install: pip install playwright mss pyautogui pillow && playwright install chromium",
             )
@@ -221,7 +220,7 @@ class UiCommandsMixin:
                 else:
                     print(f"Screenshot ready ({d.get('size_kb', 0)} KB) — send your question")
             else:
-                _print_error(result.get("error", "Screenshot failed"), "browser screenshot")
+                print_error(self.context, result.get("error", "Screenshot failed"), "browser screenshot")
         else:
             url = parts[0].strip()
             if self.context.has_rich:
@@ -246,11 +245,11 @@ class UiCommandsMixin:
                 else:
                     print(f"Title: {title}\n{text[:500]}")
             else:
-                _print_error(result.get("error", "Navigation failed"), "browser")
+                print_error(self.context, result.get("error", "Navigation failed"), "browser")
 
     async def cmd_screenshot(self, args: str):
         if not _get__HAS_COMPUTER_USE():
-            _print_error(
+            print_error(self.context, 
                 "computer_use_tools not available.",
                 "Install: pip install mss pillow",
             )
@@ -281,7 +280,7 @@ class UiCommandsMixin:
             else:
                 print(f"Screenshot {d['width']}×{d['height']} ({d['size_kb']} KB) — send your question")
         else:
-            _print_error(result.get("error", "Screenshot failed"), "screenshot")
+            print_error(self.context, result.get("error", "Screenshot failed"), "screenshot")
 
     def cmd_input(self, args: str):
         raw = args.strip().lower()

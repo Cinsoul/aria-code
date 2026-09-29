@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._ui import Panel, print_error, rich_box
+
 import asyncio
 import json
 import pathlib
@@ -62,9 +64,6 @@ from typing import Dict, Any, Optional
 def _test_datasource(*args, **kwargs):
     from aria_cli import _test_datasource as fn
     return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
-    return fn(*args, **kwargs)
 def _get_ARIA_TOOLS():
     from aria_cli import ARIA_TOOLS as val
     return val
@@ -75,17 +74,17 @@ def _get_LOCAL_TOOLS():
     from aria_cli import LOCAL_TOOLS as val
     return val
 def _get___version__():
-    from aria_cli import __version__ as val
+    from aria_code._version import __version__ as val
     return val
 def _get_Panel():
-    from aria_cli import Panel as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return Panel
 def _get_provider_key(*args, **kwargs):
     from aria_cli import _get_provider_key as fn
     return fn(*args, **kwargs)
 def _get_rich_box():
-    from aria_cli import rich_box as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return rich_box
 def _get__HAS_MCP():
     from aria_cli import _HAS_MCP as val
     return val
@@ -741,7 +740,7 @@ class DiagnosticOpsCommandsMixin:
             from datasources.router import _SOURCE_REGISTRY, DataRouter
             router = DataRouter()
         except ImportError:
-            _print_error("datasources 模块未找到")
+            print_error(self.context, "datasources 模块未找到")
             return
 
         if self.context.has_rich:

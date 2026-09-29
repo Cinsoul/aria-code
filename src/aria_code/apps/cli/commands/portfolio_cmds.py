@@ -4,7 +4,10 @@ PortfolioCommandsMixin — Portfolio commands: journal, report, portfolio, apply
 Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's namespace
 by _rebind_mixin_globals() called at module load time.
 """
+
 from __future__ import annotations
+
+from ._ui import Panel, print_error
 
 
 def _detect_lang_for_team(text: str) -> str:
@@ -33,9 +36,9 @@ def resolve_team_symbols(*args, **kwargs):
 def team_agent_names(*args, **kwargs):
     from aria_cli import team_agent_names as fn
     return fn(*args, **kwargs)
-def execute_aria_tool(*args, **kwargs):
-    from aria_cli import execute_aria_tool as fn
-    return fn(*args, **kwargs)
+# execute_aria_tool lives in apps/cli/tool_executor.py and needs nothing from
+# aria_cli — the cache it reads is owned there now, so the hop was pointless.
+from aria_code.apps.cli.tool_executor import execute_aria_tool
 def export_report_pdf(*args, **kwargs):
     from aria_cli import export_report_pdf as fn
     return fn(*args, **kwargs)
@@ -52,8 +55,8 @@ def logger(*args, **kwargs):
     from aria_cli import logger as fn
     return fn(*args, **kwargs)
 def _get_Panel():
-    from aria_cli import Panel as val
-    return val
+    # Resolved locally now — see ._ui; no aria_cli round-trip.
+    return Panel
 def save_team_report(*args, **kwargs):
     from aria_cli import save_team_report as fn
     return fn(*args, **kwargs)
@@ -61,10 +64,7 @@ def _print_verdict_banner(*args, **kwargs):
     from aria_cli import _print_verdict_banner as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 def report_agent_names(*args, **kwargs):
     from aria_cli import report_agent_names as fn
@@ -85,7 +85,7 @@ def generate_html_report(*args, **kwargs):
     from aria_cli import generate_html_report as fn
     return fn(*args, **kwargs)
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def _sanitize_team_result_with_market_data(*args, **kwargs):
     from aria_cli import _sanitize_team_result_with_market_data as fn
@@ -1059,7 +1059,7 @@ class PortfolioCommandsMixin:
                     lang=_lang, on_agent_done=_on_agent_done,
                 )
             except Exception as e:
-                _print_error(str(e), "deep")
+                print_error(self.context, str(e), "deep")
                 continue
 
             md = render_tier(result, tier)
@@ -1094,7 +1094,7 @@ class PortfolioCommandsMixin:
                /team AAPL --full          ← 7-agent 完整模式（+新闻/催化剂/行业）
                /team AAPL --pipeline      ← 开启 DAG 串行协作模式（Context Sharing）
         """
-        from aria_cli import Panel
+
         import sys as _sys
         team_args = parse_team_args(args)
         symbols = resolve_team_symbols(team_args, self.terminal.config)

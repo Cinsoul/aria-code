@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._ui import print_error
+
 import json
 
 from aria_code.apps.cli.session_export import build_session_export_payload
@@ -21,9 +23,6 @@ def _arrow_select(*args, **kwargs):
     return fn(*args, **kwargs)
 def get_model_cfg(*args, **kwargs):
     from aria_cli import get_model_cfg as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 
 import json
@@ -126,7 +125,7 @@ class SessionCommandsMixin:
             self.context.console.print(f"[green]Loaded: {title} ({n} messages)[/green]" if self.context.has_rich
                           else f"Loaded: {title} ({n} msgs)")
         else:
-            _print_error(f"Session not found: {session_id}", "session")
+            print_error(self.context, f"Session not found: {session_id}", "session")
 
     def cmd_recall(self, args: str):
         """Full-text search across all saved sessions: /recall <query>"""

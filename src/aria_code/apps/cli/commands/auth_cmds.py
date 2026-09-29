@@ -1,12 +1,13 @@
 """AuthCommandsMixin — Arthera backend auth: /login, /logout, /whoami.
 
-Method bodies use aria_cli module globals (self.context.console, self.context.has_rich, _esc_watcher,
-self.context.save_config, _print_error, asyncio, datetime) which are bound at import time by
-aria_cli._rebind_mixin_globals(AuthCommandsMixin). getpass/aiohttp are imported
-locally inside cmd_login, so this module needs no module-level imports.
+Rendering and config go through ``self.context``; errors through the local
+``print_error`` adapter. The old note here described binding by
+aria_cli._rebind_mixin_globals, which 40f23c8 stopped calling.
 """
 
 from __future__ import annotations
+
+from ._ui import print_error
 
 
 import json
@@ -18,9 +19,6 @@ from typing import Dict, Any, Optional
 
 def _esc_watcher(*args, **kwargs):
     from aria_code.aria_cli import _esc_watcher as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_code.aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 
 import json
@@ -122,21 +120,21 @@ class AuthCommandsMixin:
                         self.context.console.print(f"[green]✓ Logged in as {user_id}[/green]" if self.context.has_rich
                                       else f"Logged in as {user_id}")
                     elif resp.status == 401:
-                        _print_error("Invalid email or password", "login")
+                        print_error(self.context, "Invalid email or password", "login")
                     elif resp.status == 429:
-                        _print_error("Too many login attempts — please wait before retrying", "login")
+                        print_error(self.context, "Too many login attempts — please wait before retrying", "login")
                     else:
                         err = data.get("error", data.get("message", f"Login failed (HTTP {resp.status})"))
-                        _print_error(err, "login")
+                        print_error(self.context, err, "login")
         except aiohttp.ClientConnectorError:
-            _print_error(
+            print_error(self.context, 
                 f"Cannot reach {self.terminal.api_url} — check your network connection or use /local on",
                 "login"
             )
         except asyncio.TimeoutError:
-            _print_error("Login request timed out (15s) — server may be unavailable", "login")
+            print_error(self.context, "Login request timed out (15s) — server may be unavailable", "login")
         except Exception as e:
-            _print_error(f"Login error: {e}", "login")
+            print_error(self.context, f"Login error: {e}", "login")
 
     async def _login_with_google(self):
         """Browser-based Google sign-in (see apps/cli/google_login.py).
@@ -160,10 +158,10 @@ class AuthCommandsMixin:
                 run_google_login, self.terminal.api_url
             )
         except RuntimeError as exc:
-            _print_error(str(exc), "login")
+            print_error(self.context, str(exc), "login")
             return
         except Exception as exc:
-            _print_error(f"Google sign-in failed: {exc}", "login")
+            print_error(self.context, f"Google sign-in failed: {exc}", "login")
             return
 
         cfg = self.terminal.config

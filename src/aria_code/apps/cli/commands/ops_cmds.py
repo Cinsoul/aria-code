@@ -10,9 +10,9 @@ import time
 import shlex
 from typing import Dict, Any, Optional
 
-def _display_path(*args, **kwargs):
-    from aria_cli import _display_path as fn
-    return fn(*args, **kwargs)
+# display_path lives in ui.render.output; aria_cli only re-exports it under a
+# private alias, so going through aria_cli was a pointless second hop.
+from aria_code.ui.render.output import display_path as _display_path
 def _tool_github(*args, **kwargs):
     from aria_cli import _tool_github as fn
     return fn(*args, **kwargs)

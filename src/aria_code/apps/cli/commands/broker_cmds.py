@@ -3,7 +3,10 @@
 Extracted from aria_cli.py. Module globals (self.context.has_rich, self.context.console, etc.) are
 imported lazily inside each method body to avoid circular imports at load time.
 """
+
 from __future__ import annotations
+
+from ._ui import Panel, print_error, rich_box
 from aria_code.packages.aria_core.paths import aria_home
 
 
@@ -22,9 +25,9 @@ class BrokerCommandsMixin:
 
     async def cmd_broker(self, args: str):
         """券商账户管理: /broker list | guide | doctor | services | connect <id> | add <type>"""
-        from aria_cli import   Panel, rich_box, _HAS_BROKERS, _print_error
+        from aria_cli import _HAS_BROKERS
         if not _HAS_BROKERS:
-            _print_error("brokers 模块未加载", "请确认 brokers/ 目录存在")
+            print_error(self.context, "brokers 模块未加载", "请确认 brokers/ 目录存在")
             return
 
         parts = args.strip().split(maxsplit=1)
@@ -73,7 +76,7 @@ class BrokerCommandsMixin:
                 ))
 
     async def _cmd_broker_list(self):
-        from aria_cli import ( Panel, rich_box, _list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry)
+        from aria_cli import (_list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry)
         cfgs = _list_broker_configs()
         if not cfgs:
             await self._prompt_no_broker_action()
@@ -113,7 +116,7 @@ class BrokerCommandsMixin:
                 print(f"  {c.get('id',''):<20} {c.get('type',''):<12} {c.get('label','')}")
 
     async def _cmd_broker_status(self):
-        from aria_cli import   _get_broker_registry
+        from aria_cli import _get_broker_registry
         from brokers.trading import global_dry_run
 
         # Risk-off banner: make a global trading freeze impossible to miss.
@@ -157,7 +160,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_guide(self, broker_type: str = ""):
         """Show broker capability matrix or a single broker setup plan."""
-        from aria_cli import   Panel, rich_box, _print_error
+
         from brokers.capabilities import (
             broker_connection_plan, broker_dependency_state,
             get_broker_capability, list_broker_capabilities,
@@ -171,7 +174,7 @@ class BrokerCommandsMixin:
             if cfg:
                 spec = get_broker_capability(str(cfg.get("type", "")))
         if query and not spec:
-            _print_error(f"未知券商类型或配置 id: {query}", "运行 /broker guide 查看支持列表")
+            print_error(self.context, f"未知券商类型或配置 id: {query}", "运行 /broker guide 查看支持列表")
             return
 
         if spec:
@@ -246,7 +249,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_doctor(self, args: str = ""):
         """Check configured broker fields, SDK availability, and connection state."""
-        from aria_cli import   Panel, rich_box
+
         from brokers.capabilities import broker_dependency_state, get_broker_capability
         from brokers.config import BROKERS_CONFIG_PATH, list_broker_configs, validate_broker_config
         from aria_cli import _get_broker_registry
@@ -344,7 +347,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_services(self):
         """Show how broker data flows into Aria services."""
-        from aria_cli import   rich_box
+
         from brokers.capabilities import broker_service_playbook
 
         rows = broker_service_playbook()
@@ -369,16 +372,16 @@ class BrokerCommandsMixin:
                 print(f"{row['service']}: {row['commands']} | {row['guardrail']}")
 
     async def _cmd_broker_connect(self, broker_id: str):
-        from aria_cli import ( _list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry, _print_error)
+        from aria_cli import (_list_broker_configs, _BROKERS_CONFIG_PATH, _get_broker_registry)
         cfgs = _list_broker_configs()
         if not cfgs:
-            _print_error("尚未配置任何券商", f"请先编辑 {_BROKERS_CONFIG_PATH}")
+            print_error(self.context, "尚未配置任何券商", f"请先编辑 {_BROKERS_CONFIG_PATH}")
             return
         if not broker_id:
             from brokers.config import get_default_broker_config
             cfg = get_default_broker_config()
             if not cfg:
-                _print_error("未设置默认券商", "请用 /broker connect <id> 指定")
+                print_error(self.context, "未设置默认券商", "请用 /broker connect <id> 指定")
                 return
             broker_id = cfg["id"]
 
@@ -430,20 +433,20 @@ class BrokerCommandsMixin:
             if _is_missing_sdk:
                 # Put the actionable guidance in msg — _print_error's `context`
                 # arg is a category keyword, not free-text, so it won't render.
-                _print_error(
+                print_error(self.context, 
                     f"连接失败: {label} — {_btype} SDK 未安装。"
                     f"运行 /install {_pkg} 安装后重试（会先确认）。",
                 )
             else:
-                _print_error(f"连接失败: {label}", _err or "未知错误（检查账户配置与网络）")
+                print_error(self.context, f"连接失败: {label}", _err or "未知错误（检查账户配置与网络）")
 
     async def _cmd_broker_disconnect(self, broker_id: str):
-        from aria_cli import   _get_broker_registry, _print_error
+        from aria_cli import _get_broker_registry
         reg = _get_broker_registry()
         if not broker_id:
             b = reg.active() if reg else None
             if not b:
-                _print_error("无活跃券商", "请指定 id：/broker disconnect <id>")
+                print_error(self.context, "无活跃券商", "请指定 id：/broker disconnect <id>")
                 return
             broker_id = b.broker_id
         if reg:
@@ -456,7 +459,7 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_add(self, broker_type: str):
         from aria_cli import _arrow_select
-        from aria_cli import ( Panel, rich_box, _print_error, _supported_broker_types, _get_broker_template, _add_broker_cfg, _BROKERS_CONFIG_PATH)
+        from aria_cli import (_supported_broker_types, _get_broker_template, _add_broker_cfg, _BROKERS_CONFIG_PATH)
         from ui.picker import arrow_select
 
         supported = _supported_broker_types()
@@ -517,7 +520,7 @@ class BrokerCommandsMixin:
 
         tmpl = _get_broker_template(broker_type)
         if not tmpl:
-            _print_error(f"无法获取 {broker_type} 模板", "")
+            print_error(self.context, f"无法获取 {broker_type} 模板", "")
             return
 
         # ── 开户 & 凭证获取指南 ───────────────────────────────────────────
@@ -758,7 +761,7 @@ class BrokerCommandsMixin:
             else:
                 print(f"✓ 已保存 {broker_id}")
         except Exception as exc:
-            _print_error(f"保存失败: {exc}", f"请手动编辑 {_BROKERS_CONFIG_PATH}")
+            print_error(self.context, f"保存失败: {exc}", f"请手动编辑 {_BROKERS_CONFIG_PATH}")
             return
 
         # ── 保存后即刻连接 ────────────────────────────────────────────────
@@ -775,20 +778,20 @@ class BrokerCommandsMixin:
                 )
 
     async def _cmd_broker_remove(self, broker_id: str):
-        from aria_cli import   _print_error, _remove_broker_cfg
+        from aria_cli import _remove_broker_cfg
         if not broker_id:
-            _print_error("请指定要删除的券商 id", "/broker remove <id>")
+            print_error(self.context, "请指定要删除的券商 id", "/broker remove <id>")
             return
         removed = _remove_broker_cfg(broker_id)
         if removed:
             self.context.console.print(f"[dim]已删除券商配置: {broker_id}[/dim]") if self.context.has_rich else print(f"已删除: {broker_id}")
         else:
-            _print_error(f"未找到券商: {broker_id}", "")
+            print_error(self.context, f"未找到券商: {broker_id}", "")
 
     async def _cmd_broker_default(self, broker_id: str):
-        from aria_cli import   _print_error, _set_default_broker, _get_broker_registry
+        from aria_cli import _set_default_broker, _get_broker_registry
         if not broker_id:
-            _print_error("请指定 id", "/broker default <id>")
+            print_error(self.context, "请指定 id", "/broker default <id>")
             return
         ok = _set_default_broker(broker_id)
         if ok:
@@ -801,10 +804,10 @@ class BrokerCommandsMixin:
             else:
                 print(f"默认账户: {broker_id}")
         else:
-            _print_error(f"未找到券商: {broker_id}", "请先用 /broker add 添加")
+            print_error(self.context, f"未找到券商: {broker_id}", "请先用 /broker add 添加")
 
     async def _cmd_broker_init(self):
-        from aria_cli import   Panel, rich_box, _BROKERS_CONFIG_PATH
+        from aria_cli import _BROKERS_CONFIG_PATH
         from brokers.config import print_all_templates
         if self.context.has_rich:
             self.context.console.print(Panel(
@@ -820,9 +823,9 @@ class BrokerCommandsMixin:
 
     async def cmd_account(self, args: str):
         """显示账户资金汇总。"""
-        from aria_cli import _HAS_BROKERS, _print_error, _get_broker_registry, _print_broker_account
+        from aria_cli import _HAS_BROKERS, _get_broker_registry, _print_broker_account
         if not _HAS_BROKERS:
-            _print_error("brokers 模块未加载", "")
+            print_error(self.context, "brokers 模块未加载", "")
             return
         broker_id = args.strip()
         reg = _get_broker_registry()
@@ -836,13 +839,13 @@ class BrokerCommandsMixin:
             acct = await _aio.get_event_loop().run_in_executor(None, broker.account_info)
             _print_broker_account(acct)
         except Exception as e:
-            _print_error(f"账户查询失败: {e}", "请检查券商连接状态 (/broker status)")
+            print_error(self.context, f"账户查询失败: {e}", "请检查券商连接状态 (/broker status)")
 
     async def cmd_positions(self, args: str):
         """显示当前持仓。"""
-        from aria_cli import ( _null_ctx, _HAS_BROKERS, _print_error, _get_broker_registry, _print_broker_positions)
+        from aria_cli import (_null_ctx, _HAS_BROKERS, _get_broker_registry, _print_broker_positions)
         if not _HAS_BROKERS:
-            _print_error("brokers 模块未加载", "")
+            print_error(self.context, "brokers 模块未加载", "")
             return
         broker_id = args.strip()
         reg = _get_broker_registry()
@@ -857,13 +860,13 @@ class BrokerCommandsMixin:
                 pos = await _aio.get_event_loop().run_in_executor(None, broker.positions)
             _print_broker_positions(pos, broker.label, broker.config.get("currency","CNY"))
         except Exception as e:
-            _print_error(f"持仓查询失败: {e}", "请检查券商连接状态 (/broker status)")
+            print_error(self.context, f"持仓查询失败: {e}", "请检查券商连接状态 (/broker status)")
 
     async def cmd_orders(self, args: str):
         """显示订单记录。"""
-        from aria_cli import ( _null_ctx, _HAS_BROKERS, _print_error, _get_broker_registry, _print_broker_orders)
+        from aria_cli import (_null_ctx, _HAS_BROKERS, _get_broker_registry, _print_broker_orders)
         if not _HAS_BROKERS:
-            _print_error("brokers 模块未加载", "")
+            print_error(self.context, "brokers 模块未加载", "")
             return
         parts     = args.strip().split()
         status    = "all"
@@ -887,11 +890,11 @@ class BrokerCommandsMixin:
                 )
             _print_broker_orders(orders, broker.label, status)
         except Exception as e:
-            _print_error(f"订单查询失败: {e}", "请检查券商连接状态 (/broker status)")
+            print_error(self.context, f"订单查询失败: {e}", "请检查券商连接状态 (/broker status)")
 
     async def cmd_paper(self, args: str):
         """本地仿盘账户: /paper start [cash] [currency] | account | positions | orders | reset."""
-        from aria_cli import   _print_error
+
         from brokers.config import add_broker_config, get_broker_config, set_default_broker
         from brokers.paper_broker import PAPER_LEDGER_PATH, PaperBroker
 
@@ -934,7 +937,7 @@ class BrokerCommandsMixin:
 
         cfg = get_broker_config(broker_id)
         if not cfg:
-            _print_error("尚未创建仿盘账户", "运行 /paper start 100000 USD")
+            print_error(self.context, "尚未创建仿盘账户", "运行 /paper start 100000 USD")
             return
         broker = PaperBroker(broker_id, cfg)
         broker.connect()
@@ -956,7 +959,7 @@ class BrokerCommandsMixin:
     async def cmd_trade(self, args: str):
         """两阶段交易: /trade mode | preview SYMBOL buy|sell QTY PRICE | confirm PREVIEW_ID | previews
         | allow-chat-confirm [broker_id] | disallow-chat-confirm [broker_id]."""
-        from aria_cli import   _print_error, _get_broker_registry
+        from aria_cli import _get_broker_registry
         from brokers import (
             OrderIntent, build_order_preview, execute_order_preview,
             list_order_previews, policy_from_config,
@@ -970,12 +973,12 @@ class BrokerCommandsMixin:
             try:
                 broker = reg.connect_default() if reg else None
             except Exception as exc:
-                _print_error(f"无法连接默认账户: {exc}", "先运行 /paper start 或 /broker connect <id>")
+                print_error(self.context, f"无法连接默认账户: {exc}", "先运行 /paper start 或 /broker connect <id>")
                 return
 
         if sub == "mode":
             if not broker:
-                _print_error("无活跃账户", "先运行 /paper start 或 /broker connect <id>")
+                print_error(self.context, "无活跃账户", "先运行 /paper start 或 /broker connect <id>")
                 return
             policy = policy_from_config(getattr(broker, "config", {}) or {}, getattr(broker, "broker_type", ""))
             msg = (
@@ -986,7 +989,7 @@ class BrokerCommandsMixin:
                 f"单笔上限: {policy.max_order_value_weight:.1%}  单票仓位上限: {policy.max_single_position_weight:.1%}"
             )
             if self.context.has_rich:
-                from aria_cli import Panel, rich_box
+
                 color = "red" if policy.mode == "live" else "green" if policy.mode == "paper" else "yellow"
                 self.context.console.print(Panel(msg, title="[bold]Trade Mode[/bold]", border_style=color, box=rich_box.ROUNDED))
             else:
@@ -998,11 +1001,11 @@ class BrokerCommandsMixin:
 
             target_id = parts[1] if len(parts) > 1 else (broker.broker_id if broker else "")
             if not target_id:
-                _print_error("请指定券商 id", "/trade allow-chat-confirm <broker_id>")
+                print_error(self.context, "请指定券商 id", "/trade allow-chat-confirm <broker_id>")
                 return
             cfg = get_broker_config(target_id)
             if not cfg:
-                _print_error(f"未找到券商配置: {target_id}", "先用 /broker connect 配置好")
+                print_error(self.context, f"未找到券商配置: {target_id}", "先用 /broker connect 配置好")
                 return
 
             if sub == "disallow-chat-confirm":
@@ -1038,7 +1041,7 @@ class BrokerCommandsMixin:
             rows = list_order_previews(limit=10)
             if self.context.has_rich:
                 from rich.table import Table
-                from aria_cli import rich_box
+
                 tbl = Table(title="[bold]Trade Previews[/bold]", box=rich_box.ROUNDED, border_style="dim")
                 tbl.add_column("ID")
                 tbl.add_column("Mode")
@@ -1064,11 +1067,11 @@ class BrokerCommandsMixin:
 
         if sub == "confirm":
             if not broker:
-                _print_error("无活跃账户", "先运行 /paper start 或 /broker connect <id>")
+                print_error(self.context, "无活跃账户", "先运行 /paper start 或 /broker connect <id>")
                 return
             preview_id = parts[1] if len(parts) > 1 else ""
             if not preview_id:
-                _print_error("请提供 preview_id", "/trade confirm <preview_id>")
+                print_error(self.context, "请提供 preview_id", "/trade confirm <preview_id>")
                 return
             result = execute_order_preview(broker, preview_id, confirmed=True)
             if result.get("success"):
@@ -1081,7 +1084,7 @@ class BrokerCommandsMixin:
                 else:
                     print(result)
             else:
-                _print_error(
+                print_error(self.context, 
                     "订单未执行",
                     "; ".join(result.get("execution_blockers") or [result.get("error", "unknown")]),
                 )
@@ -1092,20 +1095,20 @@ class BrokerCommandsMixin:
         else:
             order_parts = parts
         if len(order_parts) < 4:
-            _print_error("用法: /trade preview SYMBOL buy|sell QTY PRICE", "/trade preview AAPL buy 10 190")
+            print_error(self.context, "用法: /trade preview SYMBOL buy|sell QTY PRICE", "/trade preview AAPL buy 10 190")
             return
         if not broker:
-            _print_error("无活跃账户", "先运行 /paper start 或 /broker connect <id>")
+            print_error(self.context, "无活跃账户", "先运行 /paper start 或 /broker connect <id>")
             return
         symbol, side, qty_raw, price_raw = order_parts[:4]
         try:
             qty = float(qty_raw)
             price = float(price_raw)
         except Exception:
-            _print_error("数量和价格必须是数字", "/trade preview AAPL buy 10 190")
+            print_error(self.context, "数量和价格必须是数字", "/trade preview AAPL buy 10 190")
             return
         if side.lower() not in ("buy", "sell"):
-            _print_error("side 必须是 buy 或 sell", "/trade preview AAPL buy 10 190")
+            print_error(self.context, "side 必须是 buy 或 sell", "/trade preview AAPL buy 10 190")
             return
         preview = build_order_preview(
             broker,
@@ -1120,7 +1123,7 @@ class BrokerCommandsMixin:
         )
         blockers = preview.get("execution_blockers") or []
         if self.context.has_rich:
-            from aria_cli import Panel, rich_box
+
             status = "可执行" if preview.get("can_execute") else "不可执行"
             body = (
                 f"preview_id: [bold]{preview.get('preview_id')}[/bold]\n"
@@ -1138,7 +1141,7 @@ class BrokerCommandsMixin:
     async def _prompt_no_broker_action(self) -> None:
         """未配置券商时显示可导航的操作菜单，选择后直接路由到对应功能。"""
         from aria_cli import _arrow_select
-        from aria_cli import (  Panel, rich_box, _BROKERS_CONFIG_PATH)
+        from aria_cli import (_BROKERS_CONFIG_PATH)
         from ui.picker import arrow_select
         import subprocess
         import sys as _sys
@@ -1203,7 +1206,7 @@ class BrokerCommandsMixin:
 
     async def _auto_connect_broker(self, broker_id: str):
         """尝试自动连接；无配置时弹出操作菜单。"""
-        from aria_cli import ( _print_error, _get_broker_registry, _list_broker_configs)
+        from aria_cli import (_get_broker_registry, _list_broker_configs)
         reg  = _get_broker_registry()
         cfgs = _list_broker_configs()
         if not cfgs:
@@ -1216,6 +1219,6 @@ class BrokerCommandsMixin:
             import asyncio as _aio
             return await _aio.get_event_loop().run_in_executor(None, reg.connect, target_id)
         except Exception as e:
-            _print_error(f"自动连接 {target_id} 失败: {e}",
+            print_error(self.context, f"自动连接 {target_id} 失败: {e}",
                          "请运行 /broker connect <id> 手动连接")
             return None

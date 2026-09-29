@@ -4,7 +4,10 @@ MarketCommandsMixin — Market commands: quote, realty, football, screen, news, 
 Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's namespace
 by _rebind_mixin_globals() called at module load time.
 """
+
 from __future__ import annotations
+
+from ._ui import print_error
 from typing import Optional, Tuple
 
 
@@ -258,11 +261,11 @@ def print_quote_result(*args, **kwargs):
 def _football_fixtures(*args, **kwargs):
     from aria_cli import _football_fixtures as fn
     return fn(*args, **kwargs)
-def execute_aria_tool(*args, **kwargs):
-    from aria_cli import execute_aria_tool as fn
-    return fn(*args, **kwargs)
+# execute_aria_tool lives in apps/cli/tool_executor.py and needs nothing from
+# aria_cli — the cache it reads is owned there now, so the hop was pointless.
+from aria_code.apps.cli.tool_executor import execute_aria_tool
 def _is_ashare_symbol(*args, **kwargs):
-    from aria_cli import _is_ashare_symbol as fn
+    from aria_code.apps.cli.helpers import _is_ashare_symbol as fn
     return fn(*args, **kwargs)
 def _prompt_str(*args, **kwargs):
     from aria_cli import _prompt_str as fn
@@ -286,16 +289,13 @@ def _render_property_val(*args, **kwargs):
     from aria_cli import _render_property_val as fn
     return fn(*args, **kwargs)
 def _get_mdc(*args, **kwargs):
-    from aria_cli import _get_mdc as fn
+    from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 def _load_data_keys(*args, **kwargs):
     from aria_cli import _load_data_keys as fn
     return fn(*args, **kwargs)
 def _render_asset_score(*args, **kwargs):
     from aria_cli import _render_asset_score as fn
-    return fn(*args, **kwargs)
-def _print_error(*args, **kwargs):
-    from aria_cli import _print_error as fn
     return fn(*args, **kwargs)
 def _render_rental_yield(*args, **kwargs):
     from aria_cli import _render_rental_yield as fn
@@ -319,7 +319,7 @@ def _ashare_code_to_name(*args, **kwargs):
     from aria_cli import _ashare_code_to_name as fn
     return fn(*args, **kwargs)
 def _get__HAS_MDC():
-    from aria_cli import _HAS_MDC as val
+    from .._optional import HAS_MDC as val
     return val
 def parse_symbols(*args, **kwargs):
     from aria_cli import parse_symbols as fn
@@ -1292,13 +1292,13 @@ class MarketCommandsMixin:
                     "symbol": symbol, "market": "US", "period": "1mo"
                 })
             if not result:
-                _print_error(f"{symbol}: 数据服务不可用（API未运行）", "tool")
+                print_error(self.context, f"{symbol}: 数据服务不可用（API未运行）", "tool")
                 continue
             if result.get("success") and result.get("data"):
                 output = format_quote_output(result)
                 self.context.console.print(output)
             else:
-                _print_error(f"Failed: {result.get('error', 'No data')}")
+                print_error(self.context, f"Failed: {result.get('error', 'No data')}")
 
     async def cmd_screen_cn(self, args: str):
         """A股选股筛选器 (local, akshare)."""
