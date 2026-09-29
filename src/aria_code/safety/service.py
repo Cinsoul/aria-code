@@ -90,6 +90,13 @@ class SafetyService:
         return resolve_trading_mode(self._config, broker_type)
 
     def trading_dry_run(self) -> bool:
-        """Global operational kill-switch (env ARIA_TRADING_DRY_RUN)."""
+        """Global operational kill-switch (env ARIA_DRY_RUN).
+
+        The name matters: this docstring is the only documentation the switch
+        has — no .md file mentions it — and it used to name a variable that
+        nothing reads. Anyone who followed it to freeze live trading got no
+        freeze and no error. tests/test_env_switch_docs.py now fails if any
+        docstring names an ARIA_* variable the tree never reads.
+        """
         from brokers.trading import global_dry_run
         return global_dry_run()

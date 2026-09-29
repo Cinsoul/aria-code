@@ -18,7 +18,15 @@ COMMANDS = SRC / "apps" / "cli" / "commands"
 # dict in hand, so it can and should ask the service, which sources mode,
 # policy and network state from that one config. The tool layer is exempt on
 # purpose — it is handed explicit params by its caller and has no config.
-FORBIDDEN_CALLS = {"evaluate_command_policy"}
+FORBIDDEN_CALLS = {
+    "evaluate_command_policy",
+    # Trading risk, same rule. brokers/ itself is exempt and stays direct: it
+    # *is* the trading domain, and SafetyService is the facade over it — a
+    # call the other way would invert the layering.
+    "global_dry_run",
+    "policy_from_config",
+    "resolve_trading_mode",
+}
 # Deriving state from config is the service's job. Constructing a
 # PrivacySettings outright is not — /privacy on|off legitimately builds one,
 # and the service exposes no setter — so the rule names the derivation, not

@@ -117,10 +117,10 @@ class BrokerCommandsMixin:
 
     async def _cmd_broker_status(self):
         from aria_code.apps.cli._optional import get_registry as _get_broker_registry
-        from brokers.trading import global_dry_run
+        from aria_code.safety import SafetyService
 
         # Risk-off banner: make a global trading freeze impossible to miss.
-        if global_dry_run():
+        if SafetyService(self.terminal.config).trading_dry_run():
             if self.context.has_rich:
                 self.context.console.print("[black on yellow] DRY-RUN 全局只读 (ARIA_DRY_RUN) — 所有下单已冻结 [/black on yellow]")
             else:
@@ -967,8 +967,9 @@ class BrokerCommandsMixin:
         from aria_code.apps.cli._optional import get_registry as _get_broker_registry
         from brokers import (
             OrderIntent, build_order_preview, execute_order_preview,
-            list_order_previews, policy_from_config,
+            list_order_previews,
         )
+        from aria_code.safety import SafetyService
 
         parts = args.strip().split()
         sub = parts[0].lower() if parts else "mode"
@@ -985,7 +986,11 @@ class BrokerCommandsMixin:
             if not broker:
                 print_error(self.context, "无活跃账户", "先运行 /paper start 或 /broker connect <id>")
                 return
-            policy = policy_from_config(getattr(broker, "config", {}) or {}, getattr(broker, "broker_type", ""))
+            # The broker's own config, not the terminal's — trading policy is
+            # per-account (paper vs live lives on the account, not the session).
+            policy = SafetyService(getattr(broker, "config", {}) or {}).trading_policy(
+                getattr(broker, "broker_type", "")
+            )
             msg = (
                 f"账户: {broker.label} ({broker.broker_type})\n"
                 f"模式: {policy.mode}\n"

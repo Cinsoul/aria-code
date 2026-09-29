@@ -24,7 +24,8 @@ Config via env vars (or ~/.aria/.env):
   WEBHOOK_TOKEN             — Static token for /api/v1/webhook/trigger
   ARIA_WEBHOOK_HOST         — Daemon webhook host (default: 127.0.0.1)
   ARIA_WEBHOOK_PORT         — Daemon webhook port (default: 8765)
-  ARIA_API_BASE             — FastAPI backend URL (default: http://localhost:8000)
+  (the FastAPI backend URL is the `api_url` config key, not an env var —
+   set it with `/config set api_url=...`)
   ARIA_CODE_DIR             — Path to aria-code directory
 """
 from __future__ import annotations
