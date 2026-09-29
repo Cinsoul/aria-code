@@ -33,6 +33,7 @@ from aria_code._version import __version__  # noqa: F401
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
 # Stateless helpers now live in apps/cli/helpers.py; re-exported here so
 # aria_cli's own callers keep working unchanged.
+from aria_code.packages.aria_core.secure_file import write_secret_json
 from aria_code.apps.cli.tool_registry import (  # noqa: F401 — re-exported
     ARIA_TOOLS,
     LOCAL_TOOLS,
@@ -770,7 +771,7 @@ def _save_providers_json(llm_section: Dict[str, Any]) -> None:
         except Exception:
             pass
     existing["llm"] = llm_section
-    PROVIDERS_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_secret_json(PROVIDERS_FILE, existing)
 
 
 def _save_data_key(service: str, key: str) -> None:
@@ -785,7 +786,7 @@ def _save_data_key(service: str, key: str) -> None:
     data_section = existing.get("data", {})
     data_section[service] = {"api_key": key}
     existing["data"] = data_section
-    PROVIDERS_FILE.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_secret_json(PROVIDERS_FILE, existing)
 
 
 def _load_data_keys() -> Dict[str, str]:

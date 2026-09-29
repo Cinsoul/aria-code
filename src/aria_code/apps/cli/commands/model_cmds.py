@@ -1053,7 +1053,8 @@ class ModelCommandsMixin:
                         raw = json.loads(_get_PROVIDERS_FILE().read_text(encoding="utf-8"))
                         if provider in raw.get("data", {}):
                             del raw["data"][provider]
-                            _get_PROVIDERS_FILE().write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+                            from aria_code.packages.aria_core.secure_file import write_secret_json
+                            write_secret_json(_get_PROVIDERS_FILE(), raw)
                 except Exception as _e:
                     logger.debug("apikey delete from file failed: %s", _e)
             # Clear from env
