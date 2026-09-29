@@ -104,10 +104,10 @@ def format_sparkline(*args, **kwargs):
     from aria_code.apps.cli.helpers import format_sparkline as fn
     return fn(*args, **kwargs)
 def _get_broker_registry(*args, **kwargs):
-    from aria_cli import _get_broker_registry as fn
+    from .._optional import get_registry as fn
     return fn(*args, **kwargs)
 def _get__HAS_BROKERS():
-    from aria_cli import _HAS_BROKERS as val
+    from .._optional import HAS_BROKERS as val
     return val
 def _tool_run_command(*args, **kwargs):
     from aria_cli import _tool_run_command as fn

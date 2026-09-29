@@ -15,7 +15,7 @@ import os
 from typing import Dict, Any, Optional
 
 def _get__HAS_BROKERS():
-    from aria_cli import _HAS_BROKERS as val
+    from .._optional import HAS_BROKERS as val
     return val
 def _render_cb_rates(*args, **kwargs):
     from aria_cli import _render_cb_rates as fn
@@ -39,7 +39,7 @@ def logger(*args, **kwargs):
     from aria_cli import logger as fn
     return fn(*args, **kwargs)
 def _get_broker_registry(*args, **kwargs):
-    from aria_cli import _get_broker_registry as fn
+    from .._optional import get_registry as fn
     return fn(*args, **kwargs)
 def build_analyze_prompt(*args, **kwargs):
     from aria_cli import build_analyze_prompt as fn

@@ -16,7 +16,13 @@ separate, repo-wide job (26 root modules use the same sys.modules shim trick).
 
 from __future__ import annotations
 
-__all__ = ["MarketDataClient", "get_mdc", "HAS_MDC"]
+__all__ = [
+    "MarketDataClient", "get_mdc", "HAS_MDC",
+    "HAS_BROKERS", "get_registry", "list_broker_configs", "get_broker_config",
+    "add_broker_config", "remove_broker_config", "set_default_broker",
+    "validate_broker_config", "supported_broker_types", "get_config_template",
+    "BROKERS_CONFIG_PATH",
+]
 
 try:
     from market_data_client import MarketDataClient, get_mdc  # noqa: F401
@@ -26,3 +32,62 @@ except ImportError:  # pragma: no cover - exercised only without the client inst
     MarketDataClient = None  # type: ignore[assignment]
     get_mdc = None  # type: ignore[assignment]
     HAS_MDC = False
+
+
+# ── Brokers ──────────────────────────────────────────────────────────────────
+# Same reasoning as above, and the stakes are higher: brokers.registry keeps a
+# module-level BrokerRegistry singleton holding *live broker connections*, and
+# `brokers` / `aria_code.brokers` are distinct module objects with separate
+# singletons. Connecting through one and querying the other would report "not
+# connected" for a session that is. All 37 call sites in the tree use the bare
+# form, so there is one registry today; this module uses the same form to keep
+# it that way.
+try:
+    from brokers import (  # noqa: F401
+        BROKERS_CONFIG_PATH,
+        add_broker_config,
+        get_broker_config,
+        get_config_template,
+        get_registry,
+        list_broker_configs,
+        remove_broker_config,
+        set_default_broker,
+        supported_broker_types,
+        validate_broker_config,
+    )
+
+    HAS_BROKERS = True
+except ImportError:  # pragma: no cover - exercised only without the broker stack
+    HAS_BROKERS = False
+    BROKERS_CONFIG_PATH = None  # type: ignore[assignment]
+
+    # aria_cli's version of this block only supplied three of the ten fallbacks,
+    # so a build without the broker stack would raise NameError rather than
+    # degrade — on add/remove/validate/template, i.e. exactly the paths a user
+    # hits while trying to set a broker up. All ten are covered here.
+    def get_registry():  # type: ignore[misc]
+        return None
+
+    def list_broker_configs():  # type: ignore[misc]
+        return []
+
+    def get_broker_config(broker_id: str):  # type: ignore[misc]
+        return None
+
+    def add_broker_config(cfg):  # type: ignore[misc]
+        raise RuntimeError("Broker support is not installed")
+
+    def remove_broker_config(broker_id: str):  # type: ignore[misc]
+        raise RuntimeError("Broker support is not installed")
+
+    def set_default_broker(broker_id: str):  # type: ignore[misc]
+        raise RuntimeError("Broker support is not installed")
+
+    def validate_broker_config(cfg):  # type: ignore[misc]
+        return ["Broker support is not installed"]
+
+    def supported_broker_types():  # type: ignore[misc]
+        return []
+
+    def get_config_template(broker_type: str):  # type: ignore[misc]
+        return None
