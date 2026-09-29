@@ -265,7 +265,7 @@ def execute_aria_tool(*args, **kwargs):
     from aria_cli import execute_aria_tool as fn
     return fn(*args, **kwargs)
 def _is_ashare_symbol(*args, **kwargs):
-    from aria_cli import _is_ashare_symbol as fn
+    from aria_code.apps.cli.helpers import _is_ashare_symbol as fn
     return fn(*args, **kwargs)
 def _prompt_str(*args, **kwargs):
     from aria_cli import _prompt_str as fn

@@ -52,7 +52,7 @@ class CoreCommandsMixin:
         cmd = text.split(maxsplit=1)[0].lower()
         return cmd in self.commands or cmd in self.skill_map
     async def execute(self, text: str):
-        from aria_cli import _fuzzy_match
+        from aria_code.apps.cli.helpers import _fuzzy_match
         reference_service = getattr(self.terminal, "_reference_service", None)
         if reference_service is not None and "@" in text:
             prepared = reference_service.prepare(text)
@@ -242,7 +242,8 @@ class CoreCommandsMixin:
             for s in SKILLS:
                 print(f"  {s['command']:20s} {s['description']}")
     async def cmd_artifacts(self, args: str):
-        from aria_cli import _copy_text_to_clipboard, _display_path, _open_path_or_url, _reveal_path_in_finder
+        from aria_cli import _display_path
+        from aria_code.apps.cli.helpers import _copy_text_to_clipboard, _open_path_or_url, _reveal_path_in_finder
         tokens = [part for part in args.split() if part]
         mode = "list"
         limit = 20
@@ -779,7 +780,7 @@ class CoreCommandsMixin:
             self.context.console.print(f"[red]{result['error']}[/red]" if self.context.has_rich else result["error"])
     def cmd_apply(self, args: str):
         """Extract code from last AI response and save to file."""
-        from aria_cli import _extract_code_block
+        from aria_code.apps.cli.helpers import _extract_code_block
         from aria_cli import Syntax, _SYNTAX_THEME, _tool_write_file
         filename = args.strip()
         last_response = ""
@@ -820,7 +821,7 @@ class CoreCommandsMixin:
             self.context.console.print(f"[red]{result['error']}[/red]" if self.context.has_rich else result["error"])
     async def cmd_code(self, args: str):
         """Generate code and optionally save to file. Usage: /code <description> [--save file.py]"""
-        from aria_cli import _extract_code_block
+        from aria_code.apps.cli.helpers import _extract_code_block
         from aria_cli import _display_path
         if not args.strip():
             if self.context.has_rich:
@@ -1601,7 +1602,7 @@ class CoreCommandsMixin:
         AI trading signal (BUY/SELL/HOLD) from Alibaba Cloud.
         Usage: /signal sh600519   /signal AAPL US
         """
-        from aria_cli import _is_ashare_symbol
+        from aria_code.apps.cli.helpers import _is_ashare_symbol
         parts  = args.strip().split()
         symbol = parts[0].upper() if parts else "sh600519"
         market = parts[1].upper() if len(parts) > 1 else ("CN" if _is_ashare_symbol(symbol) else "US")
@@ -1712,7 +1713,8 @@ class CoreCommandsMixin:
             )
     async def _run_local_tool(self, tool_name: str, params: dict, label: str = ""):
         """Run a LOCAL_TOOLS entry, display result with Rich formatting."""
-        from aria_cli import LOCAL_TOOLS, _clean_tool_error_message, _print_tool_result
+        from aria_cli import LOCAL_TOOLS, _print_tool_result
+        from aria_code.apps.cli.helpers import _clean_tool_error_message
         if tool_name not in LOCAL_TOOLS:
             if self.context.has_rich:
                 self.context.console.print(f"  [dim]Tool {tool_name!r} not available[/dim]")
@@ -1833,7 +1835,8 @@ class CoreCommandsMixin:
                 print(f"生成失败: {exc}")
     async def cmd_tv(self, args: str):
         """Print a TradingView chart URL or export a Pine Script strategy."""
-        from aria_cli import _build_tradingview_indicator_readout, _chart_display_label, _copy_text_to_clipboard, _open_path_or_url, _resolve_market_arg_symbol, _reveal_path_in_finder, _src_market_snapshot_analysis, _strip_latex, _write_text_companion, make_markdown
+        from aria_cli import _build_tradingview_indicator_readout, _resolve_market_arg_symbol, _src_market_snapshot_analysis, _strip_latex, _write_text_companion, make_markdown
+        from aria_code.apps.cli.helpers import _chart_display_label, _copy_text_to_clipboard, _open_path_or_url, _reveal_path_in_finder
         parts = [p.strip() for p in args.strip().split() if p.strip()]
         open_browser = any(p in {"--open", "-o", "open"} for p in parts)
         export_pine = any(p in {"--pine", "pine", "--strategy", "strategy", "策略"} for p in parts)
@@ -1981,7 +1984,8 @@ class CoreCommandsMixin:
                /chart BTC-USD 2y
         支持 period: 1m 3m 6m 1y 2y 3y 5y ytd max
         """
-        from aria_cli import _chart_display_label, _display_path, _generate_chart_sync, _resolve_market_arg_symbol, sanitize_chart_symbol_args
+        from aria_cli import _display_path, _generate_chart_sync, _resolve_market_arg_symbol, sanitize_chart_symbol_args
+        from aria_code.apps.cli.helpers import _chart_display_label
         _VALID_PERIODS = {"1m","3m","6m","1y","2y","3y","5y","ytd","max",
                           "1mo","3mo","6mo"}
         parts  = args.strip().split()
@@ -2083,7 +2087,8 @@ class CoreCommandsMixin:
             print_error(self.context, f"图表生成失败: {err[:120]}")
     async def _cmd_chart_multi(self, symbols: list[tuple[str, str]], period: str):
         """Generate a normalized comparison chart plus individual K-line charts."""
-        from aria_cli import _chart_display_label, _display_path
+        from aria_cli import _display_path
+        from aria_code.apps.cli.helpers import _chart_display_label
         labels = [_chart_display_label(raw, resolved) for raw, resolved in symbols]
         if self.context.has_rich:
             self.context.console.print(f"\n  [bold]⏺[/bold] compare {' · '.join(labels)} · {period}")
@@ -2202,7 +2207,8 @@ class CoreCommandsMixin:
             print_error(self.context, "长线分析执行失败，请检查 research/longterm/")
     async def cmd_indices(self, args: str):
         """全球主要指数实时行情."""
-        from aria_cli import _HAS_MDC, _clean_tool_error_message, _get_mdc
+        from aria_cli import _HAS_MDC, _get_mdc
+        from aria_code.apps.cli.helpers import _clean_tool_error_message
         if not _HAS_MDC:
             self.context.console.print("  [dim]market_data_client 未加载[/dim]" if self.context.has_rich else "market_data_client not loaded")
             return
@@ -2289,7 +2295,8 @@ class CoreCommandsMixin:
                 print(f"  {s.get('name',sym):<10} {sym:<8} {s.get('price','-'):<8} {s.get('change_pct',0):+.2f}%")
     async def cmd_ta(self, args: str):
         """技术指标分析.  Usage: /ta NVDA [days=120]"""
-        from aria_cli import _chart_period_from_ta_days, _display_path, _display_value, _generate_chart_sync, parse_technical_args, print_ta_result
+        from aria_cli import _display_path, _generate_chart_sync, parse_technical_args, print_ta_result
+        from aria_code.apps.cli.helpers import _chart_period_from_ta_days, _display_value
         parsed = parse_technical_args(args)
         symbol = parsed.symbol
         days = parsed.days

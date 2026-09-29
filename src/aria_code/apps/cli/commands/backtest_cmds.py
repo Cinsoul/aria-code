@@ -101,7 +101,7 @@ import os
 from typing import Dict, Any, Optional
 
 def format_sparkline(*args, **kwargs):
-    from aria_cli import format_sparkline as fn
+    from aria_code.apps.cli.helpers import format_sparkline as fn
     return fn(*args, **kwargs)
 def _get_broker_registry(*args, **kwargs):
     from aria_cli import _get_broker_registry as fn

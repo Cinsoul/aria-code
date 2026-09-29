@@ -29,6 +29,22 @@ Usage:
 __version__ = "4.4.1"
 
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
+# Stateless helpers now live in apps/cli/helpers.py; re-exported here so
+# aria_cli's own callers keep working unchanged.
+from aria_code.apps.cli.helpers import (  # noqa: F401
+    _load_project_context,
+    _display_value,
+    _chart_display_label,
+    _chart_period_from_ta_days,
+    _copy_text_to_clipboard,
+    _reveal_path_in_finder,
+    _open_path_or_url,
+    _extract_code_block,
+    _clean_tool_error_message,
+    _fuzzy_match,
+    _is_ashare_symbol,
+    format_sparkline,
+)
 import sys
 
 # Windows consoles default to a legacy codepage (cp1252 etc.), not UTF-8 —
@@ -1673,63 +1689,6 @@ def _try_prefetch_sports_data(message: str) -> str:
         return ""
 
 
-def _load_project_context() -> str:
-    """Load ARIA.md / CLAUDE.md by walking up from cwd (Claude Code style).
-
-    Search order per directory: ARIA.md → .aria.md → CLAUDE.md
-    Walks up at most 5 levels, stops at home dir.
-    Multiple files are concatenated (child file takes precedence at top).
-    Total cap: 12KB.
-    """
-    _MAX_BYTES = 12288
-    _MAX_LEVELS = 5
-    _NAMES = ("ARIA.md", ".aria.md", "CLAUDE.md")
-
-    home = pathlib.Path.home()
-    cwd  = pathlib.Path.cwd().resolve()
-
-    found: list[tuple[pathlib.Path, str]] = []  # (file_path, content)
-    current = cwd
-    for _ in range(_MAX_LEVELS):
-        for name in _NAMES:
-            p = current / name
-            if p.is_file():
-                try:
-                    content = p.read_text(encoding="utf-8")
-                    found.append((p, content))
-                except Exception:
-                    pass
-                break  # only one file per directory level
-        if current == home or current.parent == current:
-            break
-        current = current.parent
-
-    # Global user file — lowest priority background layer, project files override it.
-    # Lives at ~/.arthera/ARIA.md; user can edit with /memory edit global
-    _global_aria = home / ".arthera" / "ARIA.md"
-    if _global_aria.is_file() and not any(f == _global_aria for f, _ in found):
-        try:
-            _gc = _global_aria.read_text(encoding="utf-8")
-            if _gc.strip():
-                found.insert(0, (_global_aria, _gc))   # prepend = lowest priority
-        except Exception:
-            pass
-
-    if not found:
-        return ""
-
-    # Child directories first (most specific context wins), then parents
-    blocks: list[str] = []
-    total = 0
-    for fpath, content in found:
-        rel = fpath.relative_to(home) if fpath.is_relative_to(home) else fpath
-        snippet = content[:(_MAX_BYTES - total)]
-        blocks.append(f"### {rel}\n{snippet}")
-        total += len(snippet)
-        if total >= _MAX_BYTES:
-            break
-
-    return "\n\n## Project Context\n" + "\n\n".join(blocks)
 
 
 def _refresh_project_context() -> str:
@@ -1984,15 +1943,6 @@ def _fmt_int(value) -> str:
         return "N/A"
 
 
-def _display_value(value, digits: int = 2, suffix: str = "") -> str:
-    try:
-        if value in (None, "", "N/A", "-", "nan"):
-            return "—"
-        if isinstance(value, (int, float)):
-            return f"{float(value):,.{digits}f}{suffix}"
-        return str(value)
-    except Exception:
-        return "—"
 
 
 def _recover_repetition_stopped_text(text: str) -> str:
@@ -2296,34 +2246,8 @@ def _resolve_market_arg_symbol(raw: str) -> str:
     return _extract_market_symbol(token) or _extract_market_symbol(upper) or upper
 
 
-def _chart_display_label(raw: str, resolved: str, result: dict | None = None) -> str:
-    result = result or {}
-    name = str(result.get("name") or result.get("display_name") or "").strip()
-    resolved = str(resolved or "").strip().upper()
-    raw_label = str(raw or "").strip().upper()
-    if name and name.upper() != resolved:
-        return f"{name} ({resolved})"
-    if raw_label and raw_label != resolved and not raw_label.startswith(resolved):
-        return f"{raw_label} ({resolved})"
-    return resolved or raw_label or "chart"
 
 
-def _chart_period_from_ta_days(days: int) -> str:
-    try:
-        d = int(days)
-    except Exception:
-        return "1y"
-    if d <= 45:
-        return "1mo"
-    if d <= 110:
-        return "3mo"
-    if d <= 220:
-        return "6mo"
-    if d <= 430:
-        return "1y"
-    if d <= 800:
-        return "2y"
-    return "3y"
 
 
 def _is_market_artifact_followup(message: str) -> bool:
@@ -2371,31 +2295,10 @@ def _artifact_primary_path(pending_artifact: dict) -> str:
     return ""
 
 
-def _copy_text_to_clipboard(text: str) -> tuple[bool, str]:
-    try:
-        import subprocess as _sp
-        _sp.run(["pbcopy"], input=text.encode("utf-8"), check=True, timeout=3)
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)
 
 
-def _reveal_path_in_finder(path: str) -> tuple[bool, str]:
-    try:
-        import subprocess as _sp
-        _sp.Popen(["open", "-R", path])
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)
 
 
-def _open_path_or_url(target: str) -> tuple[bool, str]:
-    try:
-        import subprocess as _sp
-        _sp.Popen(["open", target])
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)
 
 
 def _write_text_companion(path: str) -> str:
@@ -2783,20 +2686,6 @@ async def stream_chat(base_url: str, message: str, history: list,
 
 
 
-def _extract_code_block(text: str) -> Optional[str]:
-    """Extract the first code block from markdown-formatted text."""
-    import re
-    # Match ```python ... ``` or ``` ... ```
-    pattern = r'```(?:python|py)?\s*\n(.*?)```'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    # Fallback: try to find any code block
-    pattern2 = r'```\w*\s*\n(.*?)```'
-    match2 = re.search(pattern2, text, re.DOTALL)
-    if match2:
-        return match2.group(1).strip()
-    return None
 
 
 def _build_user_context(config: dict) -> Optional[dict]:
@@ -2835,9 +2724,6 @@ def _build_user_context(config: dict) -> Optional[dict]:
 # Tool Output Formatters
 # ============================================================================
 
-def _clean_tool_error_message(error: object) -> str:
-    from ui.render.output import clean_tool_error_message as _ctm
-    return _ctm(error)
 
 
 
@@ -3049,25 +2935,6 @@ def _print_phase(label: str):
     console.print(f"\n  [dim]── {label} {'─' * bar_len}[/dim]")
 
 
-def _fuzzy_match(query: str, candidates: list, max_results: int = 3) -> list:
-    """Find closest matches using simple edit distance."""
-    def _edit_dist(a, b):
-        if len(a) > len(b):
-            a, b = b, a
-        dists = range(len(a) + 1)
-        for j, cb in enumerate(b):
-            new_dists = [j + 1]
-            for i, ca in enumerate(a):
-                cost = 0 if ca == cb else 1
-                new_dists.append(min(new_dists[-1] + 1, dists[i + 1] + 1, dists[i] + cost))
-            dists = new_dists
-        return dists[-1]
-
-    scored = [(c, _edit_dist(query.lower(), c.lower())) for c in candidates]
-    scored.sort(key=lambda x: x[1])
-    # Only suggest if edit distance is reasonable (< half the length)
-    threshold = max(3, len(query) // 2)
-    return [c for c, d in scored[:max_results] if d <= threshold]
 
 
 def _error_hint(error: str, context: str = "") -> str:
@@ -3234,14 +3101,6 @@ def _sanitize_team_result_with_market_data(team_result, data_bundle) -> list[str
     console.print()
 
 
-def _is_ashare_symbol(symbol: str) -> bool:
-    """Quick check whether a symbol looks like a Chinese A-share code."""
-    s = symbol.strip().lower()
-    return (
-        s.startswith("sh") or s.startswith("sz")
-        or (len(s) == 6 and s.isdigit())
-        or s.endswith(".ss") or s.endswith(".sz")
-    )
 
 
 # A-share code → Chinese name lookup with on-disk JSON cache (7-day TTL)
@@ -3318,6 +3177,7 @@ def _ashare_code_to_name(symbol: str) -> str:
 
 from aria_code.ui.render.output import FINANCE_TOOL_NAMES as _FINANCE_TOOL_NAMES
 from aria_code.ui.render.output import display_path as _display_path
+
 
 
 def _print_tool_result(tool_name: str, result: dict, elapsed: float = 0, params: dict = None):
@@ -3563,19 +3423,6 @@ def format_quote_output(data: dict):
 
 
 
-def format_sparkline(prices: list, width: int = 30) -> str:
-    """Generate Unicode sparkline from price data."""
-    if not prices or len(prices) < 2:
-        return ""
-    blocks = "▁▂▃▄▅▆▇█"
-    mn, mx = min(prices), max(prices)
-    rng = mx - mn or 1
-    result = ""
-    step = max(1, len(prices) // width)
-    for i in range(0, len(prices), step):
-        idx = int((prices[i] - mn) / rng * (len(blocks) - 1))
-        result += blocks[idx]
-    return result[:width]
 
 
 # ============================================================================

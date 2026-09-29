@@ -24,7 +24,7 @@ def detect_ollama_models_rich(*args, **kwargs):
     from aria_cli import detect_ollama_models_rich as fn
     return fn(*args, **kwargs)
 def _load_project_context(*args, **kwargs):
-    from aria_cli import _load_project_context as fn
+    from aria_code.apps.cli.helpers import _load_project_context as fn
     return fn(*args, **kwargs)
 def _get__HAS_MCP():
     from aria_cli import _HAS_MCP as val
