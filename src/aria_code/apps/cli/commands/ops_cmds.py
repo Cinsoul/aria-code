@@ -30,7 +30,7 @@ def _tool_write_file(*args, **kwargs):
     from aria_cli import _tool_write_file as fn
     return fn(*args, **kwargs)
 def _get_Syntax():
-    from aria_cli import Syntax as val
+    from ._ui import Syntax as val
     return val
 def _get__SYNTAX_THEME():
     from aria_cli import _SYNTAX_THEME as val

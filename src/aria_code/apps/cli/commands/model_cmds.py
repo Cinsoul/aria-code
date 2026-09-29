@@ -71,7 +71,8 @@ def _get__DATA_SIGNUP_URLS():
     from aria_cli import _DATA_SIGNUP_URLS as val
     return val
 def _arrow_select(*args, **kwargs):
-    from aria_cli import _arrow_select as fn
+    # Re-exported by aria_cli; taken from its own module here.
+    from aria_code.ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get_SKILLS():
     from aria_cli import SKILLS as val
@@ -93,7 +94,7 @@ def load_config(*args, **kwargs):
     from aria_cli import load_config as fn
     return fn(*args, **kwargs)
 def _null_ctx(*args, **kwargs):
-    from aria_cli import _null_ctx as fn
+    from ._ui import null_ctx as fn
     return fn(*args, **kwargs)
 def _get__PROVIDER_DESC():
     from aria_cli import _PROVIDER_DESC as val

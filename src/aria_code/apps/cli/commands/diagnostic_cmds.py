@@ -31,7 +31,7 @@ def _get_SKILLS():
     from aria_cli import SKILLS as val
     return val
 def _get_Syntax():
-    from aria_cli import Syntax as val
+    from ._ui import Syntax as val
     return val
 def _get__SYNTAX_THEME():
     from aria_cli import _SYNTAX_THEME as val

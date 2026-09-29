@@ -843,7 +843,8 @@ class BrokerCommandsMixin:
 
     async def cmd_positions(self, args: str):
         """显示当前持仓。"""
-        from aria_cli import (_null_ctx, _HAS_BROKERS, _get_broker_registry, _print_broker_positions)
+        from aria_cli import _HAS_BROKERS, _get_broker_registry, _print_broker_positions
+        from ._ui import null_ctx as _null_ctx
         if not _HAS_BROKERS:
             print_error(self.context, "brokers 模块未加载", "")
             return
@@ -864,7 +865,8 @@ class BrokerCommandsMixin:
 
     async def cmd_orders(self, args: str):
         """显示订单记录。"""
-        from aria_cli import (_null_ctx, _HAS_BROKERS, _get_broker_registry, _print_broker_orders)
+        from aria_cli import _HAS_BROKERS, _get_broker_registry, _print_broker_orders
+        from ._ui import null_ctx as _null_ctx
         if not _HAS_BROKERS:
             print_error(self.context, "brokers 模块未加载", "")
             return

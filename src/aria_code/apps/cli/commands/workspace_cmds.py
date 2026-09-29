@@ -41,7 +41,8 @@ def _get_rich_box():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
     return rich_box
 def _arrow_select(*args, **kwargs):
-    from aria_cli import _arrow_select as fn
+    # Re-exported by aria_cli; taken from its own module here.
+    from aria_code.ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get___version__():
     from aria_cli import __version__ as val

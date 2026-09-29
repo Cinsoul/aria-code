@@ -680,7 +680,8 @@ class CoreCommandsMixin:
         return created
     def cmd_verify(self, args: str):
         """Infer and run focused verification checks."""
-        from aria_cli import Syntax, VerificationPlanner, _SYNTAX_THEME, _tool_run_command
+        from aria_cli import VerificationPlanner, _SYNTAX_THEME, _tool_run_command
+        from ._ui import Syntax
         parts = args.split()
         dry_run = "--dry-run" in parts
         paths = [p for p in parts if p != "--dry-run"]
@@ -721,7 +722,8 @@ class CoreCommandsMixin:
         self.context.console.print(f"[green]{msg}[/green]" if self.context.has_rich else msg)
     def cmd_run(self, args: str):
         """Run a command: /run <command>"""
-        from aria_cli import Syntax, _SYNTAX_THEME, _tool_run_command, evaluate_command_policy
+        from aria_cli import _SYNTAX_THEME, _tool_run_command, evaluate_command_policy
+        from ._ui import Syntax
         if not args.strip():
             self.context.console.print("[dim]Usage: /run [--dry-run] <command>[/dim]" if self.context.has_rich
                           else "Usage: /run [--dry-run] <command>")
@@ -782,7 +784,8 @@ class CoreCommandsMixin:
     def cmd_apply(self, args: str):
         """Extract code from last AI response and save to file."""
         from aria_code.apps.cli.helpers import _extract_code_block
-        from aria_cli import Syntax, _SYNTAX_THEME, _tool_write_file
+        from aria_cli import _SYNTAX_THEME, _tool_write_file
+        from ._ui import Syntax
         filename = args.strip()
         last_response = ""
         for msg in reversed(self.terminal.conversation):
