@@ -1,0 +1,64 @@
+# Cloud Build: build the relay server image and deploy it to Cloud Run.
+#
+# Why this file exists
+# --------------------
+# The trigger for this repo was configured entirely in the console with
+# Dockerfile auto-detection. That picks the root Dockerfile, whose CMD is the
+# interactive aria-code CLI — with no TTY it prints its banner and exits 0,
+# and never listens on anything. Cloud Run only considers a revision healthy
+# once the container listens on $PORT, so Build and Push succeeded while
+# Deploy failed on every single run.
+#
+# aria_relay_server.py is the one HTTP service in this repo: it binds
+# 0.0.0.0 and reads $PORT (defaulting to 8765), which is exactly the Cloud Run
+# contract. Dockerfile.relay builds it.
+#
+# To use this, point the trigger at this file:
+#   Cloud Build → Triggers → edit the trigger →
+#   Configuration: "Cloud Build configuration file (yaml or json)" →
+#   Location: /cloudbuild.yaml
+#
+# Check the substitutions below against what the trigger currently uses —
+# _IMAGE in particular, since the existing trigger already pushes somewhere and
+# this has to keep matching it (Artifact Registry looks like
+# europe-west1-docker.pkg.dev/$PROJECT_ID/<repo>/<name>).
+
+substitutions:
+  _SERVICE_NAME: aria-relay-server
+  _REGION: europe-west1
+  _IMAGE: gcr.io/$PROJECT_ID/aria-relay-server
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=Dockerfile.relay
+      - --tag=${_IMAGE}:$COMMIT_SHA
+      - --tag=${_IMAGE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_IMAGE}"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_IMAGE}:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      # The server reads $PORT itself; Cloud Run's default is 8080, so nothing
+      # here has to match Dockerfile.relay's EXPOSE 8765.
+      - --quiet
+
+images:
+  - ${_IMAGE}:$COMMIT_SHA
+  - ${_IMAGE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
