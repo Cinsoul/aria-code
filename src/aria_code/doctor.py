@@ -373,6 +373,20 @@ def integration_checks() -> List[DoctorCheck]:
     return checks
 
 
+def _npm_install_detected(paths: dict) -> bool:
+    """Is there an npm-launcher installation for these checks to be about?
+
+    Any one of these is proof: the launcher's own aria_cli.py, the install
+    metadata it writes, or an install dir that came from npm config rather
+    than a platform default.
+    """
+    if paths["aria_cli"].is_file():
+        return True
+    if any(candidate.is_file() for candidate in paths["info_candidates"]):
+        return True
+    return str(paths.get("install_dir_source", "")).startswith("npm")
+
+
 def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
     """Return npm launcher/runtime path diagnostics."""
     checks: List[DoctorCheck] = []
@@ -381,6 +395,20 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
     source_cli = cwd / "aria_cli.py"
     source_venv_py = cwd / ".venv" / ("Scripts/python.exe" if platform.system().lower() == "windows" else "bin/python")
     using_source_checkout = source_cli.is_file() and not paths["aria_cli"].is_file()
+
+    # A pip install has no npm launcher, so every check below is about
+    # something that was never supposed to exist. Reporting them made a clean
+    # `pip install aria-code` end in "1 errors", and the repair suggestion —
+    # `node $(npm root -g)/aria-code/scripts/postinstall.js` — is not just
+    # wrong for that user, it is unrunnable on a machine with no node.
+    if not using_source_checkout and not _npm_install_detected(paths):
+        checks.append(_check(
+            "npm_runtime",
+            "skip",
+            "not an npm install — nothing to check",
+            "These checks apply to `npm install -g @artheras/aria-code`.",
+        ))
+        return checks
 
     node = shutil.which("node")
     if node:
