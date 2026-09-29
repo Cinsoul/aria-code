@@ -39,7 +39,13 @@ from aria_code.apps.cli.tool_registry import (  # noqa: F401 — re-exported
     LOCAL_TOOLS,
     LOCAL_TOOL_SCHEMAS,
 )
+from aria_code.apps.cli.provider_keys import (  # noqa: F401 — re-exported
+    get_provider_key as _get_provider_key,
+    load_data_keys as _load_data_keys,
+)
 from aria_code.apps.cli.helpers import (  # noqa: F401
+    detect_ollama_models,
+    detect_ollama_models_rich,
     _load_project_context,
     _display_value,
     _chart_display_label,
@@ -789,46 +795,8 @@ def _save_data_key(service: str, key: str) -> None:
     write_secret_json(PROVIDERS_FILE, existing)
 
 
-def _load_data_keys() -> Dict[str, str]:
-    """Return a dict of {service: api_key} for all configured data services.
-    Merges environment variables (priority) and providers.json."""
-    result: Dict[str, str] = {}
-    # 1. Environment variables
-    for svc, env_var in _DATA_KEY_MAP.items():
-        val = os.getenv(env_var, "")
-        if val:
-            result[svc] = val
-    # 2. providers.json "data" section
-    try:
-        if PROVIDERS_FILE.exists():
-            raw = json.loads(PROVIDERS_FILE.read_text(encoding="utf-8"))
-            for svc, entry in raw.get("data", {}).items():
-                if svc not in result and entry.get("api_key"):
-                    result[svc] = entry["api_key"]
-    except Exception:
-        pass
-    return result
 
 
-def _get_provider_key(provider: str) -> str:
-    """Return the configured API key for a provider (env var takes priority)."""
-    env_var = (_PROVIDER_KEY_MAP.get(provider.lower())
-               or _DATA_KEY_MAP.get(provider.lower(), ""))
-    if env_var:
-        val = os.getenv(env_var, "")
-        if val:
-            return val
-    # Check providers.json under both "llm" and "data" sections
-    try:
-        if PROVIDERS_FILE.exists():
-            raw = json.loads(PROVIDERS_FILE.read_text(encoding="utf-8"))
-            for section in ("llm", "data"):
-                entry = raw.get(section, {}).get(provider.lower(), {})
-                if entry.get("api_key"):
-                    return entry["api_key"]
-    except Exception:
-        pass
-    return ""
 
 DEFAULT_CONFIG = default_config()
 
@@ -928,79 +896,8 @@ def _pick_best_installed_model(installed, preferred: str = ""):
     return sorted(installed)[0]
 
 
-def detect_ollama_models(ollama_url: str = "http://localhost:11434") -> list:
-    """Query Ollama /api/tags and return list of available model names.
-
-    Always bypasses HTTP_PROXY so localhost is reached directly even when a
-    system proxy (VPN / clash / surge) is active.
-    """
-    import urllib.request
-    # Force direct connection — bypass any HTTP_PROXY / HTTPS_PROXY env vars
-    _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    try:
-        with _opener.open(f"{ollama_url}/api/tags", timeout=5) as r:
-            data = json.loads(r.read())
-        return [m["name"] for m in data.get("models", [])]
-    except Exception:
-        # Also try 127.0.0.1 if hostname is "localhost" (IPv6 resolution fallback)
-        if "localhost" in ollama_url:
-            try:
-                fallback = ollama_url.replace("localhost", "127.0.0.1")
-                with _opener.open(f"{fallback}/api/tags", timeout=5) as r:
-                    data = json.loads(r.read())
-                return [m["name"] for m in data.get("models", [])]
-            except Exception:
-                pass
-        return []
 
 
-def detect_ollama_models_rich(ollama_url: str = "http://localhost:11434") -> tuple:
-    """Return (models_list, error_str) where each entry in models_list is a dict:
-        {"name": str, "size_label": str, "family": str, "quant": str,
-         "execution": "local" | "remote", "remote_host": str,
-         "context_window": int, "capabilities": list[str]}
-    error_str is None on success, or a short human-readable reason on failure.
-    """
-    import urllib.request
-    _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-
-    def _try(url: str):
-        with _opener.open(f"{url}/api/tags", timeout=5) as r:
-            return json.loads(r.read())
-
-    data = None
-    last_err = None
-    for u in [ollama_url] + ([ollama_url.replace("localhost", "127.0.0.1")]
-                              if "localhost" in ollama_url else []):
-        try:
-            data = _try(u)
-            break
-        except OSError as e:
-            last_err = str(e)
-        except Exception as e:
-            last_err = str(e)
-
-    if data is None:
-        return [], last_err or "connection failed"
-
-    results = []
-    for m in data.get("models", []):
-        det  = m.get("details", {})
-        size = det.get("parameter_size", "")
-        fam  = det.get("family", "")
-        qnt  = det.get("quantization_level", "")
-        results.append({
-            "name":       m["name"],
-            "size_label": size,    # e.g. "1.5B", "7B", "671.0B"
-            "family":     fam,     # e.g. "qwen2", "deepseek2"
-            "quant":      qnt,     # e.g. "Q4_K_M", "MXFP4"
-            "execution":  "remote" if m.get("remote_host") else "local",
-            "remote_model": m.get("remote_model", ""),
-            "remote_host": m.get("remote_host", ""),
-            "context_window": int(det.get("context_length") or 0),
-            "capabilities": list(m.get("capabilities") or []),
-        })
-    return results, None
 
 
 # ── Response cache for stateless queries (TTL = 60s) ─────────────────────────

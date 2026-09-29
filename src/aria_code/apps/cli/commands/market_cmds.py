@@ -291,7 +291,7 @@ def _get_mdc(*args, **kwargs):
     from .._optional import get_mdc as fn
     return fn(*args, **kwargs)
 def _load_data_keys(*args, **kwargs):
-    from aria_cli import _load_data_keys as fn
+    from aria_code.apps.cli.provider_keys import load_data_keys as fn
     return fn(*args, **kwargs)
 def _render_asset_score(*args, **kwargs):
     from aria_cli import _render_asset_score as fn

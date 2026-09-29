@@ -19,7 +19,7 @@ import os
 from typing import Dict, Any, Optional
 
 def detect_ollama_models_rich(*args, **kwargs):
-    from aria_cli import detect_ollama_models_rich as fn
+    from aria_code.apps.cli.helpers import detect_ollama_models_rich as fn
     return fn(*args, **kwargs)
 def _sync_write_policy(*args, **kwargs):
     from aria_cli import _sync_write_policy as fn
@@ -63,7 +63,7 @@ def _test_api_key(*args, **kwargs):
     from aria_cli import _test_api_key as fn
     return fn(*args, **kwargs)
 def _get_provider_key(*args, **kwargs):
-    from aria_cli import _get_provider_key as fn
+    from aria_code.apps.cli.provider_keys import get_provider_key as fn
     return fn(*args, **kwargs)
 def _get__DATA_SIGNUP_URLS():
     from aria_cli import _DATA_SIGNUP_URLS as val
@@ -104,7 +104,7 @@ def _get__HAS_MODEL_CAP():
     from aria_code.apps.cli._optional import HAS_MODEL_CAP as val
     return val
 def _load_data_keys(*args, **kwargs):
-    from aria_cli import _load_data_keys as fn
+    from aria_code.apps.cli.provider_keys import load_data_keys as fn
     return fn(*args, **kwargs)
 
 import json

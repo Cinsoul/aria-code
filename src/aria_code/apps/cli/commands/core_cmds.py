@@ -722,7 +722,8 @@ class CoreCommandsMixin:
         self.context.console.print(f"[green]{msg}[/green]" if self.context.has_rich else msg)
     def cmd_run(self, args: str):
         """Run a command: /run <command>"""
-        from aria_cli import _SYNTAX_THEME, _tool_run_command, evaluate_command_policy
+        from aria_cli import _SYNTAX_THEME, _tool_run_command
+        from aria_code.safety import evaluate_command_policy
         from ._ui import Syntax
         if not args.strip():
             self.context.console.print("[dim]Usage: /run [--dry-run] <command>[/dim]" if self.context.has_rich
@@ -916,7 +917,10 @@ class CoreCommandsMixin:
         Usage: /feedback good|bad [comment]
                /feedback note <comment>
         """
-        from aria_cli import CONFIG_DIR, FeedbackRecord, FeedbackStore, PrivacySettings
+        from aria_cli import CONFIG_DIR
+        from aria_code.privacy import FeedbackRecord
+        from aria_code.privacy import FeedbackStore
+        from aria_code.privacy import PrivacySettings
         from aria_code.ui.render.output import display_path as _display_path
         parts = args.strip().split(maxsplit=1)
         vote = parts[0].lower() if parts else ""
@@ -1010,7 +1014,9 @@ class CoreCommandsMixin:
                   (" (uploaded)" if api_success else " (saved locally)"))
     def cmd_privacy(self, args: str):
         """Manage local privacy and feedback-sharing settings."""
-        from aria_cli import CONFIG_DIR, FeedbackStore, PrivacySettings
+        from aria_cli import CONFIG_DIR
+        from aria_code.privacy import FeedbackStore
+        from aria_code.privacy import PrivacySettings
         from aria_code.ui.render.output import display_path as _display_path
         parts = args.strip().split(maxsplit=1)
         sub = parts[0].lower() if parts else "status"
@@ -1019,7 +1025,7 @@ class CoreCommandsMixin:
         settings = PrivacySettings.from_config(self.terminal.config)
 
         def _save_settings(new_settings: PrivacySettings):
-            from aria_cli import PrivacySettings
+            from aria_code.privacy import PrivacySettings
             new_settings.apply_to_config(self.terminal.config)
             self.context.save_config(self.terminal.config)
 
@@ -1457,7 +1463,9 @@ class CoreCommandsMixin:
             print(f"  Local mode {state}  model={model}")
     async def cmd_mcp(self, args: str):
         """Manage MCP servers: /mcp status | /mcp tools | /mcp reload [server]"""
-        from aria_cli import CONFIG_DIR, MCP_CONFIG_PATH, _HAS_MCP
+        from aria_cli import CONFIG_DIR
+        from aria_code.apps.cli._optional import MCP_CONFIG_PATH
+        from aria_code.apps.cli._optional import HAS_MCP as _HAS_MCP
         from aria_code.apps.cli.tool_registry import LOCAL_TOOLS, LOCAL_TOOL_SCHEMAS
         if not _HAS_MCP:
             self.context.console.print("  [dim]mcp_client.py not available[/dim]" if self.context.has_rich else "MCP not available")
@@ -1678,7 +1686,8 @@ class CoreCommandsMixin:
                                  f"market insights {len(symbols)} stocks")
     def cmd_recommend(self, args: str):
         """Recommend best local models for financial analysis."""
-        from aria_cli import RECOMMENDED_FINANCE_MODELS, detect_ollama_models
+        from aria_cli import RECOMMENDED_FINANCE_MODELS
+        from aria_code.apps.cli.helpers import detect_ollama_models
         if self.context.has_rich:
             self.context.console.print()
             self.context.console.print("  [bold]Recommended Local Models for Finance[/bold]")

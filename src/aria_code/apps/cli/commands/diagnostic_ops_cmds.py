@@ -82,13 +82,13 @@ def _get_Panel():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
     return Panel
 def _get_provider_key(*args, **kwargs):
-    from aria_cli import _get_provider_key as fn
+    from aria_code.apps.cli.provider_keys import get_provider_key as fn
     return fn(*args, **kwargs)
 def _get_rich_box():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
     return rich_box
 def _get__HAS_MCP():
-    from aria_cli import _HAS_MCP as val
+    from aria_code.apps.cli._optional import HAS_MCP as val
     return val
 def _get_CONFIG_DIR():
     from aria_cli import CONFIG_DIR as val
