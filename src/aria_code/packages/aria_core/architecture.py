@@ -58,10 +58,24 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         name="settings",
         responsibility="Configuration, secrets, model profiles, and permission policy resolution.",
         target_state="A single settings service resolves env, config files, CLI flags, and secrets without leaking credentials.",
-        current_state="Settings are still split across CLI config, env vars, and feature-specific files.",
-        status=LayerStatus.PLANNED,
-        source_paths=("config.py", "settings_manager.py", "cloud_config.py"),
-        next_steps=("Extract SettingsService and make launcher, CLI, daemon, brokers, and MCP use it.",),
+        current_state=(
+            "packages/aria_services/settings.py exists and apps/cli/config_store.py builds it, but "
+            "aria_cli.py is its only caller — aria_daemon.py, brokers/config.py and "
+            "packages/aria_mcp/server.py each read their own files directly. The service is written; "
+            "adoption is what is missing, which is a different job from the one this layer used to "
+            "describe."
+        ),
+        status=LayerStatus.PARTIAL,
+        source_paths=(
+            "packages/aria_services/settings.py",
+            "apps/cli/config_store.py",
+            "apps/cli/config_paths.py",
+            "packages/aria_core/secure_file.py",
+        ),
+        next_steps=(
+            "Route aria_daemon.py, brokers/config.py and packages/aria_mcp/server.py through the "
+            "settings service instead of reading config files directly.",
+        ),
     ),
     ArchitectureLayer(
         name="ui",
@@ -91,7 +105,10 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         depends_on=("settings", "tools", "safety", "context"),
         next_steps=(
             "Fold send_message's remaining pre-turn (routing/decomposition/context injection) and post-turn (rendering/history/metrics) sections into testable modules, mirroring turn_planning/prompt_assembly.",
-            "Untangle stream_ollama's 47 aria_cli module-global borrowings (AST-audited) so SDK/daemon consumers stop needing an aria_cli pre-import for the default Ollama path.",
+            "Untangle stream_ollama's 45 aria_cli module-global borrowings (AST-audited; was 47 before "
+            "the response cache moved to apps/cli/providers/llm/response_cache.py). Still live: with "
+            "aria_cli unloaded, _resolve_ollama_stream() falls back to the raw function, whose globals "
+            "lack HAS_RICH, LOCAL_TOOL_SCHEMAS, _ACTIVE_COMMAND_POLICY and _CONFIRM_TOOLS.",
         ),
     ),
     ArchitectureLayer(
@@ -113,7 +130,6 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         source_paths=(
             "packages/aria_services/",
             "docs/architecture/service_boundaries.md",
-            "docs/architecture/claude_code_parity_gap_analysis.md",
         ),
         depends_on=("settings", "runtime", "tools"),
         next_steps=("Extract concrete SettingsService, SafetyService, ReportService, GatewayService, and ObservabilityService implementations behind the registered service manifests.",),
@@ -132,11 +148,22 @@ _ARCHITECTURE_LAYERS: Tuple[ArchitectureLayer, ...] = (
         name="safety",
         responsibility="Filesystem, shell, network, broker, and privacy guardrails.",
         target_state="Every risky action is classified, previewed when needed, audited, and blocked by default for live trading.",
-        current_state="Broker preview/confirm exists, but shell/network/file policies are not yet one unified service.",
+        current_state=(
+            "safety/service.py SafetyService already unifies evaluate_tool, evaluate_command, "
+            "classify_risk, privacy and trading policy — but nothing constructs it. Callers still "
+            "reach evaluate_command_policy and the broker helpers directly, so the unification "
+            "exists on paper only. Broker preview/confirm and the two-gate chat-confirm gate are "
+            "real and in use; credential files are written owner-only via "
+            "packages/aria_core/secure_file.py."
+        ),
         status=LayerStatus.PARTIAL,
         source_paths=("safety/", "brokers/", "apps/cli/commands/broker_cmds.py"),
         depends_on=("settings", "tools"),
-        next_steps=("Unify command policy, broker risk policy, and privacy controls under SafetyService.",),
+        next_steps=(
+            "Adopt SafetyService at its call sites — it is written and has zero callers. "
+            "Constructing it is not the work; routing apps/cli/tools/system_tools.py, "
+            "command_safety.py and the broker paths through it is.",
+        ),
     ),
     ArchitectureLayer(
         name="channels",
