@@ -290,17 +290,32 @@ ollama pull phi4-mini           # Microsoft Phi-4 mini, excellent code
 
 Aria auto-discovers the best installed model on first run — no configuration needed.
 
-### Step 2: Cloud API keys (all optional)
+### Step 2: Sign in — no API key needed
+
+```
+/login
+```
+
+Opens your browser to sign in or create an account. That is the whole setup:
+the model is served for you, so there is no key to obtain, paste or rotate.
+
+<details>
+<summary>Prefer your own API key, or no account at all?</summary>
+
+Both still work, and neither is required.
 
 ```bash
-# Interactive setup wizard
-python3 setup_wizard.py
+# Bring your own keys — 19 providers, all optional
+aria-setup --keys
 
-# Or manually copy and edit
+# Or set them directly
 cp .env.example .env
 ```
 
-The setup wizard now covers all 19 cloud providers including Google Gemini, xAI Grok, Mistral, Baidu ERNIE, ByteDance Doubao, and more.
+For fully offline use, start Ollama (Step 1) and pick a local model with
+`/model`. Nothing leaves your machine in that mode.
+
+</details>
 
 ---
 
