@@ -28,7 +28,8 @@ import re
 
 import pytest
 
-from aria_code.packages.aria_core.architecture import _ARCHITECTURE_LAYERS
+# 走公开访问器，不碰私有名——这样守卫核对的就是消费者真正看到的东西。
+from aria_code.packages.aria_core import list_architecture_layers
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "src" / "aria_code"
@@ -41,7 +42,7 @@ def _exists(rel: str) -> bool:
 
 @pytest.mark.parametrize(
     "layer_name, path",
-    [(layer.name, path) for layer in _ARCHITECTURE_LAYERS for path in layer.source_paths],
+    [(layer.name, path) for layer in list_architecture_layers() for path in layer.source_paths],
     ids=lambda v: v if isinstance(v, str) else str(v),
 )
 def test_source_paths_point_at_something_real(layer_name: str, path: str):
@@ -53,7 +54,7 @@ def test_source_paths_point_at_something_real(layer_name: str, path: str):
 
 
 def test_every_layer_has_paths_and_a_state():
-    for layer in _ARCHITECTURE_LAYERS:
+    for layer in list_architecture_layers():
         assert layer.source_paths, f"{layer.name} 没有 source_paths，无从核对"
         assert layer.current_state.strip(), f"{layer.name} 没有 current_state"
 
@@ -99,7 +100,7 @@ def test_the_borrowed_global_count_the_ledger_quotes_is_current():
     它是衡量 stream_ollama 解耦进度的刻度。写在那里却不再更新，读的人会以为
     工作没有进展。
     """
-    runtime = next(l for l in _ARCHITECTURE_LAYERS if l.name == "runtime")
+    runtime = next(l for l in list_architecture_layers() if l.name == "runtime")
     quoted = [
         int(m.group(1))
         for step in runtime.next_steps
@@ -112,4 +113,36 @@ def test_the_borrowed_global_count_the_ledger_quotes_is_current():
     assert quoted[0] == actual, (
         f"账本写着 stream_ollama 借用 {quoted[0]} 个 aria_cli 全局名，实测 {actual}。\n"
         "把账本里的数字更新为实测值；它是这项解耦的进度刻度。"
+    )
+
+
+def test_the_coupling_figures_the_ledger_quotes_are_current():
+    """runtime 层引用了 aria_cli 反向耦合的模块数与引用数。
+
+    它们是这项解耦的进度刻度，也正是 test_import_graph_budget.py 冻结的那两个
+    基线。写在账本里却不跟着更新，读的人会以为工作停滞——而账本腐烂的方式，
+    通常就是从"数字还在、但不再对"开始的。
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_budget_guard", REPO_ROOT / "tests" / "test_import_graph_budget.py"
+    )
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+
+    runtime = next(l for l in list_architecture_layers() if l.name == "runtime")
+    quoted = re.search(r"(\d+) modules still reach back into it .*?(\d+) references",
+                       runtime.current_state)
+    assert quoted, (
+        "runtime 层不再引用耦合数字——若是有意移除，请一并删掉这条测试"
+    )
+
+    assert (int(quoted.group(1)), int(quoted.group(2))) == (
+        guard._BASELINE_ARIA_CLI_IMPORTERS,
+        guard._BASELINE_ARIA_CLI_REFERENCES,
+    ), (
+        f"账本写着 {quoted.group(1)} 个模块 / {quoted.group(2)} 处引用，而守卫的基线是 "
+        f"{guard._BASELINE_ARIA_CLI_IMPORTERS} / {guard._BASELINE_ARIA_CLI_REFERENCES}。\n"
+        "两处必须同步——基线收紧时账本也要跟着改，否则它记录的是历史而不是现状。"
     )
