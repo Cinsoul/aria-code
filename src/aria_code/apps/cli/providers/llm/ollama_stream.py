@@ -67,6 +67,34 @@ from aria_code.apps.cli.tool_registry import LOCAL_TOOL_SCHEMAS
 from aria_code.apps.cli.tools.market_tools import _HAS_MDC
 from aria_code.ui.console import HAS_RICH, Panel, console
 
+# Second batch. Same rule as above — each verified to be the object aria_cli
+# holds, which is why _format_tool_summary is still absent: apps.cli.
+# tool_executor's copy is a different function object from aria_cli's and sits
+# on the tool-output path.
+#
+# The four intent predicates and the three message helpers were already
+# extracted; aria_cli only aliases them, so importing the real modules here
+# removes a borrow without moving any code. The three offline responders were
+# genuinely still in aria_cli and moved to offline_responses.py — a provider's
+# "backend unavailable" message belongs with the provider, and the fallback
+# path could not previously build its own.
+from aria_code.apps.cli.intent import (
+    is_analysis_request as _is_analysis_request,
+    is_coding_request as _is_coding_request,
+    is_general_knowledge as _is_general_knowledge,
+    is_sports_query as _is_sports_query,
+)
+from aria_code.apps.cli.message_processing import (
+    compact_messages as _compact_messages,
+    parse_text_tool_calls as _parse_text_tool_calls,
+    strip_tool_call_tags as _strip_tool_call_tags,
+)
+from .offline_responses import (
+    is_simple_greeting as _is_simple_greeting,
+    offline_greeting_response as _offline_greeting_response,
+    ollama_unavailable_result as _ollama_unavailable_result,
+)
+
 
 def _try_inject_file_paths(_message: str) -> str:
     """Legacy hook retained for the extracted stream implementation.
