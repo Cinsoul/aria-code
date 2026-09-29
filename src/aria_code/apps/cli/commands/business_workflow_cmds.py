@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._business_render import p, print_realty_result, print_risk_scan
+
 
 import json
 import asyncio
@@ -10,15 +12,6 @@ import time
 import shlex
 from typing import Dict, Any, Optional
 
-def _p(*args, **kwargs):
-    from aria_cli import _p as fn
-    return fn(*args, **kwargs)
-def _print_realty_result(*args, **kwargs):
-    from aria_cli import _print_realty_result as fn
-    return fn(*args, **kwargs)
-def _print_risk_scan(*args, **kwargs):
-    from aria_cli import _print_risk_scan as fn
-    return fn(*args, **kwargs)
 
 import json
 import asyncio
@@ -62,7 +55,7 @@ class BusinessWorkflowCommandsMixin:
     async def cmd_asset_diag(self, args: str):
         asset_id = args.strip()
         if not asset_id:
-            _p("用法: /asset-diag <资产ID或名称>  例: /asset-diag asset_000001", "dim")
+            p(self.context, "用法: /asset-diag <资产ID或名称>  例: /asset-diag asset_000001", "dim")
             return
         asset_info = {}
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
@@ -85,11 +78,11 @@ class BusinessWorkflowCommandsMixin:
                             "property_state": raw.get("property_state", "正常"),
                             "floor_height": raw.get("floor_height", 0),
                         }
-                        _p(f"已从 API 加载资产: {raw.get('name', asset_id)}", "ok")
+                        p(self.context, f"已从 API 加载资产: {raw.get('name', asset_id)}", "ok")
         except Exception:
             pass
         if not asset_info:
-            _p("[dim]提示: 未找到资产数据，以 ID 作为位置标识演示（结果仅供参考）[/dim]")
+            p(self.context, "[dim]提示: 未找到资产数据，以 ID 作为位置标识演示（结果仅供参考）[/dim]")
             asset_info = {
                 "location": asset_id,
                 "area": 0, "vacancy_days": 0,
@@ -122,14 +115,14 @@ class BusinessWorkflowCommandsMixin:
     async def cmd_revenue_calc(self, args: str):
         parts = args.split() if args else []
         if len(parts) < 2:
-            _p("用法: /revenue-calc <project_id> <总流水> [退款]  例: /revenue-calc proj_001 200000", "dim")
+            p(self.context, "用法: /revenue-calc <project_id> <总流水> [退款]  例: /revenue-calc proj_001 200000", "dim")
             return
         project_id = parts[0]
         try:
             gross = float(parts[1])
             refunds = float(parts[2]) if len(parts) > 2 else 0.0
         except ValueError:
-            _p("流水金额必须为数字", "error")
+            p(self.context, "流水金额必须为数字", "error")
             return
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
         rules = {}
@@ -144,7 +137,7 @@ class BusinessWorkflowCommandsMixin:
         except Exception:
             pass
         if not rules:
-            _p(f"[dim]未找到 {project_id} 的合同规则，使用默认值演示[/dim]")
+            p(self.context, f"[dim]未找到 {project_id} 的合同规则，使用默认值演示[/dim]")
             rules = {"guaranteed_monthly": 30000, "revenue_share_pct": 10,
                      "revenue_share_base": 0, "platform_fee_pct": 5,
                      "risk_reserve_pct": 3, "settlement_cycle": "monthly"}
@@ -167,7 +160,7 @@ class BusinessWorkflowCommandsMixin:
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        _print_risk_scan(data)
+                        print_risk_scan(self.context, data)
                         return
         except Exception:
             pass
@@ -204,11 +197,11 @@ class BusinessWorkflowCommandsMixin:
                             revenues = [s["split_result"].get("gross_revenue", 0) for s in splits]
                             avg_rev = sum(revenues) / len(revenues)
                             performance_data = {"monthly_revenue": avg_rev, "daily_visits": 0}
-                            _p(f"已加载近 {len(splits)} 期分账数据，月均流水 {avg_rev:,.0f}元", "ok")
+                            p(self.context, f"已加载近 {len(splits)} 期分账数据，月均流水 {avg_rev:,.0f}元", "ok")
         except Exception:
             pass
         if not performance_data:
-            _p("[dim]提示: 未找到运营数据，建议先录入分账记录后再运行此命令[/dim]")
+            p(self.context, "[dim]提示: 未找到运营数据，建议先录入分账记录后再运行此命令[/dim]")
         await self._run_realty_agent("ops_optimize", project_id, {
             "project_info": project_info,
             "performance_data": performance_data,
@@ -259,7 +252,7 @@ class BusinessWorkflowCommandsMixin:
                             "guaranteed_monthly": ctr.get("guaranteed_monthly", 0),
                             "exit_penalty_months": ctr.get("exit_penalty_months", 3),
                         })
-                        _p(f"已加载合同规则: 保底 {ctr.get('guaranteed_monthly',0):,}元/月", "ok")
+                        p(self.context, f"已加载合同规则: 保底 {ctr.get('guaranteed_monthly',0):,}元/月", "ok")
                 async with sess.get(
                     f"{api_url}/api/realty/invoices?project_id={project_id}&status=unpaid",
                     timeout=aiohttp.ClientTimeout(total=5)
@@ -270,7 +263,7 @@ class BusinessWorkflowCommandsMixin:
                         unpaid = summary.get("total_amount", 0) - summary.get("paid_amount", 0)
                         financials["unpaid_invoices"] = unpaid
                         if unpaid > 0:
-                            _p(f"发现未结账单合计: {unpaid:,.2f}元", "ok")
+                            p(self.context, f"发现未结账单合计: {unpaid:,.2f}元", "ok")
         except Exception:
             pass
         await self._run_realty_agent("exit_settlement", project_id, {
@@ -288,7 +281,7 @@ class BusinessWorkflowCommandsMixin:
             print(f"Running {agent_name}...")
             result = await self._call_realty_agent(agent_name, project_id, input_data)
         if result:
-            _print_realty_result(result, agent_name)
+            print_realty_result(self.context, result, agent_name)
 
     async def _run_realty_team(self, agents: list, project_id: str, input_data: dict):
         import asyncio
@@ -301,14 +294,14 @@ class BusinessWorkflowCommandsMixin:
             results = await asyncio.gather(*tasks, return_exceptions=False)
         for res, name in zip(results, agents):
             if res:
-                _print_realty_result(res, name)
+                print_realty_result(self.context, res, name)
 
     async def _call_realty_agent(self, agent_name: str, project_id: str, input_data: dict):
         try:
             from agents.registry import get_registry
             cls = get_registry().get(agent_name)
             if not cls:
-                _p(f"Agent '{agent_name}' 未注册", "error")
+                p(self.context, f"Agent '{agent_name}' 未注册", "error")
                 return None
             llm = None
             try:
@@ -322,5 +315,5 @@ class BusinessWorkflowCommandsMixin:
             result = await agent.analyze(project_id, input_data)
             return result
         except Exception as e:
-            _p(f"Agent {agent_name} 执行失败: {e}", "error")
+            p(self.context, f"Agent {agent_name} 执行失败: {e}", "error")
             return None
