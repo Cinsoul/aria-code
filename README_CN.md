@@ -24,8 +24,8 @@
 <h1 align="center">Aria Code</h1>
 
 <p align="center">
-  <b>命令行驱动的 AI 金融终端</b><br>
-  <sub>完全离线可用 · 19+ 云端供应商 · 系统语言自动识别 · 专为投资者和量化研究者设计</sub>
+  <b>面向编码与研究的命令行 AI 工作台</b><br>
+  <sub>代码开发 · 企业业务流程 · 金融研究 · 本地或云端模型</sub>
 </p>
 
 <p align="center">
@@ -46,7 +46,7 @@
 
 ## 什么是 Aria Code？
 
-Aria Code 是一款**终端优先的 AI 金融智能体** — 想象成 Claude Code，但内置了深度金融领域知识，且支持完全离线运行。你可以在终端里直接问它股票、投资组合优化、量化策略或代码问题，它会用真实数据、公式和分析实时回答。
+Aria Code 是一款**终端优先的 AI 编码与研究智能体**，可处理项目文件和开发工具，并提供金融研究、仓库分析等领域工具。适合的任务可使用本地模型离线运行；实时数据和云端模型需要联网。
 
 ```
 $ aria-code
@@ -733,9 +733,9 @@ pytest tests/ -v
 
 ## 与 Arthera 的关系
 
-Aria Code 是 [Arthera](https://arthera.finance) 的开源命令行组件 — Arthera 是一款 AI 驱动的量化投资平台，完整版包括 Web 仪表盘、桌面终端、iOS App 和机构级量化引擎。
+Aria Code 是 [Arthera](https://arthera.finance) 的开源命令行组件。Arthera 正从最初的金融工具扩展到编码、研究和企业业务流程；完整产品还包括桌面终端等应用端。
 
-Aria Code 设计为**独立工具** — 无需 Arthera 后端即可运行。所有金融计算在本地完成。云端功能均可选。
+Arthera 支持 Google 登录，以及首次登录时创建账户；CLI 也提供 `/login google` 登录 Arthera 后端。托管产品使用 Google Cloud 模型；登录 Arthera 与独立 CLI 直接调用模型所需的凭证是两回事。CLI 如需直接访问 Vertex AI，可安装 `aria-code[google]`，并配置 Google Cloud 应用默认凭证、`GOOGLE_CLOUD_PROJECT` 和 `GOOGLE_CLOUD_LOCATION`。CLI 还可使用 Gemini API Key、本地 Ollama 或其他已配置的模型。Google 登录本身不会给用户电脑授予 Vertex AI API 权限。
 
 ---
 

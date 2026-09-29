@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from aria_code.runtime import AgentTurnState, RuntimeTrace, ToolExecutor
+from aria_code.safety.permissions import evaluate_command_policy
 
 
 def _echo_tool(params):
@@ -40,6 +41,56 @@ class RuntimeToolExecutorTests(unittest.TestCase):
         self.assertEqual(captured["policy"], "balanced")
         self.assertEqual(captured["permission_mode"], "read-only")
         self.assertFalse(captured["network_enabled"])
+
+    def test_model_params_cannot_override_command_controls(self):
+        captured = {}
+        executor = ToolExecutor(
+            {"run_command": (lambda params: captured.update(params) or {"success": True}, "Run")},
+            config={
+                "command_policy": "safe",
+                "permission_mode": "read-only",
+                "network_enabled": False,
+                "command_sandbox": True,
+            },
+        )
+
+        result = executor.execute_local("run_command", {
+            "command": "curl https://example.com",
+            "policy": "full",
+            "permission_mode": "full-access",
+            "network_enabled": True,
+            "sandbox": False,
+            "user_approved": True,
+        })
+
+        self.assertTrue(result["success"])
+        self.assertEqual(captured["policy"], "safe")
+        self.assertEqual(captured["permission_mode"], "read-only")
+        self.assertFalse(captured["network_enabled"])
+        self.assertTrue(captured["sandbox"])
+        self.assertNotIn("user_approved", captured)
+        decision = evaluate_command_policy(
+            captured["command"], captured["policy"],
+            mode=captured["permission_mode"],
+            network_enabled=captured["network_enabled"],
+        )
+        self.assertFalse(decision.allowed)
+
+    def test_execution_context_failure_denies_local_tool(self):
+        called = []
+
+        def broken_context():
+            raise RuntimeError("context unavailable")
+
+        executor = ToolExecutor(
+            {"write_file": (lambda params: called.append(params) or {"success": True}, "Write")},
+            execution_context=broken_context,
+        )
+        result = executor.execute_local("write_file", {"path": "x.py"})
+
+        self.assertFalse(result["success"])
+        self.assertIn("Execution context unavailable", result["error"])
+        self.assertEqual(called, [])
 
     def test_local_tool_receives_runtime_execution_context(self):
         captured = {}

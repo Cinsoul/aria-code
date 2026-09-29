@@ -386,6 +386,34 @@ class RuntimeAgentLoopTests(unittest.TestCase):
         self.assertEqual(result.user_message["role"], "user")
         self.assertIn("run_command:ok", result.followup)
 
+    def test_tool_turn_approval_does_not_trust_model_policy_fields(self):
+        captured = {}
+        executor = ToolExecutor(
+            {"run_command": (lambda params: captured.update(params) or {"success": True}, "Run")},
+            config={"command_policy": "safe", "permission_mode": "read-only", "network_enabled": False},
+        )
+
+        asyncio.run(execute_tool_turn(
+            [{"tool": "run_command", "params": {
+                "command": "pytest -q",
+                "policy": "full",
+                "permission_mode": "full-access",
+                "network_enabled": True,
+            }}],
+            total_response="",
+            tool_executor=executor,
+            formatter=lambda _tool, _result: "ok",
+            confirm_tools={"run_command"},
+            approval_callback=lambda _tool, _params: ApprovalDecision.allow(
+                policy="balanced", user_approved=True
+            ),
+        ))
+
+        self.assertEqual(captured["policy"], "balanced")
+        self.assertEqual(captured["permission_mode"], "read-only")
+        self.assertFalse(captured["network_enabled"])
+        self.assertTrue(captured["user_approved"])
+
     def test_execute_tool_turn_denied_approval_cancels_without_running(self):
         ran = False
 
@@ -407,6 +435,25 @@ class RuntimeAgentLoopTests(unittest.TestCase):
         self.assertTrue(result.cancelled)
         self.assertFalse(ran)
         self.assertEqual(result.activities, [])
+
+    def test_tool_requiring_approval_stops_if_reviewer_is_unavailable(self):
+        calls = []
+        executor = ToolExecutor({
+            "write_file": (lambda params: calls.append(params) or {"success": True}, "Write")
+        })
+
+        for callback in (None, lambda _tool, _params: None):
+            result = asyncio.run(execute_tool_turn(
+                [{"tool": "write_file", "params": {"path": "x.py", "content": "x"}}],
+                total_response="",
+                tool_executor=executor,
+                formatter=lambda _tool, _result: "ok",
+                confirm_tools={"write_file"},
+                approval_callback=callback,
+            ))
+            self.assertTrue(result.cancelled)
+
+        self.assertEqual(calls, [])
 
     def test_execute_tool_turn_loop_guard_appends_retry_directive(self):
         def failing_tool(_params):
