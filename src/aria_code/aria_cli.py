@@ -916,50 +916,14 @@ from aria_code.apps.cli.providers.llm.response_cache import (
     cache_set as _cache_set,
 )
 
-def _is_simple_greeting(message: str) -> bool:
-    text = (message or "").strip().lower()
-    greetings = {
-        "hi", "hello", "hey", "你好", "您好", "嗨", "哈喽", "在吗",
-        "早上好", "下午好", "晚上好",
-    }
-    return text in greetings or (len(text) <= 8 and any(g in text for g in greetings))
-
-
-def _offline_greeting_response() -> dict:
-    return {
-        "success": True,
-        "response": (
-            "你好，我是 Aria Code。\n\n"
-            "当前云端模型不可用，且本地 Ollama 服务没有启动；简单问候可以直接响应。"
-            "如果要进行代码修改、市场分析或长文本推理，请先启动本地模型：\n\n"
-            "```bash\n"
-            "ollama serve\n"
-            "```\n\n"
-            "然后可用 `ollama list` 检查已安装模型，或运行 `/health` 查看 Aria Code 状态。"
-        ),
-        "provider": "builtin",
-        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "thinking_tokens": 0},
-    }
-
-
-def _ollama_unavailable_result(ollama_url: str, err: str = "") -> dict:
-    host = ollama_url or "http://localhost:11434"
-    detail = f"\n\nDetail: {err}" if err else ""
-    return {
-        "success": False,
-        "provider": "ollama",
-        "error": (
-            "Local Ollama is not reachable.\n\n"
-            f"Host: {host}\n"
-            "Start it in another terminal:\n\n"
-            "  ollama serve\n\n"
-            "Then verify:\n\n"
-            "  curl http://127.0.0.1:11434/api/tags\n"
-            "  ollama list\n\n"
-            "If you do not want local fallback, use a working cloud/API provider or disable local mode."
-            f"{detail}"
-        ),
-    }
+# Implementations live in apps/cli/providers/llm/offline_responses.py, with
+# the provider whose failure mode they describe. Re-exported under the private
+# names because stream_ollama borrows them from this module's globals.
+from aria_code.apps.cli.providers.llm.offline_responses import (  # noqa: E402
+    is_simple_greeting as _is_simple_greeting,
+    offline_greeting_response as _offline_greeting_response,
+    ollama_unavailable_result as _ollama_unavailable_result,
+)
 
 
 
@@ -1593,22 +1557,17 @@ def _fix_json_string(raw: str) -> str:
     return fixed
 
 
-def _parse_text_tool_calls(text: str) -> list:
-    """Thin shim — implementation in apps/cli/message_processing.py."""
-    from apps.cli.message_processing import parse_text_tool_calls as _f
-    return _f(text)
-
-
-def _strip_tool_call_tags(text: str) -> str:
-    """Thin shim — implementation in apps/cli/message_processing.py."""
-    from apps.cli.message_processing import strip_tool_call_tags as _f
-    return _f(text)
-
-
-def _compact_messages(messages: list, max_chars: int = 0, model_key: str = "qwen7b") -> list:
-    """Thin shim — implementation in apps/cli/message_processing.py."""
-    from apps.cli.message_processing import compact_messages as _f
-    return _f(messages, max_chars=max_chars, model_key=model_key)
+# Aliased rather than wrapped. These were three one-line shims delegating to
+# apps/cli/message_processing.py; a shim is a *different function object* from
+# the thing it calls, so stream_ollama importing the real functions while this
+# module held wrappers made the CLI and fallback paths run different objects —
+# caught by tests/test_ollama_stream_imports.py. Signatures are identical, so
+# the alias is an exact replacement.
+from aria_code.apps.cli.message_processing import (  # noqa: E402
+    compact_messages as _compact_messages,
+    parse_text_tool_calls as _parse_text_tool_calls,
+    strip_tool_call_tags as _strip_tool_call_tags,
+)
 
 
 

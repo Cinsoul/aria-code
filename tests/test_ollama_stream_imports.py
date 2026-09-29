@@ -90,9 +90,9 @@ class FallbackPathResolvesMoreNames(unittest.TestCase):
     """
 
     # Names stream_ollama cannot resolve from its own module globals and must
-    # therefore receive from aria_cli's rebind. Was 45; the 15 reclaimed are
-    # the module-level imports above. Decrease this, never increase it.
-    BORROW_BUDGET = 30
+    # therefore receive from aria_cli's rebind. 45 → 30 → 20. Decrease this,
+    # never increase it.
+    BORROW_BUDGET = 20
 
     @staticmethod
     def _borrowed() -> list:
