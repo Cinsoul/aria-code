@@ -895,7 +895,10 @@ ARIA_TOOLS = [
 # MODELS / MODEL_ALIASES / _MODEL_FALLBACK_PREFIXES 已移到
 # apps/cli/model_catalog.py（纯数据，约 390 行）。同 skills_catalog，普通
 # import 即可满足 mixin 的裸名引用。
-from aria_code.apps.cli.model_catalog import MODELS, MODEL_ALIASES, _MODEL_FALLBACK_PREFIXES
+from aria_code.apps.cli.model_catalog import (
+    MODELS, MODEL_ALIASES, _MODEL_FALLBACK_PREFIXES,
+    get_model_cfg, resolve_model_key,  # noqa: F401 — re-exported for existing callers
+)
 
 
 
@@ -1053,46 +1056,8 @@ def _ollama_unavailable_result(ollama_url: str, err: str = "") -> dict:
     }
 
 
-def resolve_model_key(model_str: str) -> str:
-    """Resolve any model alias/ID/key to a MODELS key.
-
-    For community Ollama models (qwen2.5-coder, llama3.2, deepseek-r1, etc.)
-    that are NOT in the MODELS registry, returns the sentinel "_community_"
-    so callers know to use model_capability.get_model_capability() instead
-    of falling back to hardcoded "prelude" settings.
-    """
-    if model_str in MODELS:
-        return model_str
-    if model_str in MODEL_ALIASES:
-        return MODEL_ALIASES[model_str]
-    # Community/custom Ollama model — not in registry
-    return "_community_"
 
 
-def get_model_cfg(model_str: str) -> dict:
-    """Return the best available config dict for *model_str*.
-
-    For registered models (MODELS table): returns the table entry.
-    For community Ollama models: synthesizes a config from model_capability.
-    Never silently falls back to 'prelude' settings for an unrelated model.
-    """
-    key = resolve_model_key(model_str)
-    if key in MODELS:
-        return MODELS[key]
-    # Community model — build config from model_capability registry
-    if _HAS_MODEL_CAP:
-        cap = get_model_capability(model_str)
-        return {
-            "id":          model_str,
-            "name":        model_str,
-            "num_ctx":     cap.context_window,
-            "temperature": cap.temperature,
-            "max_tokens":  min(cap.context_window // 4, 8192),
-            "thinking":    cap.thinking,
-            "tools":       cap.tool_calls,
-        }
-    # Last resort fallback — use qwen7b (sonata) settings as a safe default
-    return MODELS.get("sonata", MODELS.get("qwen7b", next(iter(MODELS.values()))))
 
 THINKING_MODES = {
     "auto":     {"label": "Auto",     "description": "Let Aria decide when to think deeply"},

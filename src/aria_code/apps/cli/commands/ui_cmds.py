@@ -35,7 +35,7 @@ def _get_rich_box():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
     return rich_box
 def get_model_cfg(*args, **kwargs):
-    from aria_cli import get_model_cfg as fn
+    from ..model_catalog import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_Panel():
     # Resolved locally now — see ._ui; no aria_cli round-trip.

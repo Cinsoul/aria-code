@@ -17,7 +17,7 @@ def _get_ARIA_TOOLS():
     from aria_cli import ARIA_TOOLS as val
     return val
 def get_model_cfg(*args, **kwargs):
-    from aria_cli import get_model_cfg as fn
+    from ..model_catalog import get_model_cfg as fn
     return fn(*args, **kwargs)
 def _get_MODELS():
     from aria_cli import MODELS as val

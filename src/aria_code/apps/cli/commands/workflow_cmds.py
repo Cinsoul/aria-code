@@ -37,7 +37,7 @@ def _tool_run_command(*args, **kwargs):
     from aria_cli import _tool_run_command as fn
     return fn(*args, **kwargs)
 def resolve_model_key(*args, **kwargs):
-    from aria_cli import resolve_model_key as fn
+    from ..model_catalog import resolve_model_key as fn
     return fn(*args, **kwargs)
 def _load_project_context(*args, **kwargs):
     from aria_code.apps.cli.helpers import _load_project_context as fn

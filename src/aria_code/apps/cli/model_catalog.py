@@ -438,3 +438,63 @@ _MODEL_FALLBACK_PREFIXES = [
     "gpt-oss",
     "deepseek-v3.1",
 ]
+
+
+# ── Lookups ───────────────────────────────────────────────────────────────────
+# These two read MODELS / MODEL_ALIASES and nothing else from aria_cli, so they
+# belong beside the data rather than in the CLI module. Four mixins were
+# importing them from aria_cli purely because that is where they were written.
+#
+# model_capability is optional, guarded the same way aria_cli guards it. The
+# bare import form is deliberate: it is the form every other caller in the tree
+# uses, and the package is reachable under two roots whose module objects are
+# distinct.
+try:
+    from model_capability import get_model_capability
+
+    _HAS_MODEL_CAP = True
+except ImportError:  # pragma: no cover - exercised only without model_capability
+    get_model_capability = None  # type: ignore[assignment]
+    _HAS_MODEL_CAP = False
+
+
+def resolve_model_key(model_str: str) -> str:
+    """Resolve any model alias/ID/key to a MODELS key.
+
+    For community Ollama models (qwen2.5-coder, llama3.2, deepseek-r1, etc.)
+    that are NOT in the MODELS registry, returns the sentinel "_community_"
+    so callers know to use model_capability.get_model_capability() instead
+    of falling back to hardcoded "prelude" settings.
+    """
+    if model_str in MODELS:
+        return model_str
+    if model_str in MODEL_ALIASES:
+        return MODEL_ALIASES[model_str]
+    # Community/custom Ollama model — not in registry
+    return "_community_"
+
+
+def get_model_cfg(model_str: str) -> dict:
+    """Return the best available config dict for *model_str*.
+
+    For registered models (MODELS table): returns the table entry.
+    For community Ollama models: synthesizes a config from model_capability.
+    Never silently falls back to 'prelude' settings for an unrelated model.
+    """
+    key = resolve_model_key(model_str)
+    if key in MODELS:
+        return MODELS[key]
+    # Community model — build config from model_capability registry
+    if _HAS_MODEL_CAP:
+        cap = get_model_capability(model_str)
+        return {
+            "id":          model_str,
+            "name":        model_str,
+            "num_ctx":     cap.context_window,
+            "temperature": cap.temperature,
+            "max_tokens":  min(cap.context_window // 4, 8192),
+            "thinking":    cap.thinking,
+            "tools":       cap.tool_calls,
+        }
+    # Last resort fallback — use qwen7b (sonata) settings as a safe default
+    return MODELS.get("sonata", MODELS.get("qwen7b", next(iter(MODELS.values()))))

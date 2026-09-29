@@ -588,7 +588,8 @@ class CoreCommandsMixin:
         then replaces conversation with [system summary] + last 2 message pairs.
         Falls back to hard trim if the summary call fails.
         """
-        from aria_cli import OllamaProvider, get_model_cfg, stream_provider_result
+        from aria_cli import OllamaProvider, stream_provider_result
+        from aria_code.apps.cli.model_catalog import get_model_cfg
         conv = self.terminal.conversation
         if len(conv) <= 4:
             if not silent:
