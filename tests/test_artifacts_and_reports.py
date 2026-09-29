@@ -23,7 +23,7 @@ from aria_code.artifacts import (
     user_projects_dir,
     write_artifact_metadata,
 )
-from aria_code.data_cleaner import CleanResult
+from data_cleaner import CleanResult
 from aria_code.report_generator import _build_html, _fetch_report_data_sync, generate_price_chart, generate_report
 
 
@@ -326,6 +326,8 @@ def test_generate_price_chart_has_svg_fallback(monkeypatch):
 
 
 def test_report_data_fetch_falls_back_to_market_data_client(monkeypatch):
+    # report_generator.py does `from data_cleaner import ...`, so the patch
+    # target has to be that module object, not the aria_code.* copy.
     import data_cleaner
     import market_data_client
 

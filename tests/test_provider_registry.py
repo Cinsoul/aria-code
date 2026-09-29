@@ -248,7 +248,7 @@ class TestNewProvidersRegistered(unittest.TestCase):
 
     def test_deepseek_first_in_cloud_chain(self):
         """DeepSeek 应是 fallback 链里第一个云端 provider。"""
-        from providers.llm.registry import _PROVIDER_CLASSES
+        from aria_code.providers.llm.registry import _PROVIDER_CLASSES
         cloud_names = [
             name for name, _, _ in _DEFAULT_FALLBACK_CHAIN
             if not _PROVIDER_CLASSES[name].local
