@@ -108,7 +108,7 @@ class CoreCommandsMixin:
                     print(f"  Did you mean: {', '.join(suggestions)}?")
     def cmd_help(self, args: str):
         # Contextual help: /help <command>
-        from aria_cli import SKILLS
+        from aria_code.apps.cli.skills_catalog import SKILLS
         target = args.strip().lower()
         if target:
             cmd_key = target if target.startswith("/") else f"/{target}"
@@ -242,7 +242,7 @@ class CoreCommandsMixin:
             for s in SKILLS:
                 print(f"  {s['command']:20s} {s['description']}")
     async def cmd_artifacts(self, args: str):
-        from aria_cli import _display_path
+        from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _copy_text_to_clipboard, _open_path_or_url, _reveal_path_in_finder
         tokens = [part for part in args.split() if part]
         mode = "list"
@@ -826,7 +826,7 @@ class CoreCommandsMixin:
     async def cmd_code(self, args: str):
         """Generate code and optionally save to file. Usage: /code <description> [--save file.py]"""
         from aria_code.apps.cli.helpers import _extract_code_block
-        from aria_cli import _display_path
+        from aria_code.ui.render.output import display_path as _display_path
         if not args.strip():
             if self.context.has_rich:
                 self.context.console.print("[dim]Usage: /code <description> [--save file.py][/dim]")
@@ -916,7 +916,8 @@ class CoreCommandsMixin:
         Usage: /feedback good|bad [comment]
                /feedback note <comment>
         """
-        from aria_cli import CONFIG_DIR, FeedbackRecord, FeedbackStore, PrivacySettings, _display_path
+        from aria_cli import CONFIG_DIR, FeedbackRecord, FeedbackStore, PrivacySettings
+        from aria_code.ui.render.output import display_path as _display_path
         parts = args.strip().split(maxsplit=1)
         vote = parts[0].lower() if parts else ""
         comment = parts[1].strip() if len(parts) > 1 else ""
@@ -1009,7 +1010,8 @@ class CoreCommandsMixin:
                   (" (uploaded)" if api_success else " (saved locally)"))
     def cmd_privacy(self, args: str):
         """Manage local privacy and feedback-sharing settings."""
-        from aria_cli import CONFIG_DIR, FeedbackStore, PrivacySettings, _display_path
+        from aria_cli import CONFIG_DIR, FeedbackStore, PrivacySettings
+        from aria_code.ui.render.output import display_path as _display_path
         parts = args.strip().split(maxsplit=1)
         sub = parts[0].lower() if parts else "status"
         rest = parts[1].strip() if len(parts) > 1 else ""
@@ -1112,7 +1114,8 @@ class CoreCommandsMixin:
           2. Remote Aria backend (AWS) — if local not available
           3. Graceful error if both fail
         """
-        from aria_cli import Text, execute_aria_tool
+        from aria_cli import Text
+        from aria_code.apps.cli.tool_executor import execute_aria_tool
         from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         display = label or tool_name
 
@@ -1173,7 +1176,8 @@ class CoreCommandsMixin:
                              param_list: list,
                              label_fn=None):
         """Run a tool in parallel for multiple param dicts, display each result."""
-        from aria_cli import _print_finance_result, execute_aria_tool
+        from aria_cli import _print_finance_result
+        from aria_code.apps.cli.tool_executor import execute_aria_tool
         from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         tasks = [
             asyncio.create_task(
@@ -1194,7 +1198,8 @@ class CoreCommandsMixin:
     async def _fetch_and_display_finance(self, tool_name: str, params: dict, label: str,
                                           mdc_fallback_symbol: str = "") -> bool:
         """Try tool → local finance tool → market_data_client fallback. Returns True if data shown."""
-        from aria_cli import _print_finance_result, execute_aria_tool
+        from aria_cli import _print_finance_result
+        from aria_code.apps.cli.tool_executor import execute_aria_tool
         from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         result = None
@@ -1236,7 +1241,7 @@ class CoreCommandsMixin:
             return False
     async def cmd_risk(self, args: str):
         """Risk metrics: /risk AAPL or /risk portfolio"""
-        from aria_cli import execute_aria_tool
+        from aria_code.apps.cli.tool_executor import execute_aria_tool
         from aria_code.apps.cli.tool_registry import LOCAL_TOOLS
         target = args.strip().upper() or "AAPL"
         if target == "PORTFOLIO":
@@ -1282,7 +1287,7 @@ class CoreCommandsMixin:
             self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
     async def cmd_market(self, args: str):
         """Market overview: /market [indices|sectors]"""
-        from aria_cli import execute_aria_tool
+        from aria_code.apps.cli.tool_executor import execute_aria_tool
         from aria_code.apps.cli._optional import HAS_MDC as _HAS_MDC, get_mdc as _get_mdc
         sub = args.strip().lower()
         if sub == "sectors":
@@ -1996,7 +2001,8 @@ class CoreCommandsMixin:
                /chart BTC-USD 2y
         支持 period: 1m 3m 6m 1y 2y 3y 5y ytd max
         """
-        from aria_cli import _display_path, _generate_chart_sync, _resolve_market_arg_symbol, sanitize_chart_symbol_args
+        from aria_cli import _generate_chart_sync, _resolve_market_arg_symbol, sanitize_chart_symbol_args
+        from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _chart_display_label
         _VALID_PERIODS = {"1m","3m","6m","1y","2y","3y","5y","ytd","max",
                           "1mo","3mo","6mo"}
@@ -2099,7 +2105,7 @@ class CoreCommandsMixin:
             print_error(self.context, f"图表生成失败: {err[:120]}")
     async def _cmd_chart_multi(self, symbols: list[tuple[str, str]], period: str):
         """Generate a normalized comparison chart plus individual K-line charts."""
-        from aria_cli import _display_path
+        from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _chart_display_label
         labels = [_chart_display_label(raw, resolved) for raw, resolved in symbols]
         if self.context.has_rich:
@@ -2307,7 +2313,8 @@ class CoreCommandsMixin:
                 print(f"  {s.get('name',sym):<10} {sym:<8} {s.get('price','-'):<8} {s.get('change_pct',0):+.2f}%")
     async def cmd_ta(self, args: str):
         """技术指标分析.  Usage: /ta NVDA [days=120]"""
-        from aria_cli import _display_path, _generate_chart_sync, parse_technical_args, print_ta_result
+        from aria_cli import _generate_chart_sync, parse_technical_args, print_ta_result
+        from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _chart_period_from_ta_days, _display_value
         parsed = parse_technical_args(args)
         symbol = parsed.symbol

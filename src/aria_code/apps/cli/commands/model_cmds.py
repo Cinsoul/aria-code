@@ -8,6 +8,7 @@ from __future__ import annotations
 from aria_code.packages.aria_core.paths import aria_home
 
 
+import logging
 import json
 import asyncio
 import datetime
@@ -51,9 +52,6 @@ def _get__DATA_KEY_MAP():
 def _run_picker_in_thread(*args, **kwargs):
     from aria_cli import _run_picker_in_thread as fn
     return fn(*args, **kwargs)
-def logger(*args, **kwargs):
-    from aria_cli import logger as fn
-    return fn(*args, **kwargs)
 import pathlib
 def _get_MODEL_ALIASES():
     from aria_cli import MODEL_ALIASES as val
@@ -75,20 +73,20 @@ def _arrow_select(*args, **kwargs):
     from aria_code.ui.picker import arrow_select as fn
     return fn(*args, **kwargs)
 def _get_SKILLS():
-    from aria_cli import SKILLS as val
+    from aria_code.apps.cli.skills_catalog import SKILLS as val
     return val
 def _get_LOCAL_TOOLS():
     # Owned by apps/cli/tool_registry.py; aria_cli fills it in place.
     from ..tool_registry import LOCAL_TOOLS as val
     return val
 def get_model_capability(*args, **kwargs):
-    from aria_cli import get_model_capability as fn
+    from aria_code.apps.cli._optional import get_model_capability as fn
     return fn(*args, **kwargs)
 def _save_data_key(*args, **kwargs):
     from aria_cli import _save_data_key as fn
     return fn(*args, **kwargs)
 def _get_MODELS():
-    from aria_cli import MODELS as val
+    from aria_code.apps.cli.model_catalog import MODELS as val
     return val
 def load_config(*args, **kwargs):
     from aria_cli import load_config as fn
@@ -103,7 +101,7 @@ def _get_PROVIDERS_FILE():
     from aria_cli import PROVIDERS_FILE as val
     return val
 def _get__HAS_MODEL_CAP():
-    from aria_cli import _HAS_MODEL_CAP as val
+    from aria_code.apps.cli._optional import HAS_MODEL_CAP as val
     return val
 def _load_data_keys(*args, **kwargs):
     from aria_cli import _load_data_keys as fn
@@ -117,6 +115,12 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# A real logger. This was a `def logger(*args, **kwargs)` forwarding to
+# aria_cli, so every `logger.debug(...)` raised AttributeError — and all but
+# one of them sit in an except block, where the failure replaced whatever
+# error was being reported.
+logger = logging.getLogger(__name__)
 
 
 class ModelCommandsMixin:

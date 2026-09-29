@@ -17,6 +17,7 @@ def _detect_lang_for_team(text: str) -> str:
     return "zh" if zh_chars / max(len(text), 1) > 0.15 else "en"
 
 
+import logging
 import json
 import asyncio
 import datetime
@@ -50,9 +51,6 @@ def save_markdown_report(*args, **kwargs):
     return fn(*args, **kwargs)
 def all_agents_failed(*args, **kwargs):
     from aria_cli import all_agents_failed as fn
-    return fn(*args, **kwargs)
-def logger(*args, **kwargs):
-    from aria_cli import logger as fn
     return fn(*args, **kwargs)
 def _get_Panel():
     # Resolved locally now — see ._ui; no aria_cli round-trip.
@@ -118,6 +116,12 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# A real logger. This was a `def logger(*args, **kwargs)` forwarding to
+# aria_cli, so every `logger.debug(...)` raised AttributeError — and all but
+# one of them sit in an except block, where the failure replaced whatever
+# error was being reported.
+logger = logging.getLogger(__name__)
 
 
 class PortfolioCommandsMixin:

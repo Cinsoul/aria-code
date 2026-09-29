@@ -91,6 +91,7 @@ def _bt_result_summary(data: dict) -> str:
     )
 
 
+import logging
 import json
 import asyncio
 import datetime
@@ -111,9 +112,6 @@ def _get__HAS_BROKERS():
     return val
 def _tool_run_command(*args, **kwargs):
     from aria_cli import _tool_run_command as fn
-    return fn(*args, **kwargs)
-def logger(*args, **kwargs):
-    from aria_cli import logger as fn
     return fn(*args, **kwargs)
 def _get__HAS_VAULT():
     from aria_cli import _HAS_VAULT as val
@@ -144,6 +142,12 @@ import shlex
 import sys
 import os
 from typing import Dict, Any, Optional
+
+# A real logger. This was a `def logger(*args, **kwargs)` forwarding to
+# aria_cli, so every `logger.debug(...)` raised AttributeError — and all but
+# one of them sit in an except block, where the failure replaced whatever
+# error was being reported.
+logger = logging.getLogger(__name__)
 
 
 class BacktestCommandsMixin:
