@@ -38,10 +38,14 @@ parent directories (walks up to filesystem root, stops at $HOME).
         "/factor-check": "计算 {symbol} 的技术因子并分析当前趋势"
       },
 
-      // Files to auto-read at session start (feeds AI context)
+      // Files to auto-read at session start (feeds AI context). These are
+      // paths in YOUR project; the two below are only an illustration of the
+      // shape. Earlier they named packages/quant_engine/strategies/ and
+      // analysis/, which are not in this repository, so copying the example
+      // read nothing.
       "auto_context": [
-        "packages/quant_engine/strategies/quant_strategy_base.py",
-        "packages/quant_engine/analysis/signal_pipeline.py"
+        "docs/architecture.md",
+        "src/my_project/strategy_base.py"
       ],
 
       // Which model this project runs on. Pins the backend for everyone who
