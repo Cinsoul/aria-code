@@ -10,13 +10,24 @@ We welcome contributions of all kinds — bug fixes, new features, documentation
 git clone https://github.com/artherahq/aria-code.git
 cd aria-code
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
 
-# Set up Ollama for local testing (no API key needed)
-ollama pull qwen2.5-coder:7b
+# Editable install. This is what puts `aria-code` on your PATH and what makes
+# the package importable both ways the tree needs; `pip install -r
+# requirements.txt` alone does neither.
+pip install -e ".[dev]"
 
 # Verify everything works
-python3 aria_cli.py -p "你好"
+aria-code --version
+aria-code -p "hello"
+```
+
+Ollama is optional. The default model is a cloud one (`google/gemini-2.5-pro`),
+and the test suite does not need a model at all — it stubs providers. Install
+Ollama only if you are working on the local-inference path:
+
+```bash
+ollama pull qwen2.5-coder:7b
+aria-code --model qwen2.5-coder:7b -p "hello"
 ```
 
 ---
@@ -52,7 +63,7 @@ ruff check .
 
 # Type check (mypy)
 pip install mypy
-mypy aria_cli.py --ignore-missing-imports
+mypy src/aria_code --ignore-missing-imports
 ```
 
 **Rules:**
@@ -150,7 +161,10 @@ def calculate_your_metric(param1: float, param2: float) -> dict:
     }
 ```
 
-Then register it in `aria_cli.py` in the `_TOOL_REGISTRY` dict so the LLM can call it.
+Then register it in `LOCAL_FINANCE_TOOL_REGISTRY` in
+`src/aria_code/tools/local_finance_tools.py` so the model can call it. The
+finance pack in `src/aria_code/packs/finance/` reads that registry to advertise
+the tool's name.
 
 ---
 
@@ -168,4 +182,12 @@ Report security vulnerabilities to: `security@arthera.finance`
 
 ## License
 
-By contributing, you agree your contributions will be licensed under the MIT License.
+By contributing, you agree your contributions will be licensed under the
+[Apache License, Version 2.0](LICENSE) — the same license the project itself
+uses. This line used to say MIT, which had not been the project's license since
+4.2.0; a contributor reading it was being told the wrong terms.
+
+Note that Apache 2.0 includes an explicit patent grant (section 3) and requires
+that modified files carry a notice of change (section 4b). If you are
+contributing on behalf of an employer, check that you are authorized to grant
+those terms.

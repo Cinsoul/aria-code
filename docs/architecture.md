@@ -47,3 +47,54 @@ events; it should not own core execution semantics.
 Product workflows that are not core platform behavior should be packaged under
 `plugins/` first. If a plugin needs a reusable primitive, promote that primitive
 into `runtime/` or `packages/` with tests.
+
+## Open-Core Rule
+
+The repository is Apache 2.0 (see `LICENSE` and `NOTICE`). That license is a
+commitment about *this* layer, not about everything Arthera builds, and the
+boundary between the two is an architectural constraint rather than a licensing
+footnote.
+
+```text
+Open, Apache 2.0 — this repository
+  apps/cli, apps/daemon, apps/channels    entrypoints and adapters
+  runtime/                                agent loop, tool execution, approvals
+  packages/aria_sdk                       public SDK surface
+  packages/aria_core                      architecture manifest and contracts
+  packages/aria_services                  provider health, settings, registry
+  packages/aria_mcp                       MCP bridge and tool manifests
+  ui/, plugins/, packs/                   rendering, workflows, domain packs
+  evals/, tests/                           verifiable evals, acceptance gates
+  domain interfaces                       the abstract shape of a domain pack
+
+Closed — separate, private, not in this repository
+  the quantitative engine                 pricing, calibration, factor models
+  proprietary datasets and connectors
+  institutional trading infrastructure
+```
+
+Two rules keep that boundary real:
+
+1. **The open side must never hard-import the closed side.** Every call site
+   goes through `packages/quant_engine/is_available()` and degrades when the
+   engine is absent. A plain `import` would make the free shell unusable
+   without a component that is not in the repository, which is the failure mode
+   this boundary exists to prevent.
+
+2. **Interfaces are open, implementations may be closed.** A domain pack's
+   contract — what a pack is, how it registers tools, what a tool returns —
+   belongs on the open side, so that someone can write a pack without access to
+   ours. What a *particular* pack computes can be proprietary.
+
+Most of that boundary is already drawn. Six of the engine's subpackages —
+`services/`, `agent_runtime/`, `risk/`, `analysis/`, `strategies/` and
+`mcp_server.py` — are not in this repository; the open side imports them under
+rule 1 and degrades. What is still here (`stochastic/`, `sports/`, `backtest/`,
+`portfolio/`) is published under Apache 2.0 along with everything else, and
+`CLOSING_SOURCE.md` explains why extracting it too is not worth doing:
+it is implementations of published methods, not proprietary IP.
+
+`tests/test_engine_boundary.py` holds the split, and its load-bearing assertion
+is rule 1 — an *unguarded* import of an already-private subpackage is not a
+degradation but a crash in every public checkout, on a path that works on a
+developer machine with the private repository checked out beside it.

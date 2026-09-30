@@ -23,7 +23,7 @@
     "type": "git",
     "url": "git+https://github.com/artherahq/aria-code.git"
   },
-  "license": "BUSL-1.1",
+  "license": "Apache-2.0",
   "author": "Cinsoul",
   "bin": {
     "aria-code": "bin/aria-code.js",

@@ -7,7 +7,7 @@ name = "aria-code"
 version = "0.45.0"
 description = "AI coding and research workspace with optional finance and connected-domain tools"
 readme = "README.md"
-license = { text = "BUSL-1.1" }
+license = { text = "Apache-2.0" }
 # Upper bound is real, not defensive: the core dep pandas_ta pulls numba, and
 # numba hard-refuses to build on 3.14 ("only versions >=3.10,<3.14 are
 # supported"). Without this bound pip happily starts the install on 3.14 and
@@ -25,6 +25,9 @@ keywords = ["ai", "llm", "coding-agent", "research", "finance", "terminal", "cli
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
+    # There was no License classifier while the field said BUSL-1.1 — correct
+    # then, since BSL has no OSI classifier to give. Apache 2.0 does.
+    "License :: OSI Approved :: Apache Software License",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
@@ -207,6 +210,16 @@ Issues = "https://github.com/artherahq/aria-code/issues"
 
 # ── Package discovery ──────────────────────────────────────────────────────────
 [tool.setuptools]
+# Apache 2.0 section 4d requires that NOTICE travel with the distribution, so
+# it has to be named here — setuptools' default license-files glob picks up
+# LICENSE but not NOTICE.
+#
+# This lives under [tool.setuptools] rather than in [project]. The [project]
+# license-files key is PEP 639 and needs setuptools>=77, but build-system
+# requires >=72, where an unknown [project] key is a hard validation error
+# rather than something ignored. The [tool.setuptools] spelling has worked
+# since 56.
+license-files = ["LICENSE", "NOTICE"]
 
 [tool.setuptools.packages.find]
 # src, not ".". The package moved to src/aria_code in the restructure and this

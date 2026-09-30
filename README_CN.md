@@ -16,7 +16,7 @@
   <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=flat-square&logo=npm&label=npm" alt="npm 版本"></a>
   <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=flat-square&logo=pypi&label=PyPI" alt="PyPI 版本"></a>
   <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI 状态"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-64748b?style=flat-square" alt="Business Source License 1.1"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
 <p align="center"><img src="docs/assets/demo-coding-workflow.gif" alt="Aria Code 真实终端录制：测试失败、读取代码、修改代码、测试通过" width="860"></p>
@@ -80,4 +80,6 @@ Aria 会根据所配置的权限模式，在编辑文件或运行命令前请求
 
 ## 参与贡献与许可
 
-欢迎参与贡献，见 [CONTRIBUTING.md](CONTRIBUTING.md)。Aria Code 使用 [Business Source License 1.1](LICENSE)；使用或再分发前请查看许可证中的具体参数。
+欢迎参与贡献，见 [CONTRIBUTING.md](CONTRIBUTING.md)。Aria Code 以 [Apache License 2.0](LICENSE) 开源。
+
+4.2.0 到 4.4.5 这些版本发布时使用的是 Business Source License 1.1，它们仍然按那份许可证的条款提供；4.1.2 及更早的版本是 MIT。已经授予出去的许可无法收回，所以每个版本都保留它发布时所用的许可证 —— 见 [NOTICE](NOTICE)。

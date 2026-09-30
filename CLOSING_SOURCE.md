@@ -1,14 +1,35 @@
 # 开源 → 闭源/商业化路线图 (Open-Core)
 
 像 Claude Code 那样"源码不公开、二进制可用"的目标,不需要一次性闭源整个项目。
-推荐 **open-core**:免费的 CLI 壳保持源码可见(已是 BSL 1.1),把**专有价值**编译后分发。
+推荐 **open-core**:CLI / runtime / 工具系统保持**真正开源**(Apache 2.0),把**专有价值**编译后分发。
 本仓库已为此铺好脚手架,下面是落地步骤。
+
+## 许可证已从 BSL 1.1 改为 Apache 2.0
+
+这是一个方向性的改变,不只是换个文件。BSL 的做法是"源码可见但禁止竞品",靠**许可证**保护商业价值;
+Apache 2.0 的做法是"核心彻底开放",靠**边界**保护商业价值 —— 把高价值逻辑移出公开仓库。
+
+对 open-core 来说后者其实更干净:BSL 让整个项目都不算开源,包括那些你本来乐意开放的部分,
+代价是开发者生态、贡献者和集成方。Apache 2.0 把这个代价换成了一个明确的工程任务 ——
+**把高价值逻辑移出公开仓库** —— 而这件事**大部分已经做完了**。
+
+`packages/quant_engine` 还有约 4600 行在这个仓库里,所以这一版把它们一起按
+Apache 2.0 发布了。Apache 2.0 的授权是**逐版本、不可撤回**的,已经发出去的
+版本不能事后收回 —— 所以这句话值得写清楚,而不是留给读者推断。
+
+但这不构成阻塞。审计的结论(见下面「阶段 2」和「剩下的还值得拆吗」)是:
+真正的护城河 —— `services/`、`agent_runtime/`、`risk/`、`analysis/`、
+`strategies/` —— **早就不在这个仓库里了**;留下的是 Dixon-Coles (1997)、
+Black-Scholes、Elo、Markowitz 这些**已发表方法的实现**,不是专有 IP。
+
+所以这里**不需要**在发版前先完成阶段 1 和阶段 2。这一段最初写的正是那个
+要求,那是在做审计之前写的,当时以为引擎整个都还在树里。
 
 ## 已就位的脚手架
 
 | 组件 | 作用 |
 |---|---|
-| `LICENSE` (BSL 1.1) | 源码可见但**禁止竞品/托管**;4 年后转 Apache 2.0 |
+| `LICENSE` (Apache 2.0) | 核心真正开源;保护靠仓库边界,不靠许可证条款 |
 | `licensing.py` | 功能授权闸门 —— 免费功能默认开放,专业功能需 license(支持 HMAC 签名) |
 | `packages/quant_engine/is_available()` | 可选导入边界 —— 引擎缺失时免费壳优雅降级 |
 | `tools/build_quant_engine.py` | 用 Nuitka 把专有引擎编译成 `.so`(无源码) |
@@ -17,7 +38,7 @@
 ## 分阶段执行
 
 ### 阶段 0 — 现在(已完成)
-- ✅ BSL 1.1 + PRIVACY + opt-in 同意。
+- ✅ Apache 2.0 + PRIVACY + opt-in 同意。
 - ✅ 专有数学已隔离在 `packages/quant_engine/`(期权定价、蒙特卡洛、Kelly、Dixon-Coles…)。
 - ✅ 调用点走 `try/except` + `is_available()`,缺引擎不崩 —— 其中两处 import 本身没有守卫,
   靠调用方的 `except Exception` 兜住;见 `tests/test_degrades_without_quant_engine.py`。
@@ -114,7 +135,9 @@ sports/tracker.py     ┘
 
 ## 法律与社区
 - **接受外部 PR 前先要求签 [CLA](CLA.md)** —— 否则贡献者保留版权,你将无法把含其代码的部分 relicense。
-- ≤4.1.2 的 MIT 版本不可撤销;BSL 仅对之后版本生效。正式商业化前请律师复核 LICENSE/PRIVACY/CLA。
+- 许可证是**逐版本**的,且都不可撤销:≤4.1.2 是 MIT,4.2.0–4.4.5 是 BSL 1.1,0.44.0 起是 Apache 2.0。
+  任何一版发出去之后都收不回来 —— 这正是为什么 `quant_engine` 的拆分要在下次发布之前做完。
+  正式商业化前请律师复核 LICENSE/NOTICE/PRIVACY/CLA。
 
 ## 要避免的坑
 - ❌ 把 license 校验当 IP 保护 —— 校验能被绕过;**真正的保护是编译**。
