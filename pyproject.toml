@@ -209,7 +209,20 @@ Issues = "https://github.com/artherahq/aria-code/issues"
 [tool.setuptools]
 
 [tool.setuptools.packages.find]
-where = ["."]
+# src, not ".". The package moved to src/aria_code in the restructure and this
+# was never updated, so packages.find matched nothing: the built wheel contained
+# six metadata entries and zero modules — 7 KB against the 1.75 MB that 4.4.2
+# published. Any release cut from this tree would have installed successfully and
+# then failed on `import aria_code`.
+#
+# It survived because nothing built a wheel and looked inside. The v4.4.2 branch
+# had already fixed it; main never received the fix, and the six-batch port of
+# that branch missed it because pyproject.toml counted as "both sides changed"
+# and was left on main's version.
+#
+# tests/test_wheel_is_not_empty.py builds a wheel and asserts it contains the
+# package.
+where = ["src"]
 # Real top-level packages (dirs with __init__.py). packages.find only matches
 # package directories — single-file top-level modules are declared in
 # [tool.setuptools].py-modules above, NOT here.
@@ -310,6 +323,9 @@ exclude = '''
 pythonpath = [".", "src", "src/aria_code"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow_packaging: builds and installs a real wheel; tens of seconds",
+]
 python_files = ["test_*.py"]
 filterwarnings = [
     "ignore:datetime\\.datetime\\.utcfromtimestamp\\(\\) is deprecated:DeprecationWarning:google\\.protobuf\\.internal\\.well_known_types",

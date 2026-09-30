@@ -172,3 +172,29 @@ jobs:
 
       - name: Every task must still start red
         run: python -m aria_code.evals.runner evals/suites/core.yaml --check
+
+  # ── The release artifact must actually install and run ──────────────────────
+  # Nothing here ever built a wheel and looked inside it, and three defects lived
+  # in that gap at once: packages.find pointed at the repo root instead of src/
+  # so the wheel held zero modules (7 KB against 4.4.2's 1.75 MB); the console
+  # script then died on `No module named 'aria_cli'` because the tree imports
+  # itself bare and only pyproject's pythonpath made that work; and CI installed
+  # with `pip install -e .`, which never exercises either.
+  #
+  # Separate job, not folded into the test matrix: it builds a wheel and creates a
+  # virtualenv, which is tens of seconds, and it must run on a machine with no
+  # source tree on the path.
+  packaging:
+    name: Wheel installs and runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build + test deps only
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      - name: Build the wheel, install it clean, run the console script
+        run: python -m pytest tests/test_wheel_is_installable.py -q

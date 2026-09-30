@@ -131,6 +131,52 @@ jobs:
         if: env.HAS_PYPI_TOKEN == 'true'
         run: uvx twine check dist/*
 
+      # twine check validates metadata and passes happily on a wheel that
+      # contains nothing else. A misconfigured packages.find made exactly that:
+      # six metadata entries, zero modules, 7 KB against the 1.75 MB that 4.4.2
+      # published — an install that succeeds and then fails on `import
+      # aria_code`. Since the token was unset the release skipped and it never
+      # shipped, which was luck, not a gate.
+      - name: The distribution must actually contain the package
+        if: env.HAS_PYPI_TOKEN == 'true'
+        shell: bash
+        run: |
+          python - <<'CHECK'
+          import pathlib, sys, tarfile, zipfile
+
+          MIN_MODULES = 100
+          problems = []
+
+          for wheel in pathlib.Path("dist").glob("*.whl"):
+              names = zipfile.ZipFile(wheel).namelist()
+              modules = [n for n in names if n.startswith("aria_code/") and n.endswith(".py")]
+              print(f"{wheel.name}: {len(modules)} modules")
+              if len(modules) < MIN_MODULES:
+                  problems.append(f"{wheel.name} holds {len(modules)} aria_code modules")
+              for needed in ("aria_code/aria_cli.py", "aria_code/apps/cli/main.py"):
+                  if needed not in names:
+                      problems.append(f"{wheel.name} is missing {needed}")
+
+          for sdist in pathlib.Path("dist").glob("*.tar.gz"):
+              with tarfile.open(sdist) as tar:
+                  modules = [n for n in tar.getnames()
+                             if "/src/aria_code/" in n and n.endswith(".py")]
+              print(f"{sdist.name}: {len(modules)} modules")
+              if len(modules) < MIN_MODULES:
+                  problems.append(f"{sdist.name} holds {len(modules)} aria_code modules")
+
+          if not list(pathlib.Path("dist").glob("*")):
+              problems.append("dist/ is empty — nothing was built")
+
+          if problems:
+              print("\nRefusing to publish:")
+              for p in problems:
+                  print(f"  - {p}")
+              print("\nCheck [tool.setuptools.packages.find] where in pyproject.toml.")
+              sys.exit(1)
+          print("\nOK: the distribution contains the package")
+          CHECK
+
       - name: Publish to PyPI
         if: env.HAS_PYPI_TOKEN == 'true'
         env:

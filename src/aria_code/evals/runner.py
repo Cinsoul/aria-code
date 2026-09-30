@@ -204,9 +204,29 @@ def main(argv: list[str] | None = None) -> int:
         # In check mode the only acceptable outcome is "every task is still
         # broken". A pass here means a fixture drifted green and the suite is
         # quietly measuring less than it claims.
-        drifted = [r.task_id for r in suite.results if r.outcome != FAIL]
+        #
+        # "Could not run" is reported separately from "drifted green" because
+        # they call for opposite responses and were previously indistinguishable:
+        # CI installed the package without pytest, every task errored with
+        # "environment is missing pytest", and the verdict said five fixtures had
+        # stopped being red. That reads as a fixture problem and sends whoever
+        # sees it to look at the fixtures, which are fine.
+        errored = [r for r in suite.results if r.outcome == ERROR]
+        drifted = [r.task_id for r in suite.results
+                   if r.outcome != FAIL and r.outcome != ERROR]
+
+        if errored:
+            print(f"\n✗ {len(errored)} task(s) could not run — this is an "
+                  f"environment problem, not a drifted fixture:")
+            for result in errored:
+                print(f"    {result.task_id}: {result.detail}")
+            print("\n  The suite declares what it needs with `requires:`. "
+                  "Install it and run again;")
+            print("  `pip install -e \".[dev]\"` covers the pytest the shipped "
+                  "suite asks for.")
         if drifted:
             print(f"\n✗ {len(drifted)} task(s) no longer start red: {', '.join(drifted)}")
+        if errored or drifted:
             return 1
         print(f"\n✓ all {len(suite.results)} task(s) still start red")
         return 0
