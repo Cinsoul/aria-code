@@ -16,7 +16,7 @@ Work in your project, use local or cloud models, and connect domain tools when y
   <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=flat-square&logo=npm&label=npm" alt="npm version"></a>
   <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=flat-square&logo=pypi&label=PyPI" alt="PyPI version"></a>
   <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI status"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-64748b?style=flat-square" alt="Business Source License 1.1"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
 <p align="center"><img src="docs/assets/demo-coding-workflow.gif" alt="Real Aria Code terminal recording: failing tests, source inspection, code edit, and passing tests" width="860"></p>
@@ -80,4 +80,6 @@ For the current command-line flags, run `aria-code --help`. For help inside the 
 
 ## Contributing and license
 
-Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Aria Code is distributed under the [Business Source License 1.1](LICENSE); review its parameters before using or redistributing the software.
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Aria Code is open source under the [Apache License, Version 2.0](LICENSE).
+
+Releases 4.2.0 through 4.4.5 were published under the Business Source License 1.1 and remain available under those terms; releases up to and including 4.1.2 were MIT. A license grant cannot be withdrawn from someone who already has it, so each version keeps the license it shipped with — see [NOTICE](NOTICE).

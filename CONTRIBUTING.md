@@ -168,4 +168,12 @@ Report security vulnerabilities to: `security@arthera.finance`
 
 ## License
 
-By contributing, you agree your contributions will be licensed under the MIT License.
+By contributing, you agree your contributions will be licensed under the
+[Apache License, Version 2.0](LICENSE) — the same license the project itself
+uses. This line used to say MIT, which had not been the project's license since
+4.2.0; a contributor reading it was being told the wrong terms.
+
+Note that Apache 2.0 includes an explicit patent grant (section 3) and requires
+that modified files carry a notice of change (section 4b). If you are
+contributing on behalf of an employer, check that you are authorized to grant
+those terms.
