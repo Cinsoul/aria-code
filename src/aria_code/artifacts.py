@@ -110,7 +110,7 @@ def _cleanup_empty_dirs(start: Path, stop: Path) -> None:
 def _project_artifact_root() -> Optional[Path]:
     """Return project-level artifact root from .ariarc when configured."""
     try:
-        from ariarc import AriaRC
+        from aria_code.ariarc import AriaRC
 
         rc = AriaRC.load()
         source = rc.source_path
@@ -305,6 +305,9 @@ def _notify_preview_session(record: ArtifactRecord) -> None:
     try:
         import asyncio
 
+        # Bare root: tests/test_preview_server.py patches `preview_server`,
+        # and the packaged root is a different module object — importing it
+        # here notified a session nothing was watching.
         from preview_server import get_active_session, thread_id_for
 
         session = get_active_session()

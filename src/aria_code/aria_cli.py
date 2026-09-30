@@ -1064,6 +1064,24 @@ except Exception as _exc:
     logger.debug("LSP tools init error: %s", _exc)
     LSP_SCHEMAS = []
 
+# ── Register repo-map tools (symbol index + symbol lookup) ────────────────────
+try:
+    from aria_code.runtime.repo_map import REPO_MAP_TOOLS, REPO_MAP_SCHEMAS
+    LOCAL_TOOLS.update(REPO_MAP_TOOLS)
+    logger.info("Registered %d repo-map tools", len(REPO_MAP_TOOLS))
+except Exception as _exc:
+    logger.debug("Repo-map tools init error: %s", _exc)
+    REPO_MAP_SCHEMAS: list = []  # type: ignore[no-redef]
+
+# ── Register artifact publishing (model-facing canvas tool) ───────────────────
+try:
+    from aria_code.tools.artifact_tools import ARTIFACT_TOOLS, ARTIFACT_TOOL_SCHEMAS
+    LOCAL_TOOLS.update(ARTIFACT_TOOLS)
+    logger.info("Registered %d artifact tools", len(ARTIFACT_TOOLS))
+except Exception as _exc:
+    logger.debug("Artifact tools init error: %s", _exc)
+    ARTIFACT_TOOL_SCHEMAS: list = []  # type: ignore[no-redef]
+
 # ── Register computer-use tools (browser automation + desktop control) ──────
 _HAS_COMPUTER_USE = False
 try:
@@ -1206,6 +1224,11 @@ if _HAS_COMPUTER_USE:
 # Make spawn_task / task_* and lsp_diagnostics visible to the model.
 LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(SUBAGENT_SCHEMAS))
 LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(LSP_SCHEMAS))
+# Without these two the tools are registered but have no schema, which
+# hides them from the model instead of gating them — the same defect
+# tests/test_tool_scope.py caught for the code-audit tools.
+LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(REPO_MAP_SCHEMAS))
+LOCAL_TOOL_SCHEMAS.extend(_wrap_bare_schemas(ARTIFACT_TOOL_SCHEMAS))
 
 
 
