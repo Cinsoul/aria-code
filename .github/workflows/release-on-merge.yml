@@ -67,11 +67,50 @@ jobs:
       - name: Confirm the three files agree
         run: python scripts/bump_version.py --check "v${{ steps.next.outputs.version }}"
 
+      # tests/test_version_consistency.py requires an entry for the current
+      # version, and it was right to: 4.3.0 shipped with no description of what
+      # changed. The first two automated releases (4.4.3, 4.4.4) bumped the
+      # version and left the changelog alone, so that guard went red on main —
+      # the automation has to write the entry, not the person who is no longer
+      # in the loop.
+      #
+      # One merge is one release, so the merge subject is the entry. It is a
+      # rolling log, not a curated one; a release worth more than a line gets a
+      # hand-written section added afterwards.
+      - name: Write the changelog entry
+        shell: bash
+        env:
+          SUBJECT: ${{ github.event.head_commit.message }}
+        run: |
+          VERSION="${{ steps.next.outputs.version }}"
+          # First line only: merge commits carry the PR body after a blank line.
+          LINE="$(printf '%s' "$SUBJECT" | head -1)"
+          python - "$VERSION" "$LINE" <<'PY'
+          import datetime, pathlib, sys
+
+          version, subject = sys.argv[1], sys.argv[2]
+          path = pathlib.Path("CHANGELOG.md")
+          text = path.read_text(encoding="utf-8")
+          if f"[{version}]" in text:
+              print(f"[{version}] already documented; leaving it alone")
+              raise SystemExit(0)
+
+          entry = (f"## [{version}] — {datetime.date.today().isoformat()}\n\n"
+                   f"- {subject}\n\n")
+          marker = "---\n\n"
+          if marker in text:
+              head, rest = text.split(marker, 1)
+              path.write_text(head + marker + entry + rest, encoding="utf-8")
+          else:
+              path.write_text(entry + text, encoding="utf-8")
+          print(f"Added [{version}]: {subject}")
+          PY
+
       - name: Commit and tag
         run: |
           git config user.name  "aria-release[bot]"
           git config user.email "aria-release[bot]@users.noreply.github.com"
-          git add pyproject.toml npm/package.json src/aria_code/_version.py
+          git add pyproject.toml npm/package.json src/aria_code/_version.py CHANGELOG.md
           git commit -m "release: v${{ steps.next.outputs.version }}"
           git tag "v${{ steps.next.outputs.version }}"
           # Push the commit and the tag together. Pushing the tag first would
