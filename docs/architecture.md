@@ -86,7 +86,15 @@ Two rules keep that boundary real:
    belongs on the open side, so that someone can write a pack without access to
    ours. What a *particular* pack computes can be proprietary.
 
-`packages/quant_engine` is currently still in this tree, so this version
-publishes it under Apache 2.0 too. `CLOSING_SOURCE.md` has the plan for moving
-it out; until that lands, rule 1 is the only thing separating the two sides, and
-rule 2 is aspirational for the finance pack specifically.
+Most of that boundary is already drawn. Six of the engine's subpackages —
+`services/`, `agent_runtime/`, `risk/`, `analysis/`, `strategies/` and
+`mcp_server.py` — are not in this repository; the open side imports them under
+rule 1 and degrades. What is still here (`stochastic/`, `sports/`, `backtest/`,
+`portfolio/`) is published under Apache 2.0 along with everything else, and
+`CLOSING_SOURCE.md` explains why extracting it too is not worth doing:
+it is implementations of published methods, not proprietary IP.
+
+`tests/test_engine_boundary.py` holds the split, and its load-bearing assertion
+is rule 1 — an *unguarded* import of an already-private subpackage is not a
+degradation but a crash in every public checkout, on a path that works on a
+developer machine with the private repository checked out beside it.

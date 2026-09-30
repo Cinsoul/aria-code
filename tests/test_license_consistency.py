@@ -107,15 +107,50 @@ class NoticeKeepsThePerVersionHistory(unittest.TestCase):
     def test_it_says_the_old_grants_cannot_be_withdrawn(self) -> None:
         self.assertRegex(self.notice, r"cannot be withdrawn|not\s+retroactive")
 
-    def test_the_quant_engine_carve_out_is_not_claimed_while_it_is_in_the_tree(self) -> None:
-        # CLOSING_SOURCE.md plans to move the engine to a private repository.
-        # Until that happens, NOTICE must not imply it is already outside the
-        # license -- the first draft of this NOTICE did exactly that.
+    def test_nothing_notice_calls_excluded_is_actually_in_the_tree(self) -> None:
+        """NOTICE says which engine subpackages this license does not cover.
+
+        Anything it names as outside must genuinely be absent, or the file is
+        telling recipients that code they received is unlicensed. The first
+        draft of this NOTICE claimed the whole engine was outside the
+        repository while 4,600 lines of it sat in the tree.
+
+        Checked against the tree rather than against a literal sentence, so
+        rewording the paragraph cannot quietly disable the check.
+        """
         engine = ROOT / "src" / "aria_code" / "packages" / "quant_engine"
-        in_tree = any(engine.rglob("*.py")) if engine.exists() else False
-        if in_tree:
-            self.assertNotIn("are not part of this repository", self.notice)
-            self.assertIn("quant_engine", self.notice)
+        # The names NOTICE lists as not covered.
+        claimed_absent = [
+            "services", "agent_runtime", "risk", "analysis", "strategies",
+            "mcp_server",
+        ]
+        for name in claimed_absent:
+            if name not in self.notice:
+                continue
+            with self.subTest(subpackage=name):
+                present = (engine / name).is_dir() or (engine / f"{name}.py").exists()
+                self.assertFalse(
+                    present,
+                    f"NOTICE says {name} is outside this repository, but it is in "
+                    f"the tree and therefore covered by this license",
+                )
+
+    def test_the_subpackages_that_are_in_the_tree_are_named_as_covered(self) -> None:
+        engine = ROOT / "src" / "aria_code" / "packages" / "quant_engine"
+        if not engine.is_dir():
+            self.skipTest("no quant_engine in this checkout")
+        in_tree = sorted(
+            d.name for d in engine.iterdir()
+            if d.is_dir() and not d.name.startswith(("_", "."))
+        )
+        self.assertTrue(in_tree, "expected engine subpackages in the tree")
+        for name in in_tree:
+            with self.subTest(subpackage=name):
+                self.assertIn(
+                    name, self.notice,
+                    f"{name}/ is in the tree and covered by this license, but "
+                    f"NOTICE does not mention it",
+                )
 
 
 if __name__ == "__main__":

@@ -38,8 +38,12 @@ integration, the repo map, the acceptance gate, the eval framework, the SDK,
 the domain packs -- and, as of this version, packages/quant_engine, whose
 source is still in the tree.
 
-That last point is deliberate to state rather than leave implied. CLOSING_SOURCE.md
-describes an open-core plan in which the quant engine is compiled and moved to a
-private repository; that move has not happened yet. Until it does, the engine's
-source is published under Apache 2.0 along with the rest, and the grant on each
-released version cannot be withdrawn afterwards.
+That last point is deliberate to state rather than leave implied, because a
+grant made on a released version cannot be withdrawn afterwards.
+
+What remains under packages/quant_engine is stochastic/, sports/, backtest/ and
+portfolio/. Six further subpackages -- services/, agent_runtime/, risk/,
+analysis/, strategies/ and mcp_server.py -- are not in this repository and are
+not covered by this license; the code here imports them optionally and degrades
+when they are absent. See CLOSING_SOURCE.md and
+tests/test_engine_boundary.py, which pins that split.
