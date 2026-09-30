@@ -145,11 +145,20 @@ def _highest_tag_triple():
     return max(triples) if triples else None
 
 
-# The 0.x line this project is moving to. While the files still say 4.x, the
-# counter has to be told where to start, because the released history is
-# numerically *higher* than everything that follows it — the one case where
-# "next" cannot mean "one more than what exists".
-FIRST_ZEROX_MINOR = 1
+# Where the 0.x counter starts, for the one case where "next" cannot mean "one
+# more than what exists": crossing out of the old 4.x line, which is numerically
+# higher than everything that follows it.
+#
+# 45 rather than 1 because minor is a release counter and this project has
+# already shipped: 44 pull requests were merged before the "one merge, one
+# release" rule existed, so 44 is the number of releases it would have had under
+# it. Codex reached 0.159 by shipping 196 times — the number means "how many",
+# nothing else, which is exactly why starting it at an invented figure would say
+# something untrue.
+#
+# Only ever raise this, and only with a basis. The counter must stay above every
+# tag that exists.
+FIRST_ZEROX_MINOR = 45
 
 
 def _zerox(triple) -> bool:

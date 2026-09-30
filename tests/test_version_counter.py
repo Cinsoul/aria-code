@@ -54,6 +54,42 @@ class TripleParsing(unittest.TestCase):
                 self.assertIsNone(bump._triple(bad))
 
 
+class CounterStart(unittest.TestCase):
+    """The 0.x counter's starting point, and why it can only go up.
+
+    It is 45 because minor counts releases and 44 pull requests were merged
+    before the "one merge, one release" rule existed. The number means "how
+    many" and nothing else — which is why it has a basis rather than being
+    picked to look established.
+    """
+
+    def test_the_start_is_above_every_tag_that_exists(self):
+        """Lowering it would make a release collide with a published version,
+        and PyPI refuses that after the tag is already pushed."""
+        tags = subprocess.run(["git", "tag", "--list", "v0.*"],
+                              capture_output=True, text=True, cwd=ROOT).stdout.split()
+        existing = [t for t in (bump._triple(name[1:]) for name in tags) if t]
+        if not existing:
+            self.skipTest("no 0.x tags yet")
+        self.assertGreater((0, bump.FIRST_ZEROX_MINOR, 0), max(existing),
+                           f"FIRST_ZEROX_MINOR={bump.FIRST_ZEROX_MINOR} is at or "
+                           "below a tag that already exists")
+
+    def test_the_files_agree_with_each_other(self):
+        versions = set(bump.read_versions().values())
+        self.assertEqual(len(versions), 1, f"version sources disagree: {bump.read_versions()}")
+
+    def test_the_recorded_version_is_one_below_the_next_release(self):
+        """The file records what has shipped; the automation publishes file + 1.
+        Off by one here and the chosen starting number is not the one released."""
+        current = bump._triple(bump.read_versions()["pyproject.toml"])
+        proc = subprocess.run([sys.executable, str(SCRIPT), "--next-release"],
+                              capture_output=True, text=True, cwd=ROOT)
+        nxt = bump._triple(proc.stdout.strip())
+        if current[0] == 0:
+            self.assertEqual(nxt, (0, current[1] + 1, 0))
+
+
 class NextReleaseOutput(unittest.TestCase):
     def _run(self):
         proc = subprocess.run(
