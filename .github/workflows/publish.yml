@@ -74,6 +74,32 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org/"
 
+      # The dispatcher lists the platform packages as optionalDependencies.
+      # build-native-binaries.yml publishes them from the same tag, in parallel
+      # with this workflow, so without waiting the dispatcher can land first —
+      # and npm skips an optionalDependency it cannot resolve, silently, leaving
+      # anyone who installs in that window with a launcher and no binary.
+      #
+      # Missing after the timeout is not fatal: that platform's build may have
+      # failed, and the dispatcher already reports an absent package by name.
+      # A whole release should not be held for one platform.
+      - name: Wait for this version's platform packages
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          KEYS="darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64"
+          DEADLINE=$(( $(date +%s) + 900 ))
+          for key in $KEYS; do
+            pkg="@artheras/aria-code-${key}@${VERSION}"
+            until npm view "$pkg" version >/dev/null 2>&1; do
+              if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+                echo "::warning::$pkg never appeared; publishing without it"
+                break
+              fi
+              echo "waiting for $pkg …"
+              sleep 20
+            done
+          done
+
       - name: Publish @artheras/aria-code to npm
         run: npm publish --access public
         working-directory: npm

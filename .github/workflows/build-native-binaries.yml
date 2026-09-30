@@ -191,3 +191,67 @@ jobs:
               --generate-notes
           fi
           gh release upload "${{ github.ref_name }}" release/* --clobber --repo "${{ github.repository }}"
+
+  # ── Publish the per-platform npm packages ───────────────────────────────────
+  # These must exist on npm before the dispatcher package is published, because
+  # the dispatcher lists them as optionalDependencies. publish.yml's publish-npm
+  # job therefore waits on this workflow's tag run; if a platform's build failed,
+  # its package is simply absent and the dispatcher says so by name rather than
+  # installing something broken.
+  publish-platform-packages:
+    name: Publish platform packages to npm
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+
+      - name: Assemble the platform packages
+        id: assemble
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Only pass a platform whose artifact actually arrived. A build that
+          # failed must not become an empty package.
+          ARGS=()
+          add() {   # add <platform-key> <artifact-dir> <cli-name> <mcp-name>
+            if [ -f "built/$2/$3" ]; then
+              ARGS+=(--binary "$1=built/$2/$3")
+              [ -f "built/$4/$3" ] && ARGS+=(--mcp "$1=built/$4/$3")
+            else
+              echo "::warning::no binary for $1 — its package will not be published"
+            fi
+          }
+          add darwin-arm64 aria-code-macos-arm64   aria-code-bin      aria-code-mcp-macos-arm64
+          add linux-x64    aria-code-linux-x64     aria-code-bin      aria-code-mcp-linux-x64
+          add win32-x64    aria-code-windows-x64   aria-code-bin.exe  aria-code-mcp-windows-x64
+          python scripts/make_platform_packages.py --version "$VERSION" \
+            --out npm/platforms "${ARGS[@]}"
+
+      - name: Publish each one
+        if: ${{ env.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm/platforms/*/; do
+            echo "── publishing $(basename "$dir")"
+            (cd "$dir" && npm publish --access public)
+          done
+
+      - name: Skipped notice
+        if: ${{ env.NPM_TOKEN == '' }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: echo "::warning::NPM_TOKEN not set — platform packages were built but not published."

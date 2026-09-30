@@ -1,152 +1,52 @@
 #!/usr/bin/env node
+"use strict";
 /**
- * aria-code — global CLI launcher
+ * Dispatcher. Finds the prebuilt binary for this platform and becomes it.
  *
- * Reads install metadata (written by postinstall.js) to find the correct
- * Python venv and aria_cli.py path, then delegates.
+ * This replaces a launcher that located a git clone, a venv and a Python
+ * interpreter, and a 651-line postinstall that created all three. Nothing is
+ * built or fetched at install time now: npm resolves one optionalDependency
+ * matching the platform, and this file execs what is inside it.
  *
- * Fallback chain:
- *   1. venv python from install-info
- *   2. system python3 / python in PATH
- *   3. friendly error with repair instructions
+ * The exec is a replacement, not a wrapper: signals, exit codes, stdin and the
+ * tty all belong to the binary. A wrapper would have to forward each of them
+ * and would get Ctrl-C subtly wrong.
  */
 
-"use strict";
-
 const { spawnSync } = require("child_process");
-const fs   = require("fs");
-const path = require("path");
-const { resolveAriaPaths, resolveAriaCliPath, ariaCliPythonPath } = require("../lib/paths");
+const {
+  platformKey,
+  binaryRequestFor,
+  unsupportedMessage,
+  missingPackageMessage,
+} = require("../lib/platform");
 
-const PLATFORM = process.platform;
-const PATHS = resolveAriaPaths();
-
-const C = {
-  reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
-  red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", cyan: "\x1b[36m",
-};
-
-// ── Read install info ─────────────────────────────────────────────────────────
-
-function readInstallInfo() {
-  for (const file of PATHS.infoCandidates) {
-    try {
-      if (fs.existsSync(file)) {
-        const info = JSON.parse(fs.readFileSync(file, "utf8"));
-        if (info && typeof info === "object") {
-          info._infoFile = file;
-          return info;
-        }
-      }
-    } catch (_) {
-      // Try the next candidate.
-    }
-  }
-  return null;
-}
-
-// ── Find python executable ────────────────────────────────────────────────────
-
-function findPython(info) {
-  // 1. Prefer the venv that belongs to the resolved ARIA_HOME. This prevents
-  // stale global install metadata from pairing an old environment with a new
-  // checkout when ARIA_HOME/ARIA_CODE_HOME is explicitly set.
-  const localVenvPython = PLATFORM === "win32"
-    ? path.join(PATHS.venvDir, "Scripts", "python.exe")
-    : path.join(PATHS.venvDir, "bin", "python");
-  if (fs.existsSync(localVenvPython)) {
-    return localVenvPython;
-  }
-  // 2. Use venv python from install metadata
-  if (info && info.venvPy && fs.existsSync(info.venvPy)) {
-    return info.venvPy;
-  }
-  // 3. System python
-  for (const cmd of ["python3", "python"]) {
-    const r = spawnSync(PLATFORM === "win32" ? "where" : "which", [cmd],
-      { encoding: "utf8", stdio: "pipe" });
-    if (r.status === 0) return r.stdout.trim().split("\n")[0];
-  }
-  return null;
-}
-
-// ── Find aria_cli.py ──────────────────────────────────────────────────────────
-
-function findAriaCli(info) {
-  const installDir = info && info.installDir ? info.installDir : PATHS.installDir;
-
-  // Each root is probed for both layouts (src/aria_code/aria_cli.py first, then
-  // the pre-migration root copy) — see resolveAriaCliPath in ../lib/paths.
-  const roots = [
-    PATHS.installDir,
-    installDir,
-    PATHS.legacyInstallDir,
-    // bundled alongside this script (dev/test only)
-    path.join(__dirname, "..", ".."),
-  ].filter(Boolean);
-
-  const fromResolvedHome = resolveAriaCliPath(PATHS.installDir);
-  if (fromResolvedHome) return fromResolvedHome;
-
-  // Metadata from an older postinstall still names the pre-src-layout path;
-  // trust it only when that file is really there.
-  if (info && info.ariaCli && fs.existsSync(info.ariaCli)) return info.ariaCli;
-
-  for (const root of roots) {
-    const found = resolveAriaCliPath(root);
-    if (found) return found;
-  }
-  return null;
-}
-
-// ── Main ─────────────────────────────────────────────────────────────────────
-
-const info    = readInstallInfo();
-const python  = findPython(info);
-const ariaCli = findAriaCli(info);
-const args    = process.argv.slice(2);
-const installDir = (info && info.installDir) || PATHS.installDir;
-
-if (!python) {
-  process.stderr.write(`
-${C.red}  aria-code: Python not found.${C.reset}
-
-  Run the installer to set up Python automatically:
-    ${C.cyan}npm install -g @artheras/aria-code${C.reset}
-
-  Or repair the installation:
-    ${C.cyan}npm explore -g @artheras/aria-code -- npm run repair${C.reset}
-
-  Runtime path:
-    ${C.dim}${installDir}${C.reset}
-
-  `);
+function fail(message) {
+  process.stderr.write(`${message}\n`);
   process.exit(1);
 }
 
-if (!ariaCli) {
-  process.stderr.write(`
-${C.red}  aria-code: aria_cli.py not found at ${installDir}${C.reset}
-
-  Repair the installation:
-    ${C.cyan}npm explore -g @artheras/aria-code -- npm run repair${C.reset}
-
-  You can override the runtime path with:
-    ${C.cyan}ARIA_HOME=/path/to/aria-code aria${C.reset}
-
-  `);
-  process.exit(1);
+function resolveBinary(name) {
+  const key = platformKey(process);
+  if (!key) fail(unsupportedMessage(process));
+  try {
+    return require.resolve(binaryRequestFor(key, name));
+  } catch {
+    fail(missingPackageMessage(key));
+  }
 }
 
-const result = spawnSync(python, [ariaCli, ...args], {
-  stdio: "inherit",
-  env: {
-    ...process.env,
-    // Ensure the venv's site-packages are used
-    VIRTUAL_ENV: info && info.venvDir ? info.venvDir : undefined,
-    PYTHONPATH:  ariaCliPythonPath(ariaCli),
-  },
-  windowsHide: true,
-});
+// argv[2..] is the user's command line; argv[0..1] are node and this script.
+const binary = resolveBinary("aria-code-bin");
+const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
 
-process.exit(result.status ?? 1);
+if (result.error) {
+  // ENOENT here means the package resolved but the file is gone or not
+  // executable — worth distinguishing from "package not installed", which the
+  // resolve step above already reported.
+  fail(`Could not run ${binary}\n${result.error.message}`);
+}
+// Signal deaths must not look like a clean exit: 128+signal is what a shell
+// reports, and CI reads the exit code.
+process.exit(result.signal ? 128 + (require("os").constants.signals[result.signal] || 0)
+                           : (result.status === null ? 1 : result.status));
