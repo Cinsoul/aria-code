@@ -58,8 +58,26 @@ def load_cli_config(
     *,
     sync_policy: Callable[[dict], None] | None = None,
 ) -> dict:
-    """Load config.json and merge with defaults (SettingsService-backed)."""
-    return build_settings_service(paths, defaults, sync_policy=sync_policy).load()
+    """Load config.json, merge with defaults, then apply the project's .ariarc.
+
+    The i18n/chat_routing imports below are bare on purpose: the tests
+    patch those modules, and the packaged root is a different module
+    object, so the packaged form left detect_system_lang unpatched.
+
+    The .ariarc overlay goes last so a repo that pins a model gets it for
+    everyone who opens it, without each developer editing their global config.
+    It is best-effort: a malformed project file must not stop the CLI from
+    starting, because the user would then have no way to run the tool that
+    would fix it.
+    """
+    config = build_settings_service(paths, defaults, sync_policy=sync_policy).load()
+    try:
+        from aria_code.ariarc import apply_to_config
+
+        apply_to_config(config)
+    except Exception:
+        pass
+    return config
 
 
 def save_cli_config(paths: AriaConfigPaths, cfg: dict) -> None:
