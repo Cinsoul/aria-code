@@ -28,11 +28,6 @@ def _detect_lang() -> str:
     return detect_system_lang()
 
 
-def _auto_select_model(ollama_url: str, fallback: str) -> str:
-    from apps.cli.i18n import auto_select_model
-    return auto_select_model(ollama_url, fallback=fallback)
-
-
 def build_settings_service(
     paths: AriaConfigPaths,
     defaults: dict,
@@ -47,7 +42,6 @@ def build_settings_service(
         defaults=defaults,
         normalize_provider=_normalize_provider,
         detect_lang=_detect_lang,
-        auto_select_model=_auto_select_model,
         on_loaded=sync_policy,
     )
 

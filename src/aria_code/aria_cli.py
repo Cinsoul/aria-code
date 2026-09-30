@@ -887,25 +887,15 @@ ARIA_TOOLS.extend([
 from aria_code.apps.cli.model_catalog import (
     MODELS, MODEL_ALIASES, _MODEL_FALLBACK_PREFIXES,
     get_model_cfg, resolve_model_key,  # noqa: F401 — re-exported for existing callers
+    is_provider_qualified, pick_best_installed_model,
 )
 
 
-
-def _pick_best_installed_model(installed, preferred: str = ""):
-    """从已安装模型中选出实际将使用的模型（预检与运行时共用此逻辑）。
-
-    优先精确匹配 preferred；否则按 _MODEL_FALLBACK_PREFIXES 能力顺序；
-    全部未命中才退化到字母排序第一个。installed 为空返回 None。
-    """
-    if not installed:
-        return None
-    if preferred and preferred in installed:
-        return preferred
-    for pref in _MODEL_FALLBACK_PREFIXES:
-        cand = next((m for m in sorted(installed) if m.startswith(pref)), None)
-        if cand:
-            return cand
-    return sorted(installed)[0]
+# The selection logic moved to model_catalog beside the prefix table it reads —
+# it is pure, and it was untestable here because importing this module pulls in
+# the whole interactive CLI. The old body ended in `sorted(installed)[0]`; see
+# model_catalog for what that did to a configured cloud model.
+_pick_best_installed_model = pick_best_installed_model
 
 
 
@@ -4141,9 +4131,14 @@ class ArtheraTerminal:
         # Resolve current model info
         current_id  = self.config.get("model", "qwen2.5:7b")
 
-        # ── 模型自动配对（现实优先）─────────────────────────────────────────
-        # 检测本机已安装的 Ollama 模型；若配置模型未安装，自动配对到最优
-        # 可用模型并持久化配置（与运行时 fallback 共用同一选择逻辑）。
+        # ── 模型自动配对（仅限本地模型）──────────────────────────────────────
+        # 检测本机已安装的 Ollama 模型；若配置的**本地**模型未安装，配对到
+        # 一个能力足够的可用模型并持久化（与运行时 fallback 共用选择逻辑）。
+        #
+        # 云端模型不参与配对。Ollama 的列表里永远没有 google/gemini-2.5-pro,
+        # 所以这个判断对云端配置恒为真 —— 以前它会把用户显式选的云端模型改掉
+        # 并 save_config() 落盘,每次启动都改一次。pick_best_installed_model
+        # 现在对 provider 前缀的 id 直接返回 None。
         self._auto_healed_from: Optional[str] = None   # 原配置模型（仅本次显示用）
         self._ollama_alive = False
         self._installed_models: set = set()

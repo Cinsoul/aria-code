@@ -248,7 +248,8 @@ def t(key: str, lang: Optional[str] = None, config: Optional[dict] = None) -> st
 
 
 # ---------------------------------------------------------------------------
-# Ollama model helpers (used by load_config on first run)
+# Ollama model helpers. No longer called during config load — see
+# SettingsService.load(), which no longer overrides the configured model.
 # ---------------------------------------------------------------------------
 
 _MODEL_PRIORITY = [
@@ -265,24 +266,32 @@ _MODEL_PRIORITY = [
 ]
 
 
-def auto_select_model(ollama_url: str = "http://localhost:11434",
-                      fallback: str = "qwen2.5-coder:1.5b") -> str:
-    """Query Ollama and return the best locally available model.
-
-    Returns *fallback* when Ollama is unreachable or no models are installed.
-    """
+def installed_ollama_models(ollama_url: str = "http://localhost:11434") -> set[str]:
+    """The model names Ollama reports, or an empty set if it cannot be reached."""
     try:
         import urllib.request as _ur
         import json as _json
         with _ur.urlopen(f"{ollama_url}/api/tags", timeout=3) as resp:
             data = _json.loads(resp.read())
-        installed = {m["name"] for m in data.get("models", [])}
-        if not installed:
-            return fallback
-        for pref in _MODEL_PRIORITY:
-            if pref in installed:
-                return pref
-        # Return alphabetically first installed model
-        return sorted(installed)[0]
+        return {m["name"] for m in data.get("models", [])}
     except Exception:
-        return fallback
+        return set()
+
+
+def preferred_installed_model(installed: set[str]) -> Optional[str]:
+    """The best model from *installed* that this list vouches for, else None.
+
+    Pure, so it is testable without a running Ollama.
+
+    Note what this does NOT do: there is no alphabetical last resort. The
+    function it replaced (``auto_select_model``) ended with
+    ``sorted(installed)[0]``, and it was called during config load to overwrite
+    the caller's default model. A machine with one stray 0.5B model got that
+    model as its agent. Declining to answer is the correct answer when nothing
+    on the curated list is present; ``model_catalog.pick_best_installed_model``
+    is the richer version that also consults the capability registry.
+    """
+    for pref in _MODEL_PRIORITY:
+        if pref in installed:
+            return pref
+    return None
