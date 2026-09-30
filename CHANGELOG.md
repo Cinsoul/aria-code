@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.46.0] — 2026-09-30
+
+- Merge pull request #53 from Cinsoul/chore/apache-2.0
+
 ## [0.45.0] — 2026-09-30
 
 - Merge pull request #52 from Cinsoul/fix/release-workflow-permissions
