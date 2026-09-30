@@ -266,6 +266,23 @@ def make_provider_fn(
             )
 
         async def run_ollama(_on_token):
+            if route == "ollama":
+                # stream_ollama still borrows 12 names from aria_cli's module
+                # globals and only resolves them after that module's import-time
+                # rebind, so an out-of-CLI caller has to import it first. Doing
+                # it here rather than at the caller's import time means only the
+                # route that needs it pays: measured, `import aria_cli` is 1766ms
+                # against 63ms for the daemon's own dependencies, and a
+                # Vertex/Gemini config routes to "configured", which never
+                # touches stream_ollama. The daemon was paying 1.7s to forward an
+                # alert it then analysed through the cloud.
+                #
+                # Idempotent and cached by sys.modules, so the second alert pays
+                # nothing. Inside the function, not the module, because importing
+                # aria_cli at this module's import time would put the cost back
+                # on every consumer.
+                import aria_cli  # noqa: F401  (side effect: rebinds stream_ollama)
+
             selected = (
                 OllamaProvider(ollama_url, model, system_override=system_override)
                 if route == "ollama" else
