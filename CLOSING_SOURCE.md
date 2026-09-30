@@ -19,7 +19,8 @@
 ### 阶段 0 — 现在(已完成)
 - ✅ BSL 1.1 + PRIVACY + opt-in 同意。
 - ✅ 专有数学已隔离在 `packages/quant_engine/`(期权定价、蒙特卡洛、Kelly、Dixon-Coles…)。
-- ✅ 所有调用点走 `try/except` + `is_available()`,缺引擎不崩。
+- ✅ 调用点走 `try/except` + `is_available()`,缺引擎不崩 —— 其中两处 import 本身没有守卫,
+  靠调用方的 `except Exception` 兜住;见 `tests/test_degrades_without_quant_engine.py`。
 
 ### 阶段 1 — 编译专有引擎
 ```bash
@@ -30,10 +31,31 @@ python tools/build_quant_engine.py --build     # 产出 dist_compiled/*.so
 - 发布带 `.so`(而非 `.py`)的 wheel;反编译成本极高 ≈ 实质闭源。
 - 免费壳把它作为**可选依赖** `import`,无授权时降级。
 
-### 阶段 2 — 拆库
-- 把 `packages/quant_engine` 移到**独立私有仓**(如 `arthera-quant`)。
-- 私有仓 CI 跑阶段 1 的编译,发布到**私有 index**(或随付费账户分发)。
-- 公开仓删除该目录;`is_available()` 自动返回 False,免费壳照常工作。
+### 阶段 2 — 拆库(**大部分已经完成**,本文档此前没有反映这一点)
+
+审计当前公开仓的结果:引擎的六个子包**已经不在这个仓库里了**。
+
+| 子包 | 状态 | 内容 |
+|---|---|---|
+| `services/` | **私有** | 企业财务、Stripe 分析、A 股次日预测服务 |
+| `agent_runtime/` | **私有** | quant strategist agent |
+| `risk/` | **私有** | risk-compliance agent |
+| `analysis/` | **私有** | signal pipeline |
+| `strategies/` | **私有** | 策略基类 |
+| `mcp_server.py` | **私有** | 引擎自己的 MCP server |
+| `stochastic/` | 公开,1649 行 | Black-Scholes、CRR 二叉树、SVI、Itô、Kelly、蒙特卡洛 |
+| `sports/` | 公开,2705 行 | Dixon-Coles、Elo、form、h2h、calibrator、tracker |
+| `backtest/` | 公开,163 行 | core、engine |
+| `portfolio/` | 公开,98 行 | 均值-方差优化 |
+
+公开侧对私有子包的 import 全部走守卫并降级(`backtest_cmds.py` 那句
+`except ImportError` 下面就写着 "Moat feature")。也就是说**护城河已经搬走了**。
+
+`tests/test_engine_boundary.py` 把这条边界钉住了,其中最重要的一条不变量是:
+**对已私有子包的 import 必须有守卫**。没守卫的 import 只在公开 checkout 里炸,
+而开发机旁边就放着私有仓,永远测不出来。
+
+剩下的 4615 行还要不要搬走,是个需要单独判断的问题 —— 见下面「剩下的还值得拆吗」。
 
 ### 阶段 3 — 授权与付费
 - 用 `licensing.py`:专业功能调 `require_feature("...")`。
@@ -43,6 +65,52 @@ python tools/build_quant_engine.py --build     # 产出 dist_compiled/*.so
 ### 阶段 4 — 服务端化(最强护城河)
 - 最高价值逻辑(实时因子、ML 训练、组合优化)逐步迁到**后端 API**。
 - 服务端代码天生不可分发;客户端只拿结果。Claude Code 的核心能力也在服务端。
+
+## 剩下的还值得拆吗
+
+先看公开侧**实际用到**的是哪些 —— 只有三个模块有外部 import:
+
+| 模块 | 被谁用 |
+|---|---|
+| `sports/predictor` | `football_data_client`、`football_agent` |
+| `sports/tracker` | `football_data_client` |
+| `stochastic/options_pricing` | `analysis_cmds`(只用 `black_scholes`) |
+
+其余全部只被引擎内部调用,`sports/ml_model.py` 连内部都没人调(它自己的
+docstring 写明了「未接入预测路径,这是有意的」)。
+
+再看这些模块**是什么**。它们的 docstring 自己交代得很清楚:
+
+- `dixon_coles.py` —— 「实现 Dixon & Coles (1997) 经典论文的完整模型」
+- `elo.py` —— World Football Elo,公式就写在 docstring 里
+- `options_pricing.py` —— Black-Scholes (1973)、CRR (1979)、SVI 参数化;
+  标题写的是「Citadel / SIG **风格**」,即仿其风格,不是其专有实现
+- `portfolio/optimizer.py` —— `scipy.optimize.minimize` 上的 Markowitz 均值-方差
+
+**这些是已发表方法的实现,不是专有 IP。** 教科书和论文里都有。
+
+所以拆走它们的收益接近于零,代价却是实打实的:公开版的 `/football` 预测和
+`black_scholes` 会一起消失 —— 从开源产品里拿掉能用的功能,换不到任何 IP 保护。
+
+**结论:阶段 2 对这四个子包不值得做。** 真正的护城河(services / agent_runtime /
+risk / analysis / strategies)已经在私有仓,阶段 3(授权)和阶段 4(服务端化)
+才是后面该投入的方向。
+
+### 如果以后还是要拆,先知道这一点
+
+`sports/` **不是自包含的**。五个文件反向依赖公开侧:
+
+```
+sports/predictor.py   ┐
+sports/ml_model.py    │
+sports/elo.py         ├─→ from aria_code.packages.aria_core.paths import aria_home
+sports/calibrator.py  │
+sports/tracker.py     ┘
+```
+
+方向本身是对的(私有依赖公开,而不是反过来),但它意味着私有仓**必须把
+`aria-code` 列为依赖**,而不是简单 `cp -r` 一个目录就能独立跑起来。
+`stochastic/`、`backtest/`、`portfolio/` 没有这个问题,只依赖 numpy / pandas / scipy。
 
 ## 法律与社区
 - **接受外部 PR 前先要求签 [CLA](CLA.md)** —— 否则贡献者保留版权,你将无法把含其代码的部分 relicense。
