@@ -15,6 +15,15 @@
  * that, kept pure so it can be tested without a binary present.
  */
 
+// All five are built by build-native-binaries.yml — macOS on macos-14 and
+// macos-15-intel, Linux on ubuntu-latest and ubuntu-24.04-arm, Windows on
+// windows-latest. Both references ship these same platforms (Codex six,
+// Claude Code eight, the extra two being musl variants), and every runner here
+// is GitHub-hosted, so each one is a native build.
+//
+// Not covered: musl (Alpine). A glibc binary does not run there, which is why
+// Claude Code ships linux-x64-musl and linux-arm64-musl separately. Anyone on
+// Alpine gets the unsupported message and `pip install aria-code`.
 const PLATFORM_KEYS = Object.freeze([
   "darwin-arm64",
   "darwin-x64",

@@ -4,6 +4,46 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [4.4.4] — 2026-09-30
+
+### Changed
+- npm install now ships a prebuilt binary per platform instead of bootstrapping
+  at install time. The dispatcher has no runtime dependencies and runs no
+  install-time code; the 651-line postinstall (Xcode CLT → Homebrew → Python →
+  git clone → venv → pip) is gone, along with lib/paths.js and lib/venv.js whose
+  only remaining callers were their own tests. npm/ went from 1055 lines to 152.
+
+## [4.4.3] — 2026-09-30
+
+Two months of work that had been released as 4.4.2 from a branch that never
+merged, brought onto main in six verified batches, plus the release machinery
+around it.
+
+### Added
+- Domain packs (finance, logistics, payments, realty), the acceptance gate and
+  the repo map.
+- Workspace service, project review, artifact publishing.
+- Eval harness, cloud memory, LSP tools.
+- One merge to main is now one patch release; the patch component grows without
+  bound.
+
+### Fixed
+- `-p` was not agentic: it made one provider round, advertised tool schemas that
+  nothing executed, and never fed tool results back. CI, pipes and the eval
+  harness got a chat reply where the REPL would have done the work.
+- `scripts/bump_version.py` pointed at a path that has not existed since the
+  src/ restructure, so `--check` — the first job `publish.yml` runs on a tag —
+  died with FileNotFoundError. Releases could not start.
+- Two enterprise tools invented data: financial statements returned a DuPont
+  analysis from a company name alone, and the Stripe tool returned a positive
+  payment volume and MRR from a business name alone. Both now refuse.
+- MCP re-registration duplicated every tool schema. Vertex rejects such a
+  request outright with "Duplicate function declaration found".
+- Tools registered with no schema (invisible to the model) and schemas with no
+  handler (offered but unrunnable) — both directions, with a guard for each.
+- `_rebind_module_function_globals` dropped `__kwdefaults__`, so every rebound
+  function's keyword-only parameters silently became required.
+
 ## [4.4.2] — 2026-08-27
 
 ### Fixed

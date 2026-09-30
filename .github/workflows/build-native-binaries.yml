@@ -21,8 +21,21 @@ env:
 
 jobs:
   build-macos:
-    name: Build (macOS arm64)
-    runs-on: macos-14
+    # A matrix rather than a second copy of this job: the signing and
+    # notarization steps below are 40 lines that must stay identical on both
+    # architectures, and duplicating them is how one of them silently stops
+    # being signed. macos-15-intel is a GitHub-hosted x64 runner, so this is a
+    # native build on both legs — no cross-compilation.
+    name: Build (macOS ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-15-intel
     env:
       # Graceful skip if these secrets aren't configured — see below. Add
       # them (repo Settings → Secrets) once you have a Developer ID cert to
@@ -76,11 +89,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: aria-code-macos-arm64
+          name: aria-code-macos-${{ matrix.arch }}
           path: dist-native/dist/${{ env.BIN_NAME }}
       - uses: actions/upload-artifact@v4
         with:
-          name: aria-code-mcp-macos-arm64
+          name: aria-code-mcp-macos-${{ matrix.arch }}
           path: dist-native/dist/${{ env.MCP_BIN_NAME }}
 
   build-windows:
@@ -120,8 +133,20 @@ jobs:
           path: dist-native/dist/${{ env.MCP_BIN_NAME }}.exe
 
   build-linux:
-    name: Build (Linux x64)
-    runs-on: ubuntu-latest
+    # ubuntu-24.04-arm is a GitHub-hosted arm64 runner, so arm64 builds natively
+    # here too. linux-arm64 is the growing side of this list — Graviton, GCP
+    # Axion, Ampere, ARM CI runners, and any linux/arm64 container on an Apple
+    # Silicon machine. Without a binary all of those fall back to pip.
+    name: Build (Linux ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -140,7 +165,7 @@ jobs:
         run: dist-native/dist/${{ env.BIN_NAME }} --version
       - uses: actions/upload-artifact@v4
         with:
-          name: aria-code-linux-x64
+          name: aria-code-linux-${{ matrix.arch }}
           path: dist-native/dist/${{ env.BIN_NAME }}
       - name: Run PyInstaller for the MCP server binary (--onefile)
         run: >
@@ -152,7 +177,7 @@ jobs:
         run: dist-native/dist/${{ env.MCP_BIN_NAME }} --version
       - uses: actions/upload-artifact@v4
         with:
-          name: aria-code-mcp-linux-x64
+          name: aria-code-mcp-linux-${{ matrix.arch }}
           path: dist-native/dist/${{ env.MCP_BIN_NAME }}
 
   attach-to-release:
@@ -166,16 +191,28 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Rename artifacts for release
+      # Derived from what actually arrived, not a hand-written list. The list
+      # was six cp lines; adding darwin-x64 and linux-arm64 means ten, and a
+      # forgotten line is a binary that builds, uploads as an artifact, and
+      # never reaches the release. A platform whose build failed is simply
+      # absent here instead of failing this step.
+      - name: Collect the artifacts that arrived
+        # Explicit bash: the nullglob below is a bashism, and a runner default
+        # that is not bash would silently copy a literal glob.
+        shell: bash
         run: |
           mkdir -p release
-          cp artifacts/aria-code-macos-arm64/${{ env.BIN_NAME }} release/aria-code-macos-arm64
-          cp artifacts/aria-code-windows-x64/${{ env.BIN_NAME }}.exe release/aria-code-windows-x64.exe
-          cp artifacts/aria-code-linux-x64/${{ env.BIN_NAME }} release/aria-code-linux-x64
-          cp artifacts/aria-code-mcp-macos-arm64/${{ env.MCP_BIN_NAME }} release/aria-code-mcp-macos-arm64
-          cp artifacts/aria-code-mcp-windows-x64/${{ env.MCP_BIN_NAME }}.exe release/aria-code-mcp-windows-x64.exe
-          cp artifacts/aria-code-mcp-linux-x64/${{ env.MCP_BIN_NAME }} release/aria-code-mcp-linux-x64
-          chmod +x release/aria-code-macos-arm64 release/aria-code-linux-x64 release/aria-code-mcp-macos-arm64 release/aria-code-mcp-linux-x64
+          shopt -s nullglob
+          for dir in artifacts/aria-code-*/; do
+            slug="$(basename "$dir")"          # e.g. aria-code-mcp-linux-arm64
+            for file in "$dir"*; do
+              case "$file" in
+                *.exe) cp "$file" "release/${slug}.exe" ;;
+                *)     cp "$file" "release/${slug}" && chmod +x "release/${slug}" ;;
+              esac
+            done
+          done
+          echo "Attaching:"; ls -l release/
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -234,7 +271,9 @@ jobs:
             fi
           }
           add darwin-arm64 aria-code-macos-arm64   aria-code-bin      aria-code-mcp-macos-arm64
+          add darwin-x64   aria-code-macos-x64     aria-code-bin      aria-code-mcp-macos-x64
           add linux-x64    aria-code-linux-x64     aria-code-bin      aria-code-mcp-linux-x64
+          add linux-arm64  aria-code-linux-arm64   aria-code-bin      aria-code-mcp-linux-arm64
           add win32-x64    aria-code-windows-x64   aria-code-bin.exe  aria-code-mcp-windows-x64
           python scripts/make_platform_packages.py --version "$VERSION" \
             --out npm/platforms "${ARGS[@]}"
