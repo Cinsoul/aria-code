@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [4.4.5] — 2026-09-30
+
+- Merge pull request #45 from Cinsoul/feat/binaries-intel-and-arm64
+
 ## [4.4.4] — 2026-09-30
 
 ### Changed
