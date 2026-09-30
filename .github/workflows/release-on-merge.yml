@@ -24,8 +24,26 @@ on:
   push:
     branches: [main]
 
+# The union of what this workflow and everything it calls need. A called
+# workflow's jobs cannot request more than the caller's GITHUB_TOKEN was
+# granted: anything not listed here is `none` for them, and GitHub rejects the
+# whole file before running a single job ("the workflow is requesting
+# 'packages: write', but is only allowed 'contents: write'").
+#
+# That is what happened. When release-on-merge started *calling* publish.yml
+# instead of relying on the tag to trigger it, publish.yml's jobs kept asking
+# for packages: write (GitHub Packages) and id-token: write (npm provenance,
+# PyPI Trusted Publishing) while this file still granted only contents: write.
+# Every merge from #48 onward failed with startup_failure — no tag, no release,
+# and nothing red anywhere except a workflow run nobody was watching. Four
+# merges shipped nothing.
+#
+# tests/test_release_workflow_permissions.py now fails if a called workflow
+# asks for a scope this list does not cover.
 permissions:
-  contents: write
+  contents: write     # tag, push the bump commit, create the GitHub release
+  packages: write     # publish-github-packages
+  id-token: write     # npm provenance, PyPI Trusted Publishing (OIDC)
 
 concurrency:
   # Two merges landing together must not race to claim the same patch number.
