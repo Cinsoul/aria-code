@@ -536,3 +536,85 @@ def get_model_cfg(model_str: str) -> dict:
         }
     # Last resort fallback — use qwen7b (sonata) settings as a safe default
     return MODELS.get("sonata", MODELS.get("qwen7b", next(iter(MODELS.values()))))
+
+
+# ── Choosing a local model when the configured one is not installed ──────────
+# This used to live in aria_cli as _pick_best_installed_model, and it ended with
+# `return sorted(installed)[0]`. Two things went wrong with that.
+#
+# First, the caller in print_header() asks "is config['model'] in the set Ollama
+# reports?" — and a cloud id is NEVER in that set, because Ollama only lists
+# local models. So for anyone running google/gemini-2.5-pro (the shipped
+# default) with Ollama installed, the answer was always no, the "heal" branch
+# always fired, and print_header() then persisted the result with save_config().
+# A deliberate `/model google/gemini-2.5-pro` was overwritten on every startup.
+#
+# Second, the alphabetical last resort answered with whatever sorted first.
+# Measured before the fix, with google/gemini-2.5-pro configured:
+#
+#   installed {qwen2.5:7b, llama3.2:3b}            -> qwen2.5:7b
+#   installed {aardvark-tiny:1b, zzz-exp:0.5b}     -> aardvark-tiny:1b
+#   installed {llama3.2:1b}, claude-sonnet-4 cfg   -> llama3.2:1b
+#
+# A 0.5B model that sorts early becoming the agent's brain is not a fallback,
+# it is a silent downgrade to something that cannot hold a tool call together.
+#
+# So: cloud choices are never healed from a local list, and a model only
+# qualifies if the capability registry says it can handle coding. When nothing
+# qualifies, this returns None and the caller leaves the configuration alone.
+
+def is_provider_qualified(model: str) -> bool:
+    """True for ids that name their own provider ("google/gemini-2.5-pro").
+
+    Ollama serves namespaced community models such as "hf.co/user/model", whose
+    first segment is a host rather than a backend — those are local, so the
+    check is against the known provider prefixes, not merely against "/".
+    """
+    name = (model or "").strip().lower()
+    if "/" not in name:
+        return False
+    head = name.split("/", 1)[0]
+    return head in _KNOWN_PROVIDER_PREFIXES
+
+
+_KNOWN_PROVIDER_PREFIXES = frozenset({
+    "openai", "anthropic", "google", "xai", "deepseek", "groq", "together",
+    "dashscope", "lmstudio", "siliconflow", "moonshot", "zhipu", "mistral",
+    "cohere", "perplexity", "baidu", "ernie", "qianfan", "ollama",
+})
+
+
+def _is_capable_enough(model: str) -> bool:
+    """True if the capability registry vouches for *model* on coding work."""
+    if not _HAS_MODEL_CAP:
+        # Without the registry there is no basis for vouching, so don't.
+        return False
+    from model_capability import can_handle_coding, is_unknown_model
+
+    cap = get_model_capability(model)
+    return not is_unknown_model(cap) and can_handle_coding(cap)
+
+
+def pick_best_installed_model(installed, preferred: str = "") -> str | None:
+    """Pick a local model to use when *preferred* is not installed.
+
+    Returns None — meaning "leave the configuration alone" — when *preferred*
+    names a cloud provider, or when no installed model is one the capability
+    registry vouches for.
+    """
+    if not installed:
+        return None
+    if preferred and preferred in installed:
+        return preferred
+    # A cloud model's absence from the local list says nothing about the user's
+    # intent, so it is not grounds for switching them to a local model.
+    if is_provider_qualified(preferred):
+        return None
+    for prefix in _MODEL_FALLBACK_PREFIXES:
+        match = next((m for m in sorted(installed) if m.startswith(prefix)), None)
+        if match:
+            return match
+    # No curated match. Take a capable installed model if there is one, in a
+    # deterministic order; otherwise decline rather than guess.
+    capable = sorted(m for m in installed if _is_capable_enough(m))
+    return capable[0] if capable else None

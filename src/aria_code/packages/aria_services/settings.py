@@ -46,7 +46,10 @@ class SettingsService:
     # Optional environment hooks (all safe to omit):
     normalize_provider: Optional[Callable[[str], str]] = None
     detect_lang: Optional[Callable[[], str]] = None
-    auto_select_model: Optional[Callable[[str, str], str]] = None
+    # There was an auto_select_model hook here. It probed Ollama on first run
+    # and replaced the caller's default model with whatever was installed; see
+    # load(). Removed rather than left unwired, so it is not reconnected by
+    # someone who finds an unused hook and assumes it should be doing something.
     on_loaded: Optional[Callable[[dict], None]] = None  # e.g. CLI policy sync
     stale_model_prefixes: tuple = STALE_ARIA_MODEL_PREFIXES
 
@@ -70,13 +73,19 @@ class SettingsService:
             except Exception:
                 pass
 
+        # First run: the defaults stand as written. This used to probe Ollama
+        # here and overwrite cfg["model"] with whatever was installed, which
+        # contradicted the comment above DEFAULT_MODEL in apps/cli/bootstrap.py
+        # -- "provider configuration is the user's to make ... the code's job is
+        # to have a sane default and then get out of the way". It also cost a
+        # 3s HTTP timeout on every first start, and it was not needed for
+        # discoverability: the banner already reports "Ollama online · N models"
+        # (ui/banner.ollama_status_label), so a user with local models can see
+        # them and run /model.
         cfg = dict(self.defaults)
         try:
             if self.detect_lang is not None:
                 cfg["ui_lang"] = self.detect_lang()
-            if self.auto_select_model is not None:
-                ollama_url = cfg.get("ollama_url", "http://localhost:11434")
-                cfg["model"] = self.auto_select_model(ollama_url, self.defaults.get("model", ""))
         except Exception:
             cfg["ui_lang"] = "en"
         cfg.setdefault("ui_lang", "en")

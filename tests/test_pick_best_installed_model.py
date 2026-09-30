@@ -46,9 +46,18 @@ class PickBestInstalledModelTests(unittest.TestCase):
         installed = {"gpt-oss:20b", "gpt-oss:120b-cloud"}
         self.assertEqual(_pick_best_installed_model(installed), "gpt-oss:120b-cloud")
 
-    def test_no_prefix_matches_falls_back_to_alphabetically_first(self):
+    def test_no_prefix_matches_and_nothing_capable_declines(self):
+        # This used to assert "aaa-custom-model" — the alphabetically first
+        # installed model. That assertion documented actual behavior rather than
+        # a decision, as the sibling test above says in so many words, and the
+        # behavior was the bug this module's own docstring warns about: it
+        # silently changed which model answers the user. An unregistered model
+        # that happens to sort early is not a fallback, it is a downgrade to
+        # something the capability registry cannot vouch for.
+        #
+        # Declining (None) means the caller leaves the configuration alone.
         installed = {"zzz-custom-model", "aaa-custom-model"}
-        self.assertEqual(_pick_best_installed_model(installed), "aaa-custom-model")
+        self.assertIsNone(_pick_best_installed_model(installed))
 
     def test_preferred_empty_string_is_treated_as_not_preferred(self):
         installed = {"qwen2.5:7b"}
