@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - "v*"
+  # Called directly by release-on-merge.yml. A tag pushed with
+  # GITHUB_TOKEN does not start a new workflow run — GitHub suppresses
+  # that to prevent recursion — so v0.1.0 and v0.2.0 were tagged and
+  # never published, silently. Being callable removes the need for a
+  # PAT and makes a publish failure fail the run that caused it.
+  workflow_call:
+    inputs:
+      tag:
+        description: "The vX.Y.Z tag to publish"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -22,7 +33,7 @@ jobs:
       - name: pyproject / package.json / aria_cli.py must agree with the tag
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            python scripts/bump_version.py --check "${{ github.ref_name }}"
+            python scripts/bump_version.py --check "${{ inputs.tag || github.ref_name }}"
           else
             python scripts/bump_version.py --check ${{ github.event.inputs.version }}
           fi
@@ -34,7 +45,7 @@ jobs:
     # v4.3.0 干脆没有 release。这里创建，且刻意排在最前：二进制要构建好几分钟，
     # 等它们跑完时 release 早就在了。
     name: Create GitHub Release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(inputs.tag || github.ref_name, 'v')
     needs: verify-version
     runs-on: ubuntu-latest
     permissions:
@@ -48,12 +59,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # 幂等：重跑 workflow 或手工先建过都不该失败
-          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "Release ${{ github.ref_name }} already exists — leaving it as is."
+          if gh release view "${{ inputs.tag || github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ inputs.tag || github.ref_name }} already exists — leaving it as is."
           else
-            gh release create "${{ github.ref_name }}" \
+            gh release create "${{ inputs.tag || github.ref_name }}" \
               --repo "${{ github.repository }}" \
-              --title "${{ github.ref_name }}" \
+              --title "${{ inputs.tag || github.ref_name }}" \
               --generate-notes
           fi
 
@@ -84,8 +95,11 @@ jobs:
       # failed, and the dispatcher already reports an absent package by name.
       # A whole release should not be held for one platform.
       - name: Wait for this version's platform packages
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
           KEYS="darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64"
           DEADLINE=$(( $(date +%s) + 900 ))
           for key in $KEYS; do
