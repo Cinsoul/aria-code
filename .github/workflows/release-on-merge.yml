@@ -1,0 +1,86 @@
+# One merge to main = one patch release.
+#
+# The patch component grows without bound (4.4.3 → 4.4.4 → … → 4.4.120), which
+# is how Claude Code ships: 526 versions, a median of 0.9 days apart, the number
+# used as a counter rather than a summary. Codex does the same on minor. What
+# makes small version numbers possible is not discipline about numbering — it is
+# that each release contains one merge. Before this, a release here carried
+# 65–96 commits (v4.4.1 → v4.4.2 was 96 commits over 8 days).
+#
+# This workflow only creates the tag. publish.yml already owns everything after
+# that: it verifies the three version files agree with the tag, refuses to
+# publish a commit that is not an ancestor of main, creates the GitHub release,
+# and publishes to npm, PyPI and GitHub Packages.
+name: Release on merge
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Two merges landing together must not race to claim the same patch number.
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  tag-next-patch:
+    name: Tag the next patch
+    runs-on: ubuntu-latest
+    # The bump commit this job pushes lands on main and would trigger the
+    # workflow again. Skipping on its own marker is what stops the loop;
+    # [skip ci] alone would not, because that only suppresses some providers.
+    if: |
+      !startsWith(github.event.head_commit.message, 'release: v') &&
+      !contains(github.event.head_commit.message, '[skip release]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags: --next-patch compares pyproject against the
+          # highest existing tag, and a shallow clone has neither.
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Work out the next version
+        id: next
+        run: |
+          VERSION="$(python scripts/bump_version.py --next-patch)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Next release: v$VERSION"
+
+      - name: Refuse if that tag already exists
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.next.outputs.version }}" >/dev/null; then
+            echo "::error::v${{ steps.next.outputs.version }} already exists. Nothing was published."
+            exit 1
+          fi
+
+      - name: Set the version in all three files
+        run: python scripts/bump_version.py "${{ steps.next.outputs.version }}"
+
+      - name: Confirm the three files agree
+        run: python scripts/bump_version.py --check "v${{ steps.next.outputs.version }}"
+
+      - name: Commit and tag
+        run: |
+          git config user.name  "aria-release[bot]"
+          git config user.email "aria-release[bot]@users.noreply.github.com"
+          git add pyproject.toml npm/package.json src/aria_code/_version.py
+          git commit -m "release: v${{ steps.next.outputs.version }}"
+          git tag "v${{ steps.next.outputs.version }}"
+          # Push the commit and the tag together. Pushing the tag first would
+          # publish a version whose bump commit is not yet on main, which is
+          # exactly what publish.yml's ancestry gate refuses.
+          git push origin "HEAD:${{ github.ref_name }}" "refs/tags/v${{ steps.next.outputs.version }}"
+
+      - name: Summary
+        run: |
+          echo "### Released v${{ steps.next.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "publish.yml takes it from the tag." >> "$GITHUB_STEP_SUMMARY"

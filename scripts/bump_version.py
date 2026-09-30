@@ -18,6 +18,12 @@ Usage:
   python scripts/bump_version.py 4.1.5     # set all three to 4.1.5
   python scripts/bump_version.py --check            # assert all three already agree
   python scripts/bump_version.py --check 4.1.5      # assert all three == 4.1.5 (CI: pass the tag)
+  python scripts/bump_version.py --next-patch       # print the next patch version, set nothing
+
+The patch component grows without bound on purpose: 4.4.3, 4.4.4, ... 4.4.120.
+That is how Claude Code ships (2.1.284 at the time of writing) and it is the
+point — a release is one merge, so the number is a counter, not a summary. minor
+and major stay manual, for when something actually changes shape.
 """
 from __future__ import annotations
 
@@ -107,8 +113,64 @@ def cmd_bump(new: str) -> int:
     return 0
 
 
+def _triple(version: str):
+    """(major, minor, patch) as ints, or None if it is not a plain X.Y.Z."""
+    parts = version.split(".")
+    if len(parts) < 3:
+        return None
+    head = parts[2].split("-")[0].split("+")[0]
+    if not (parts[0].isdigit() and parts[1].isdigit() and head.isdigit()):
+        return None
+    return int(parts[0]), int(parts[1]), int(head)
+
+
+def _highest_tag_triple():
+    """The highest vX.Y.Z tag in this checkout, or None."""
+    import subprocess
+
+    proc = subprocess.run(["git", "tag", "--list", "v*"],
+                          capture_output=True, text=True, cwd=ROOT)
+    if proc.returncode != 0:
+        return None
+    triples = [t for t in (_triple(name[1:]) for name in proc.stdout.split()) if t]
+    return max(triples) if triples else None
+
+
+def cmd_next_patch() -> int:
+    """Print the next patch version. Reads, never writes.
+
+    Takes the higher of pyproject.toml and the highest vX.Y.Z tag, because both
+    have been ahead of the other in this repository. pyproject said 4.4.1 while
+    4.4.2 was already on PyPI and npm — a release cut from pyproject alone would
+    have tried to republish a version that exists, and PyPI rejects that. The
+    reverse can happen too, when a tag is pushed and the publish fails.
+
+    Reporting the disagreement rather than absorbing it: if the tag is ahead,
+    that is said on stderr, because it means the files and the released history
+    have drifted and someone should know.
+    """
+    from_file = _triple(read_versions()["pyproject.toml"])
+    if from_file is None:
+        print(f"cannot derive a patch bump from "
+              f"{read_versions()['pyproject.toml']!r}", file=sys.stderr)
+        return 1
+
+    from_tag = _highest_tag_triple()
+    base = from_file
+    if from_tag and from_tag > from_file:
+        print(f"note: highest tag v{'.'.join(map(str, from_tag))} is ahead of "
+              f"pyproject {'.'.join(map(str, from_file))}; counting from the tag",
+              file=sys.stderr)
+        base = from_tag
+
+    print(f"{base[0]}.{base[1]}.{base[2] + 1}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     args = argv[1:]
+    if args and args[0] == "--next-patch":
+        return cmd_next_patch()
     if args and args[0] == "--check":
         return cmd_check(args[1] if len(args) > 1 else None)
     if len(args) == 1:
