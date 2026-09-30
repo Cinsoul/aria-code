@@ -17,10 +17,12 @@ from __future__ import annotations
 import hashlib
 import time
 
-__all__ = ["RESPONSE_CACHE", "RESPONSE_CACHE_TTL", "cache_get", "cache_set", "cache_key"]
+__all__ = ["RESPONSE_CACHE", "RESPONSE_CACHE_TTL", "RESPONSE_CACHE_MAX_ENTRIES",
+           "cache_get", "cache_set", "cache_clear", "cache_key"]
 
 RESPONSE_CACHE: dict = {}   # key → (response_text, expire_ts)
 RESPONSE_CACHE_TTL = 60.0   # seconds
+RESPONSE_CACHE_MAX_ENTRIES = 200
 
 
 def cache_get(key: str) -> str | None:
@@ -35,11 +37,22 @@ def cache_set(key: str, value: str) -> None:
     """Store response in cache with TTL expiry."""
     RESPONSE_CACHE[key] = (value, time.time() + RESPONSE_CACHE_TTL)
     # Keep cache small — evict expired entries when it grows large
-    if len(RESPONSE_CACHE) > 200:
+    if len(RESPONSE_CACHE) > RESPONSE_CACHE_MAX_ENTRIES:
         now = time.time()
         for k in list(RESPONSE_CACHE.keys()):
             if RESPONSE_CACHE[k][1] < now:
                 del RESPONSE_CACHE[k]
+
+
+def cache_clear() -> None:
+    """Drop every cached response — for /clear and for test isolation.
+
+    v4.4.2 grew a second copy of this module at apps/cli/response_cache.py.
+    That copy is not taken: this one is already where the two callers share it,
+    and duplicating it would put two cache dicts behind one name. Only the
+    parts this one lacked came across.
+    """
+    RESPONSE_CACHE.clear()
 
 
 def cache_key(model: str, message: str) -> str:
