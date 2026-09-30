@@ -6,7 +6,7 @@ separate publish source:
 
   pyproject.toml   version = "X"       -> PyPI  (uv publish reads this)
   npm/package.json "version": "X"      -> npm   (npm publish reads this)
-  aria_cli.py      __version__ = "X"   -> `aria-code --version`
+  aria_code/_version.py  __version__ = "X"  -> `aria-code --version`
 
 `publish.yml` triggers on a `vX.Y.Z` tag and publishes whatever these files say,
 so a mismatch ships a wrong/duplicate version or makes --version lie. This script
@@ -29,7 +29,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 PACKAGE_JSON = ROOT / "npm" / "package.json"
-ARIA_CLI = ROOT / "aria_cli.py"
+# The single hand-written copy of the version. This path has been wrong twice.
+# It pointed at the repo root after the src/ restructure, so `--check` died with
+# FileNotFoundError — the first job publish.yml runs on a tag, so releases could
+# not start at all and the error named a missing file rather than a stale path.
+# Then the version moved out of aria_cli.py into aria_code/_version.py (so it
+# can be read without importing the CLI) and the check reported "<missing>"
+# instead. tests/test_version_consistency.py follows the same file.
+VERSION_FILE = ROOT / "src" / "aria_code" / "_version.py"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+([.-][0-9A-Za-z.]+)?$")
 
@@ -42,8 +49,8 @@ def read_versions() -> dict[str, str]:
     m = re.search(r'(?m)^version = "([^"]+)"', PYPROJECT.read_text())
     out["pyproject.toml"] = m.group(1) if m else "<missing>"
 
-    m = re.search(r'(?m)^__version__ = "([^"]+)"', ARIA_CLI.read_text())
-    out["aria_cli.py"] = m.group(1) if m else "<missing>"
+    m = re.search(r'(?m)^__version__ = "([^"]+)"', VERSION_FILE.read_text())
+    out["aria_code/_version.py"] = m.group(1) if m else "<missing>"
 
     out["npm/package.json"] = json.loads(PACKAGE_JSON.read_text()).get("version", "<missing>")
     return out
@@ -53,8 +60,8 @@ def write_version(new: str) -> None:
     PYPROJECT.write_text(
         re.sub(r'(?m)^version = "[^"]+"', f'version = "{new}"', PYPROJECT.read_text(), count=1)
     )
-    ARIA_CLI.write_text(
-        re.sub(r'(?m)^__version__ = "[^"]+"', f'__version__ = "{new}"', ARIA_CLI.read_text(), count=1)
+    VERSION_FILE.write_text(
+        re.sub(r'(?m)^__version__ = "[^"]+"', f'__version__ = "{new}"', VERSION_FILE.read_text(), count=1)
     )
     # Swap only the top-level "version" value in package.json — a regex line edit,
     # not a JSON round-trip, so the file's hand-formatting (compact arrays, inline
