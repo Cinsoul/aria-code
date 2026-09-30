@@ -4,6 +4,23 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.44.0] — 2026-09-30
+
+Renumbering, not a release. This version is never published: it records that 44
+changes have shipped, so the next automated release is 0.45.0.
+
+### Changed
+- Version scheme moves to Codex's shape: major stays 0, minor carries the
+  release count, patch is reserved for a fix on top of a shipped release
+  (0.45.0 → 0.46.0 for releases, 0.45.1 for a hotfix). Measured from Codex's
+  196 published stable versions rather than assumed.
+- The counter starts at 45 because minor counts releases and 44 pull requests
+  were merged before the "one merge, one release" rule existed. Reaching
+  0.121.0 takes 76 more merges — the number means "how many" and nothing else,
+  which is why it has a basis instead of being chosen to look established.
+- v0.1.0 and v0.2.0 remain as unused tags. They were created before the release
+  chain worked and reached no registry.
+
 ## [0.2.0] — 2026-09-30
 
 - Merge pull request #47 from Cinsoul/fix/empty-wheel
