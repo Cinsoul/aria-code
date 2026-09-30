@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.2.0] — 2026-09-30
+
+- Merge pull request #47 from Cinsoul/fix/empty-wheel
+
 ## [0.1.0] — 2026-09-30
 
 - Merge pull request #46 from Cinsoul/feat/codex-style-versioning
