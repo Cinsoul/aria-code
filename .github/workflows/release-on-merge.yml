@@ -1,11 +1,18 @@
-# One merge to main = one patch release.
+# One merge to main = one release, and a release bumps minor.
 #
-# The patch component grows without bound (4.4.3 → 4.4.4 → … → 4.4.120), which
-# is how Claude Code ships: 526 versions, a median of 0.9 days apart, the number
-# used as a counter rather than a summary. Codex does the same on minor. What
-# makes small version numbers possible is not discipline about numbering — it is
-# that each release contains one merge. Before this, a release here carried
-# 65–96 commits (v4.4.1 → v4.4.2 was 96 commits over 8 days).
+# Codex's scheme, measured from its 196 published stable versions: major is
+# always 0, minor carries the release count (0.157.0 → 0.158.0 → 0.159.0), and
+# patch is reserved for a fix on top of a release that already shipped
+# (0.159.1, 0.159.2). Reaching 0.121.0 takes 121 releases — that is how Codex
+# reached 0.159, and it is the point.
+#
+# What makes the count climb is not the numbering, it is that each release
+# contains one merge. Before this, a release here carried 65–96 commits
+# (v4.4.1 → v4.4.2 was 96 commits over 8 days).
+#
+# Hotfixes are not automated: scripts/bump_version.py --next-hotfix exists for
+# when a shipped release needs a fix, and it is run by hand on purpose so this
+# workflow cannot produce one by accident.
 #
 # This workflow only creates the tag. publish.yml already owns everything after
 # that: it verifies the three version files agree with the tag, refuses to
@@ -38,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history and tags: --next-patch compares pyproject against the
+          # Full history and tags: --next-release compares pyproject against the
           # highest existing tag, and a shallow clone has neither.
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
@@ -50,7 +57,7 @@ jobs:
       - name: Work out the next version
         id: next
         run: |
-          VERSION="$(python scripts/bump_version.py --next-patch)"
+          VERSION="$(python scripts/bump_version.py --next-release)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Next release: v$VERSION"
 
