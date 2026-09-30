@@ -42,10 +42,20 @@ pytestmark = __import__("pytest").mark.slow_packaging
 
 
 def _build_wheel(into: pathlib.Path) -> pathlib.Path:
-    subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", "--no-deps", "-q", "-w", str(into), str(ROOT)],
-        check=True, capture_output=True, text=True,
-    )
+    # setuptools writes its scratch into <source>/build regardless of -w, so this
+    # dirties the repository. Left behind it makes the next lint run report 52
+    # F821s from a stale copy of the tree — a test that fails the linter for
+    # everyone afterwards is a bad neighbour, so it removes what it created.
+    build_dir = ROOT / "build"
+    pre_existing = build_dir.exists()
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", "--no-deps", "-q", "-w", str(into), str(ROOT)],
+            check=True, capture_output=True, text=True,
+        )
+    finally:
+        if not pre_existing:
+            shutil.rmtree(build_dir, ignore_errors=True)
     wheels = sorted(into.glob("*.whl"))
     assert wheels, "pip wheel produced nothing"
     return wheels[0]

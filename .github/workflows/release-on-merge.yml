@@ -36,6 +36,8 @@ jobs:
   tag-next-patch:
     name: Tag the next patch
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
     # The bump commit this job pushes lands on main and would trigger the
     # workflow again. Skipping on its own marker is what stops the loop;
     # [skip ci] alone would not, because that only suppresses some providers.
@@ -59,6 +61,7 @@ jobs:
         run: |
           VERSION="$(python scripts/bump_version.py --next-release)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "Next release: v$VERSION"
 
       - name: Refuse if that tag already exists
@@ -129,4 +132,28 @@ jobs:
         run: |
           echo "### Released v${{ steps.next.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "publish.yml takes it from the tag." >> "$GITHUB_STEP_SUMMARY"
+          echo "Publishing runs in this workflow — see the jobs below." >> "$GITHUB_STEP_SUMMARY"
+
+  # Called, not triggered. A tag pushed with GITHUB_TOKEN does not start a new
+  # workflow run — GitHub suppresses that to prevent recursion — so the previous
+  # arrangement tagged v0.1.0 and v0.2.0 and published neither, without failing
+  # anything. Calling the workflows keeps it in one run: if publishing breaks,
+  # the release that caused it goes red.
+  #
+  # The binaries go first: the dispatcher package lists the platform packages as
+  # optionalDependencies, and npm silently skips one it cannot resolve.
+  binaries:
+    name: Build and publish the platform binaries
+    needs: tag-next-patch
+    uses: ./.github/workflows/build-native-binaries.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.tag-next-patch.outputs.tag }}
+
+  publish:
+    name: Publish to npm, PyPI and GitHub
+    needs: [tag-next-patch, binaries]
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.tag-next-patch.outputs.tag }}
