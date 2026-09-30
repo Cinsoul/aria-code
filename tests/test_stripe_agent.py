@@ -43,9 +43,26 @@ def test_stripe_revenue_agent_analysis():
     asyncio.run(_run())
 
 
-def test_stripe_tool_execution():
+def test_stripe_tool_refuses_a_name_without_records():
+    """A business name is not revenue data.
+
+    This asserted the opposite: that passing only business_name produced a
+    positive gross payment volume and MRR. It did — by inventing them. Same
+    correction as the financial-statements tool.
+    """
     tool_res = tool_analyze_stripe_data({"business_name": "Test Co"})
-    assert tool_res["success"] is True
-    assert "data" in tool_res
+    assert tool_res["success"] is False
+    assert "No Stripe data" in tool_res["error"]
+
+
+def test_stripe_tool_computes_from_supplied_records():
+    tool_res = tool_analyze_stripe_data({
+        "business_name": "Test Co",
+        "charges": [
+            {"amount_usd": 100.0, "status": "succeeded"},
+            {"amount_usd": 50.0, "status": "succeeded"},
+        ],
+        "subscriptions": [{"amount_usd": 20.0, "interval": "month", "status": "active"}],
+    })
+    assert tool_res["success"] is True, tool_res.get("error")
     assert tool_res["data"]["gross_payment_volume_usd"] > 0
-    assert tool_res["data"]["mrr_usd"] > 0
