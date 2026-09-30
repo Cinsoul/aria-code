@@ -1174,7 +1174,11 @@ try:
         from aria_code.tools.code_audit_tools import register_code_audit_tools as _reg_audit
     except ImportError:
         from tools.code_audit_tools import register_code_audit_tools as _reg_audit  # type: ignore[no-redef]
-    _reg_audit(LOCAL_TOOLS)
+    # The schema list matters: these are real implementations that were
+    # registered and callable but had no schema, so the model was never
+    # offered them. Registering the handler alone hides a tool rather than
+    # gating it.
+    _reg_audit(LOCAL_TOOLS, LOCAL_TOOL_SCHEMAS)
     logger.info("Registered code audit & diff tools")
 except Exception as _exc:
     logger.debug("Code audit tools init error: %s", _exc)
@@ -3302,10 +3306,20 @@ def _rebind_module_function_globals(module, names):
     for _name in names:
         _attr = getattr(module, _name, None)
         if isinstance(_attr, _types.FunctionType):
-            globals()[_name] = _types.FunctionType(
+            _rebound = _types.FunctionType(
                 _attr.__code__, globals(), _attr.__name__,
                 _attr.__defaults__, _attr.__closure__,
             )
+            # FunctionType takes positional defaults but not keyword-only ones,
+            # so a rebound function silently loses them and every keyword-only
+            # parameter becomes required. _format_tool_summary's char_limit hit
+            # exactly this: the extracted module declares a default, the rebind
+            # dropped it, and callers that had always omitted it started raising
+            # TypeError. __doc__ goes across for the same reason — the rebind
+            # should be invisible.
+            _rebound.__kwdefaults__ = _attr.__kwdefaults__
+            _rebound.__doc__ = _attr.__doc__
+            globals()[_name] = _rebound
 
 
 import apps.cli.tool_executor as _tool_executor_module
@@ -6681,10 +6695,16 @@ def _rebind_stream_ollama():
 
     merged = dict(_source.__globals__)
     merged.update(globals())
-    return types.FunctionType(
+    rebound = types.FunctionType(
         _source.__code__, merged, "stream_ollama",
         _source.__defaults__, _source.__closure__,
     )
+    # Same omission as _rebind_module_function_globals: stream_ollama has no
+    # keyword-only parameters today, so this is insurance rather than a fix —
+    # but the sibling rebind proved what happens when one is added.
+    rebound.__kwdefaults__ = _source.__kwdefaults__
+    rebound.__doc__ = _source.__doc__
+    return rebound
 
 
 stream_ollama = _rebind_stream_ollama()

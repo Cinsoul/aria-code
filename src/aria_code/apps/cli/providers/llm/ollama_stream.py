@@ -55,7 +55,10 @@ import time
 
 logger = logging.getLogger(__name__)
 
-from aria_code.apps.cli.deterministic import _is_broker_intent
+# market_detect owns it; deterministic only re-exports. Same object either
+# way, but going direct keeps this module from pulling in deterministic
+# (and, now, the domain packs behind it).
+from aria_code.apps.cli.utils.market_detect import _is_broker_intent
 from aria_code.apps.cli.helpers import detect_ollama_models_rich
 from aria_code.apps.cli.model_catalog import (
     _HAS_MODEL_CAP,

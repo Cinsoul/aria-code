@@ -63,6 +63,7 @@ def tool_analyze_logistics_data(params: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 raise ValueError("Only CSV and JSON waybill files are supported")
             source = str(path)
+            data_source = f"file:{path.name}"
         elif records is None:
             path = pathlib.Path.home() / ".aria" / "erp_warehouse.db"
             if not path.is_file():
@@ -71,8 +72,10 @@ def tool_analyze_logistics_data(params: Dict[str, Any]) -> Dict[str, Any]:
                 connection.row_factory = sqlite3.Row
                 records = [dict(row) for row in connection.execute("SELECT * FROM logistics_waybills")]
             source = str(path)
+            data_source = "local logistics database"
         else:
             source = "provided_waybills"
+            data_source = "caller-supplied records"
 
         if not isinstance(records, list) or not records:
             raise ValueError("No waybill records available for analysis")
@@ -108,9 +111,9 @@ def tool_analyze_logistics_data(params: Dict[str, Any]) -> Dict[str, Any]:
             item["on_time_rate"] = round(item["on_time_count"] / item["known_delivery_count"] * 100, 2) if item["known_delivery_count"] else None
             metrics.append({"carrier": carrier, **item})
         rate = round(on_time / known_delivery * 100, 2) if known_delivery else None
-        result = {"total_waybills": len(records), "total_freight_spend": round(spend, 2), "overall_on_time_rate": rate, "known_delivery_count": known_delivery, "carrier_metrics": metrics, "billing_anomalies": anomalies}
-        rate_label = f"{rate}%" if rate is not None else "未知（无准时状态记录）"
-        return {"success": True, "data": result, "source": source, "summary": f"已审计 {len(records)} 单运单，运费总计 ¥{spend:,.2f}，已知准时交付率 {rate_label}，发现 {len(anomalies)} 笔需核实的计费重量异常。"}
+        result = {"total_waybills": len(records), "total_freight_spend": round(spend, 2), "overall_on_time_rate": rate, "known_delivery_count": known_delivery, "carrier_metrics": metrics, "billing_anomalies": anomalies, "data_source": data_source}
+        rate_label = f"{rate}%" if rate is not None else "不可得（无准时状态记录）"
+        return {"success": True, "data": result, "source": source, "summary": f"已审计 {len(records)} 单运单（来源：{data_source}），运费总计 ¥{spend:,.2f}，已知准时交付率 {rate_label}，发现 {len(anomalies)} 笔需核实的计费重量异常。"}
     except (OSError, sqlite3.Error, ValueError, TypeError, json.JSONDecodeError) as exc:
         return {"success": False, "error": str(exc)}
 
