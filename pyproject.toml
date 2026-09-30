@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aria-code"
-version = "4.4.1"
+version = "4.4.3"
 description = "AI coding and research workspace with optional finance and connected-domain tools"
 readme = "README.md"
 license = { text = "BUSL-1.1" }
