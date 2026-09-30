@@ -6378,51 +6378,61 @@ class ArtheraTerminal:
                 except Exception:
                     _prompt_spinner = None
             try:
-                # Ollama models (no "/" provider prefix) skip the api_url stub
-                # backend entirely — same routing as the interactive REPL.
-                _force_backend_p = bool(self.config.get("backend_chat")) and bool(self.api_url)
-                if not _force_backend_p and (local_mode or "/" not in (model or "")):
-                    result = await stream_provider_result(
-                        OllamaProvider(
-                            self.config.get("ollama_url", "http://localhost:11434"),
-                            model,
-                            show_market_prefetch_status=False,
-                        ),
-                        prompt,
-                        [],
-                        tools=LOCAL_TOOL_SCHEMAS,
-                    )
-                else:
-                    # Cloud-provider model: try api_url, fall back to Ollama on
-                    # failure OR a stub placeholder response.
-                    result = await stream_provider_result(
-                        AriaSSEProvider(
-                            self.api_url,
-                            model,
-                            thinking_mode=thinking_mode,
-                            user_context=user_context,
-                            auth_token=auth_token,
-                            project_context=_PROJECT_CONTEXT,
-                            use_react_gateway=bool(self.config.get("arthera_react_gateway")),
-                        ),
-                        prompt,
-                        [],
-                        tools=LOCAL_TOOL_SCHEMAS,
-                    )
-                    _resp = result.get("response", "") or ""
-                    if (not result.get("success")
-                            or len(_resp) < 20
-                            or _response_is_stub_placeholder(_resp)):
-                        result = await stream_provider_result(
-                            OllamaProvider(
-                                self.config.get("ollama_url", "http://localhost:11434"),
-                                model,
-                                show_market_prefetch_status=False,
-                            ),
-                            prompt,
-                            [],
-                            tools=LOCAL_TOOL_SCHEMAS,
-                        )
+                # Headless -p runs the SAME loop as the REPL.
+                #
+                # It used to call stream_provider_result directly: one provider
+                # round, tool schemas advertised but nothing executing what came
+                # back, and a single best-effort pass over tool_calls_pending
+                # afterwards whose results the model never saw. So `-p` was not
+                # agentic at all — no rounds, no tool results fed back, no loop
+                # guard, no acceptance gate. Every non-interactive user (CI, a
+                # pipe, the eval harness) got a chat reply where the REPL would
+                # have done the work.
+                #
+                # run_chat_via_runtime is the documented single entry point and
+                # already handles provider selection and cloud→Ollama fallback,
+                # which is what the two branches here were open-coding.
+                from aria_code.apps.cli.providers.runtime_bridge import run_chat_via_runtime
+
+                _turn = await run_chat_via_runtime(
+                    prompt=prompt, history=[],
+                    local_tools=LOCAL_TOOLS, tool_schemas=LOCAL_TOOL_SCHEMAS,
+                    model=model, config=self.config, api_url=self.api_url,
+                    ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
+                    thinking_mode=thinking_mode, user_context=user_context,
+                    auth_token=auth_token, project_context=_PROJECT_CONTEXT,
+                    max_rounds=int(self.config.get("max_rounds", 30) or 30),
+                    # No approval UI exists in headless mode. Leaving the confirm
+                    # set populated would block every write on a prompt nobody is
+                    # there to answer; the operator opts in with
+                    # --dangerously-skip-permissions or --allow-tools.
+                    confirm_tools=(
+                        frozenset() if _auto_approve_session
+                        else frozenset(_CONFIRM_TOOLS) - _session_always_allow
+                    ),
+                    return_result=True,
+                )
+                _tools_used = list(getattr(_turn.final, "tools", []) or [])
+                # An empty closing message after the tools already ran is not a
+                # failed turn. The model did the work and then said nothing;
+                # exiting 1 there told a script the task failed while the edit
+                # sat finished on disk. Narrow on purpose — any other error,
+                # and a turn that ran no tools at all, still fails.
+                _empty_after_work = (
+                    _turn.error == "empty_response" and bool(_tools_used)
+                )
+                result = {
+                    "success": _turn.ok or _empty_after_work,
+                    "response": (
+                        _turn.text
+                        or (f"（模型未给出收尾说明。已执行的工具：{', '.join(_tools_used)}）"
+                            if _empty_after_work else "")
+                    ),
+                    "error": "" if _empty_after_work else (_turn.error or ""),
+                    "provider": getattr(_turn.final, "provider", ""),
+                    "tools_used": _tools_used,
+                    "acceptance": getattr(_turn.final, "acceptance", None),
+                }
             finally:
                 if _prompt_spinner is not None:
                     try:
@@ -6430,26 +6440,18 @@ class ArtheraTerminal:
                     except Exception:
                         pass
 
-        # Execute any pending tool calls (write_file / run_command) generated by
-        # the code-block fallback in stream_ollama.  This makes -p mode behave
-        # the same as interactive mode for code generation tasks.
-        pending = result.get("tool_calls_pending", [])
-        if pending and result.get("success"):
-            for tc in pending:
-                tool_name  = tc.get("tool", "")
-                tool_params = tc.get("params", {})
-                if tool_name in LOCAL_TOOLS:
-                    fn = LOCAL_TOOLS[tool_name][0]
-                    tr = fn(tool_params)
-                    if not quiet:
-                        if tool_name == "write_file":
-                            _status = "Created" if tr.get("success") else "Failed"
-                            msg = f"{_status}: file tool"
-                            print(msg if not HAS_RICH else msg, file=sys.stderr)
-                        elif tool_name == "run_command":
-                            _out = tr.get("data", {}).get("stdout", "") or tr.get("error", "")
-                            if _out:
-                                print(_out[:2000])
+        # The agent loop executes tools now, so there is nothing left over to
+        # run here — only stream_provider_result ever populated
+        # tool_calls_pending, and the deterministic chain never does. Keeping
+        # the old pass would risk running a write twice.
+        #
+        # What is worth surfacing instead is the acceptance verdict: in headless
+        # mode nobody watched the run, so a turn that changed files and failed
+        # its checks must say so on stderr rather than print a confident summary
+        # and exit 0.
+        _acceptance = (result or {}).get("acceptance") or {}
+        if _acceptance.get("verified") is False and not quiet:
+            print(f"⚠ 验收未通过: {_acceptance.get('headline', '')}", file=sys.stderr)
 
         if json_output or fmt == "json":
             content = json.dumps(result, ensure_ascii=False, indent=2)
