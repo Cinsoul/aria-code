@@ -18,12 +18,21 @@ Usage:
   python scripts/bump_version.py 4.1.5     # set all three to 4.1.5
   python scripts/bump_version.py --check            # assert all three already agree
   python scripts/bump_version.py --check 4.1.5      # assert all three == 4.1.5 (CI: pass the tag)
-  python scripts/bump_version.py --next-patch       # print the next patch version, set nothing
+  python scripts/bump_version.py --next-release     # print the next release version
+  python scripts/bump_version.py --next-hotfix      # print the next hotfix version
 
-The patch component grows without bound on purpose: 4.4.3, 4.4.4, ... 4.4.120.
-That is how Claude Code ships (2.1.284 at the time of writing) and it is the
-point — a release is one merge, so the number is a counter, not a summary. minor
-and major stay manual, for when something actually changes shape.
+Codex's scheme, measured from its 196 published stable versions rather than
+assumed: major is always 0, minor carries the release count, and patch is only
+used for a fix on top of a release that already shipped.
+
+  0.157.0 -> 0.158.0 -> 0.159.0        one release each (--next-release)
+  0.159.0 -> 0.159.1 -> 0.159.2        hotfixes on 0.159 (--next-hotfix)
+
+A release is one merge, so minor is a counter, not a summary. Reaching 0.121.0
+takes 121 releases; that is how Codex reached 0.159, and it is the point.
+
+Major stays 0 deliberately. It is the signal Codex uses and it is honest: the
+CLI surface still moves.
 """
 from __future__ import annotations
 
@@ -136,41 +145,83 @@ def _highest_tag_triple():
     return max(triples) if triples else None
 
 
-def cmd_next_patch() -> int:
-    """Print the next patch version. Reads, never writes.
+# The 0.x line this project is moving to. While the files still say 4.x, the
+# counter has to be told where to start, because the released history is
+# numerically *higher* than everything that follows it — the one case where
+# "next" cannot mean "one more than what exists".
+FIRST_ZEROX_MINOR = 1
 
-    Takes the higher of pyproject.toml and the highest vX.Y.Z tag, because both
-    have been ahead of the other in this repository. pyproject said 4.4.1 while
-    4.4.2 was already on PyPI and npm — a release cut from pyproject alone would
-    have tried to republish a version that exists, and PyPI rejects that. The
-    reverse can happen too, when a tag is pushed and the publish fails.
 
-    Reporting the disagreement rather than absorbing it: if the tag is ahead,
-    that is said on stderr, because it means the files and the released history
-    have drifted and someone should know.
+def _zerox(triple) -> bool:
+    return triple is not None and triple[0] == 0
+
+
+def _current() -> tuple:
+    current = read_versions()["pyproject.toml"]
+    triple = _triple(current)
+    if triple is None:
+        raise SystemExit(f"cannot parse the current version {current!r}")
+    return triple
+
+
+def _base_for_next() -> tuple:
+    """The version to count from: the files, or the highest tag if it is ahead.
+
+    Only ever compares within the same major line. Once the files say 0.x, a
+    4.4.x tag is history and not a number to count from — otherwise the first
+    0.x release would try to be 4.4.6 again.
     """
-    from_file = _triple(read_versions()["pyproject.toml"])
-    if from_file is None:
-        print(f"cannot derive a patch bump from "
-              f"{read_versions()['pyproject.toml']!r}", file=sys.stderr)
-        return 1
-
+    from_file = _current()
     from_tag = _highest_tag_triple()
-    base = from_file
-    if from_tag and from_tag > from_file:
+    if from_tag and from_tag[0] == from_file[0] and from_tag > from_file:
         print(f"note: highest tag v{'.'.join(map(str, from_tag))} is ahead of "
               f"pyproject {'.'.join(map(str, from_file))}; counting from the tag",
               file=sys.stderr)
-        base = from_tag
+        return from_tag
+    return from_file
 
-    print(f"{base[0]}.{base[1]}.{base[2] + 1}")
+
+def cmd_next_release() -> int:
+    """Print the next release version: minor + 1, patch back to 0.
+
+    Codex's shape, and the reason patch resets: patch means "a fix on top of a
+    release that already shipped", so carrying it forward would say something
+    untrue about the new release.
+    """
+    base = _base_for_next()
+    if not _zerox(base):
+        # Crossing from 4.x into the 0.x line. There is nothing to increment —
+        # 0.x is lower than every 4.x, so the first one is stated, not derived.
+        print(f"note: leaving the {base[0]}.x line; starting 0.x at "
+              f"0.{FIRST_ZEROX_MINOR}.0", file=sys.stderr)
+        print(f"0.{FIRST_ZEROX_MINOR}.0")
+        return 0
+    print(f"0.{base[1] + 1}.0")
+    return 0
+
+
+def cmd_next_hotfix() -> int:
+    """Print the next hotfix version: patch + 1 on the current minor.
+
+    For a fix that has to go out on top of the release that just shipped, which
+    is what Codex's 0.159.1 and 0.159.2 are. Deliberately separate from
+    --next-release so the automation cannot produce one by accident.
+    """
+    base = _base_for_next()
+    if not _zerox(base):
+        print(f"refusing to hotfix the {base[0]}.x line; cut a 0.x release first",
+              file=sys.stderr)
+        return 1
+    print(f"0.{base[1]}.{base[2] + 1}")
     return 0
 
 
 def main(argv: list[str]) -> int:
     args = argv[1:]
-    if args and args[0] == "--next-patch":
-        return cmd_next_patch()
+    if args and args[0] == "--next-release":
+        return cmd_next_release()
+    if args and args[0] == "--next-hotfix":
+        return cmd_next_hotfix()
     if args and args[0] == "--check":
         return cmd_check(args[1] if len(args) > 1 else None)
     if len(args) == 1:
