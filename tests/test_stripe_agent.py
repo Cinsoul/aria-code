@@ -43,26 +43,28 @@ def test_stripe_revenue_agent_analysis():
     asyncio.run(_run())
 
 
-def test_stripe_tool_refuses_a_name_without_records():
-    """A business name is not revenue data.
-
-    This asserted the opposite: that passing only business_name produced a
-    positive gross payment volume and MRR. It did — by inventing them. Same
-    correction as the financial-statements tool.
-    """
-    tool_res = tool_analyze_stripe_data({"business_name": "Test Co"})
-    assert tool_res["success"] is False
-    assert "No Stripe data" in tool_res["error"]
-
-
-def test_stripe_tool_computes_from_supplied_records():
+def test_stripe_tool_execution():
+    # Supplies charges and subscriptions: the tool no longer falls back to a
+    # sample dataset, so this used to assert on numbers nobody provided.
     tool_res = tool_analyze_stripe_data({
         "business_name": "Test Co",
         "charges": [
-            {"amount_usd": 100.0, "status": "succeeded"},
-            {"amount_usd": 50.0, "status": "succeeded"},
+            {"charge_id": "ch_01", "amount_usd": 120.0, "status": "succeeded",
+             "fee_usd": 3.78, "refunded_amount_usd": 0.0},
+            {"charge_id": "ch_02", "amount_usd": 500.0, "status": "succeeded",
+             "fee_usd": 14.80, "refunded_amount_usd": 0.0},
         ],
-        "subscriptions": [{"amount_usd": 20.0, "interval": "month", "status": "active"}],
+        "subscriptions": [
+            {"subscription_id": "sub_01", "customer_id": "cus_01",
+             "plan_name": "Pro Plan", "mrr_usd": 120.0, "status": "active"},
+        ],
     })
-    assert tool_res["success"] is True, tool_res.get("error")
+    assert tool_res["success"] is True
     assert tool_res["data"]["gross_payment_volume_usd"] > 0
+    assert tool_res["data"]["mrr_usd"] > 0
+
+
+def test_stripe_tool_refuses_without_data():
+    result = tool_analyze_stripe_data({"business_name": "Test Co"})
+    assert result["success"] is False
+    assert "No Stripe data" in result["error"]

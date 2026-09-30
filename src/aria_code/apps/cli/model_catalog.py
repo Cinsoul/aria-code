@@ -458,8 +458,38 @@ except ImportError:  # pragma: no cover - exercised only without model_capabilit
     _HAS_MODEL_CAP = False
 
 
+_MODEL_ID_INDEX: dict[str, str] | None = None
+
+
+def _model_id_index() -> dict[str, str]:
+    """Lazily build a lowercase {model id -> MODELS key} index.
+
+    The config stores the provider-qualified *id* ("google/gemini-2.5-pro")
+    while MODELS is keyed by short name ("gemini-pro"), so without this lookup
+    a registered model resolves to "_community_" and its own registry entry is
+    never used.
+
+    Measured, rather than assumed: when model_capability knows the model it
+    guesses the same tools/context, so the visible damage is limited. The real
+    exposure is a model model_capability does not know, or an install without
+    it at all (_HAS_MODEL_CAP False), where get_model_cfg falls back to
+    sonata's settings for an unrelated model.
+    """
+    global _MODEL_ID_INDEX
+    if _MODEL_ID_INDEX is None:
+        index: dict[str, str] = {}
+        for key, cfg in MODELS.items():
+            model_id = str(cfg.get("id") or "").strip().lower()
+            if model_id and model_id not in index:
+                index[model_id] = key
+        _MODEL_ID_INDEX = index
+    return _MODEL_ID_INDEX
+
+
 def resolve_model_key(model_str: str) -> str:
     """Resolve any model alias/ID/key to a MODELS key.
+
+    Lookup order: exact key -> alias -> registered model id (case-insensitive).
 
     For community Ollama models (qwen2.5-coder, llama3.2, deepseek-r1, etc.)
     that are NOT in the MODELS registry, returns the sentinel "_community_"
@@ -470,6 +500,14 @@ def resolve_model_key(model_str: str) -> str:
         return model_str
     if model_str in MODEL_ALIASES:
         return MODEL_ALIASES[model_str]
+    normalized = str(model_str or "").strip().lower()
+    if normalized in MODELS:
+        return normalized
+    if normalized in MODEL_ALIASES:
+        return MODEL_ALIASES[normalized]
+    mapped = _model_id_index().get(normalized)
+    if mapped:
+        return mapped
     # Community/custom Ollama model — not in registry
     return "_community_"
 
