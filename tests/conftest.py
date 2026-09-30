@@ -18,6 +18,35 @@ if _CLI_DIR not in sys.path:
     sys.path.insert(0, _CLI_DIR)
 
 
+# ── 与开发者真实主目录隔离 ────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _isolate_user_directories(tmp_path_factory, monkeypatch):
+    """Keep every test out of the developer's real home directory.
+
+    build_session_diagnostic_bundle falls back to artifacts.artifact_summary(),
+    which rglobs artifact_root() — by default ``~/Documents/Aria Code``. On a
+    machine where Documents is iCloud-backed, the first walk blocks while the
+    placeholders materialise: measured at 251s here against 0.0s once warm.
+
+    That is why four TestSessionManager cases failed intermittently, why the
+    whole suite occasionally took 17 or 27 minutes instead of 100 seconds, and
+    why they always passed when re-run. The tests were reading whatever the
+    person running them happened to have generated.
+
+    autouse and session-scoped roots: the point is that no test can reach the
+    real directories, not that these four remember to opt in. A test that wants
+    a specific root still sets its own — monkeypatch.setenv here is overridden
+    by a later setenv in the test itself.
+    """
+    base = tmp_path_factory.mktemp("isolated-home")
+    for var in ("ARIA_ARTIFACT_ROOT", "ARIA_USER_OUTPUT_ROOT"):
+        monkeypatch.setenv(var, str(base / var.lower()))
+    # ARIA_HOME covers config/sessions/credentials for the same reason: an
+    # earlier round of this work found tests writing to the real brokers.json.
+    monkeypatch.setenv("ARIA_HOME", str(base / "aria_home"))
+
+
 # ── SSE mock 基础结构 ─────────────────────────────────────────────────────────
 
 class FakeSSEContent:
