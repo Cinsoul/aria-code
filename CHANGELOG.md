@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.45.0] — 2026-09-30
+
+- Merge pull request #52 from Cinsoul/fix/release-workflow-permissions
+
 ## [0.44.0] — 2026-09-30
 
 Renumbering, not a release. This version is never published: it records that 44
