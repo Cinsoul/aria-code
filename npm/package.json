@@ -30,10 +30,7 @@
     "aria": "bin/aria-code.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js",
-    "repair": "node scripts/postinstall.js",
-    "update-engine": "node scripts/postinstall.js",
-    "test": "node tests/paths.test.js && node tests/venv.test.js"
+    "test": "node tests/platform.test.js"
   },
   "engines": {
     "node": ">=16.0.0"
@@ -41,11 +38,17 @@
   "preferGlobal": true,
   "files": [
     "bin/",
-    "lib/",
-    "scripts/"
+    "lib/"
   ],
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"
+  },
+  "optionalDependencies": {
+    "@artheras/aria-code-darwin-arm64": "4.4.1",
+    "@artheras/aria-code-darwin-x64": "4.4.1",
+    "@artheras/aria-code-linux-x64": "4.4.1",
+    "@artheras/aria-code-linux-arm64": "4.4.1",
+    "@artheras/aria-code-win32-x64": "4.4.1"
   }
 }
