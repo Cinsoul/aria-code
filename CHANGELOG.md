@@ -4,6 +4,22 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.51.0] — 2026-10-01
+
+- Claimed by hand to step over an orphaned v0.51.0 tag. Two merges 24 seconds
+  apart raced the release job: the branch push was rejected as a
+  non-fast-forward while the tag, pushed in the same non-atomic command,
+  landed anyway. That left v0.51.0 pointing at a commit that is not on main,
+  and every subsequent release computed 0.51.0 and refused because the tag
+  existed.
+- Nothing was ever published under that tag. Deleting it needs write access to
+  artherahq that the release work does not have, so the version is claimed here
+  instead and the next release is 0.52.0. The tag stays as a marker of where
+  the race happened.
+- The cause is fixed in the same change: the push is now --atomic, so a
+  rejected branch can no longer strand a tag, and it rebases and retries when
+  a merge lands mid-step.
+
 ## [0.50.0] — 2026-10-01
 
 - Merge pull request #57 from Cinsoul/fix/decouple-registries
