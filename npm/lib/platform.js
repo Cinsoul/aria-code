@@ -52,15 +52,16 @@ function platformKey(proc) {
   return PLATFORM_KEYS.includes(key) ? key : null;
 }
 
-/** The npm package that carries the binary for a platform key. */
-function packageNameFor(key) {
-  return `${SCOPE}/${BASE}-${key}`;
+/** The npm package that carries the requested binary for a platform key. */
+function packageNameFor(key, name = "aria-code-bin") {
+  const kind = name === "aria-code-mcp-bin" ? "mcp-" : "";
+  return `${SCOPE}/${BASE}-${kind}${key}`;
 }
 
 /** The require path of a binary inside its platform package. */
 function binaryRequestFor(key, name = "aria-code-bin") {
   const platform = key.split("-")[0];
-  return `${packageNameFor(key)}/bin/${binaryName(platform, name)}`;
+  return `${packageNameFor(key, name)}/bin/${binaryName(platform, name)}`;
 }
 
 /**

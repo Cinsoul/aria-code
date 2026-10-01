@@ -26,8 +26,10 @@ of the two shows up.
 from __future__ import annotations
 
 import pathlib
+import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -131,37 +133,55 @@ class AFullSetOfArtifactsAssembles(_Fixture):
                 self.assertIn(f"{platform}=built/{mcp_dir}/{mcp_file}", args)
 
 
-class MissingArtifactsDoNotKillTheStep(_Fixture):
-    """A platform that failed to build must be skipped, not fatal.
+class MissingArtifactsStopTheRelease(_Fixture):
+    """Every binary pinned by the dispatcher must be available."""
 
-    This is the property the workflow comment claims ("A build that failed must
-    not become an empty package") and that bug 2 silently removed.
-    """
-
-    def test_a_missing_mcp_binary_is_a_warning(self) -> None:
+    def test_a_missing_mcp_binary_fails_before_packaging(self) -> None:
         for platform in ARTIFACTS:
             self.place(platform, mcp=False)
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"a missing MCP binary ended the step:\n{proc.stderr[-800:]}")
-        self.assertIn("::warning::", proc.stdout)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no MCP binary", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
 
-    def test_a_missing_platform_is_a_warning(self) -> None:
+    def test_a_missing_platform_fails_before_packaging(self) -> None:
         self.place("linux-x64")
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"a missing platform ended the step:\n{proc.stderr[-800:]}")
-        args = [l[4:] for l in proc.stdout.splitlines() if l.startswith("ARG:")]
-        self.assertIn("linux-x64=built/aria-code-linux-x64/aria-code-bin", args)
-        self.assertNotIn("--binary", [a for a in args if "darwin" in a])
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no CLI binary for darwin-arm64", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
 
-    def test_no_artifacts_at_all_still_reaches_python(self) -> None:
-        # Nothing to package is the script's job to report ("no --binary
-        # given"), not something bash should die on first.
+    def test_no_artifacts_at_all_fails_before_packaging(self) -> None:
         self.built.mkdir(parents=True)
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"an empty artifact set ended the step:\n{proc.stderr[-800:]}")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no CLI binary", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
+
+
+class PlatformPackagesAreSplit(_Fixture):
+    def test_cli_and_mcp_have_separate_tarball_inputs(self) -> None:
+        for platform in ARTIFACTS:
+            self.place(platform)
+        out = self.tmp / "packages"
+        args = [sys.executable, str(ROOT / "scripts" / "make_platform_packages.py"),
+                "--version", "9.9.9", "--out", str(out)]
+        for platform, (cli_dir, cli_file, mcp_dir, mcp_file) in ARTIFACTS.items():
+            args += ["--binary", f"{platform}={self.built / cli_dir / cli_file}",
+                     "--mcp", f"{platform}={self.built / mcp_dir / mcp_file}"]
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=20)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(len(list(out.iterdir())), 10)
+        for platform in ARTIFACTS:
+            for kind, name in (("", "aria-code-bin"), ("mcp-", "aria-code-mcp-bin")):
+                package = out / f"aria-code-{kind}{platform}"
+                manifest = json.loads((package / "package.json").read_text())
+                self.assertEqual(manifest["name"], f"@artheras/aria-code-{kind}{platform}")
+                self.assertEqual(manifest["version"], "9.9.9")
+                binaries = list((package / "bin").iterdir())
+                self.assertEqual(len(binaries), 1)
+                extension = ".exe" if platform.startswith("win32") else ""
+                self.assertEqual(binaries[0].name, f"{name}{extension}")
 
 
 if __name__ == "__main__":

@@ -75,13 +75,13 @@ class ThePublishedVersionIsVerified(unittest.TestCase):
                       "reporting a missing package without failing is the same "
                       "silence this job exists to break")
 
-    def test_the_platform_packages_are_reported(self) -> None:
-        # Their absence is a warning rather than an error: a platform whose
-        # build failed should not fail the whole release, but it must be said,
-        # because npm skipping an unresolvable optionalDependency is silent.
+    def test_missing_platform_packages_fail_the_release(self) -> None:
+        # npm silently skips unavailable optionalDependencies, so a published
+        # dispatcher without its pinned binaries is not a working release.
         script = "\n".join(str(s.get("run", "")) for s in self.job.get("steps") or [])
-        self.assertIn("aria-code-$key", script)
-        self.assertIn("::warning::", script)
+        self.assertIn("manifest.optionalDependencies", script)
+        self.assertIn("::error::no $pkg", script)
+        self.assertIn("MISSING=1", script)
 
 
 # The job graph — that publishing no longer waits on the npm binaries, and
@@ -92,15 +92,17 @@ class ThePublishedVersionIsVerified(unittest.TestCase):
 
 class TheNpmPageDescribesTheCurrentProduct(unittest.TestCase):
     def test_the_two_manifests_agree(self) -> None:
+        import ast
         import json
-        import tomllib
+        import re
 
         root = WORKFLOWS.parents[1]
         npm = json.loads((root / "npm" / "package.json").read_text(encoding="utf-8"))
-        with (root / "pyproject.toml").open("rb") as fh:
-            py = tomllib.load(fh)["project"]
+        project_section = (root / "pyproject.toml").read_text(encoding="utf-8").split("[project]", 1)[1].split("\n[", 1)[0]
+        description = re.search(r'^description\s*=\s*(".*")\s*$', project_section, re.MULTILINE)
+        self.assertIsNotNone(description)
         self.assertEqual(
-            npm["description"], py["description"],
+            npm["description"], ast.literal_eval(description.group(1)),
             "the npm page's one-line pitch and PyPI's disagree; npm's said "
             "'AI-powered financial terminal' long after the project was "
             "repositioned, and it is the first line a visitor reads",

@@ -52,10 +52,7 @@ class GeneratedPackages(unittest.TestCase):
         self.out = self.tmp / "platforms"
 
     def _build(self, key, mcp=False):
-        binaries = {"aria-code-bin": self.fake}
-        if mcp:
-            binaries["aria-code-mcp-bin"] = self.fake
-        return mpp.build_one(key, "9.9.9", binaries, self.out)
+        return mpp.build_one(key, "9.9.9", self.fake, self.out, mcp=mcp)
 
     def test_windows_binaries_get_exe_and_nothing_else_does(self):
         win = self._build("win32-x64")
@@ -88,17 +85,20 @@ class GeneratedPackages(unittest.TestCase):
         self.assertEqual(meta["version"], "9.9.9")
         self.assertEqual(meta["files"], ["bin/"])
 
-    def test_the_mcp_binary_is_optional_and_named_the_same_way(self):
-        without = self._build("linux-x64")
-        self.assertFalse((without / "bin" / "aria-code-mcp-bin").exists())
-        with_mcp = self._build("darwin-arm64", mcp=True)
-        self.assertTrue((with_mcp / "bin" / "aria-code-mcp-bin").is_file())
+    def test_the_mcp_binary_has_its_own_package(self):
+        cli = self._build("darwin-arm64")
+        mcp = self._build("darwin-arm64", mcp=True)
+        self.assertFalse((cli / "bin" / "aria-code-mcp-bin").exists())
+        self.assertTrue((mcp / "bin" / "aria-code-mcp-bin").is_file())
+        self.assertEqual(json.loads((mcp / "package.json").read_text())["name"],
+                         "@artheras/aria-code-mcp-darwin-arm64")
 
     def test_rebuilding_replaces_rather_than_accumulates(self):
-        pkg = self._build("linux-x64", mcp=True)
-        self.assertTrue((pkg / "bin" / "aria-code-mcp-bin").is_file())
-        pkg = self._build("linux-x64", mcp=False)
-        self.assertFalse((pkg / "bin" / "aria-code-mcp-bin").exists(),
+        pkg = self._build("linux-x64")
+        stale = pkg / "bin" / "aria-code-mcp-bin"
+        stale.write_bytes(b"stale")
+        pkg = self._build("linux-x64")
+        self.assertFalse(stale.exists(),
                          "a stale binary from a previous build would be published")
 
 

@@ -49,6 +49,11 @@
     "@artheras/aria-code-darwin-x64": "0.53.0",
     "@artheras/aria-code-linux-x64": "0.53.0",
     "@artheras/aria-code-linux-arm64": "0.53.0",
-    "@artheras/aria-code-win32-x64": "0.53.0"
+    "@artheras/aria-code-win32-x64": "0.53.0",
+    "@artheras/aria-code-mcp-darwin-arm64": "0.53.0",
+    "@artheras/aria-code-mcp-darwin-x64": "0.53.0",
+    "@artheras/aria-code-mcp-linux-x64": "0.53.0",
+    "@artheras/aria-code-mcp-linux-arm64": "0.53.0",
+    "@artheras/aria-code-mcp-win32-x64": "0.53.0"
   }
 }

@@ -303,14 +303,15 @@ jobs:
           # failed the v0.47.0 release.
           add() {
             if [ ! -f "built/$2/$3" ]; then
-              echo "::warning::no binary for $1 — its package will not be published"
-              return 0
+              echo "::error::no CLI binary for $1 — refusing a partial npm release"
+              return 1
             fi
             ARGS+=(--binary "$1=built/$2/$3")
             if [ -f "built/$4/$5" ]; then
               ARGS+=(--mcp "$1=built/$4/$5")
             else
-              echo "::warning::no MCP binary for $1 — its package ships the CLI only"
+              echo "::error::no MCP binary for $1 — refusing a partial npm release"
+              return 1
             fi
             return 0
           }
@@ -322,19 +323,44 @@ jobs:
           python scripts/make_platform_packages.py --version "$VERSION" \
             --out npm/platforms "${ARGS[@]}"
 
-      - name: Publish each one
-        if: ${{ env.NPM_TOKEN != '' }}
+      - name: Require npm publishing token
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for dir in npm/platforms/*/; do
-            echo "── publishing $(basename "$dir")"
-            (cd "$dir" && npm publish --access public)
-          done
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not configured; platform packages cannot be published"
+            exit 1
+          fi
 
-      - name: Skipped notice
-        if: ${{ env.NPM_TOKEN == '' }}
+      - name: Publish each platform package
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: echo "::warning::NPM_TOKEN not set — platform packages were built but not published."
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          shopt -s nullglob
+          packages=(npm/platforms/*/)
+          if [ "${#packages[@]}" -ne 10 ]; then
+            echo "::error::Expected five CLI and five MCP packages, found ${#packages[@]}"
+            exit 1
+          fi
+          # Check every tarball before publishing any package. A combined CLI
+          # and MCP Linux arm64 tarball was 307.8 MB and npm rejected it with
+          # E413 after the macOS packages had already been published.
+          for dir in "${packages[@]}"; do
+            size="$(cd "$dir" && npm pack --dry-run --json | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(String(JSON.parse(s)[0].size)))')"
+            if [ "$size" -ge 240000000 ]; then
+              echo "::error::$(basename "$dir") is $size bytes packed; split or slim it before publishing"
+              exit 1
+            fi
+          done
+          for dir in "${packages[@]}"; do
+            spec="$(node -e 'const p=require(process.argv[1]); console.log(p.name+"@"+p.version)' "./${dir}package.json")"
+            if npm view "$spec" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+              echo "── already published $spec"
+              continue
+            fi
+            echo "── publishing $spec"
+            (cd "$dir" && npm publish --access public) || {
+              echo "::error::npm rejected $(basename "$dir"). Check that the token's account can create packages in the @artheras scope and that the token allows package write and CI publishing."
+              exit 1
+            }
+          done

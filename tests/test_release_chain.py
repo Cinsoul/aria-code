@@ -12,7 +12,10 @@ that fails by doing nothing.
 
 from __future__ import annotations
 
+import os
 import pathlib
+import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -155,6 +158,42 @@ class CalledWorkflowsAcceptATag(unittest.TestCase):
                             f"which on a call is the caller's branch, not the tag",
                         )
                         self.assertIn("inputs.tag", str(ref))
+
+
+class NpmDispatcherGate(unittest.TestCase):
+    """Exercise the actual release step without contacting npm."""
+
+    def _run_wait(self, npm_available: bool):
+        steps = _load("publish")["jobs"]["publish-npm"]["steps"]
+        script = next(step["run"] for step in steps
+                      if step.get("name") == "Wait for this version's platform packages")
+        # Keep the real shell logic, but expire its wait immediately in the
+        # missing-package case instead of making the test sleep 30 minutes.
+        self.assertIn("+ 1800", script)
+        script = script.replace("+ 1800", "+ 0", 1)
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = pathlib.Path(tmp)
+            node = bin_dir / "node"
+            node.write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = -p ]; then echo 0.52.0; "
+                "else echo @artheras/aria-code-linux-x64@0.52.0; fi\n"
+            )
+            npm = bin_dir / "npm"
+            npm.write_text(f"#!/bin/sh\nexit {0 if npm_available else 1}\n")
+            node.chmod(0o755)
+            npm.chmod(0o755)
+            env = dict(os.environ, PATH=f"{tmp}:{os.environ.get('PATH', '')}",
+                       INPUT_TAG="v0.52.0")
+            return subprocess.run(["bash", "-c", script], env=env,
+                                  capture_output=True, text=True, timeout=10)
+
+    def test_dispatcher_waits_for_its_platform_packages(self):
+        present = self._run_wait(True)
+        self.assertEqual(present.returncode, 0, present.stderr)
+        missing = self._run_wait(False)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("Refusing to publish a dispatcher", missing.stdout)
 
 
 if __name__ == "__main__":

@@ -110,35 +110,71 @@ jobs:
       # with this workflow, so without waiting the dispatcher can land first —
       # and npm skips an optionalDependency it cannot resolve, silently, leaving
       # anyone who installs in that window with a launcher and no binary.
-      #
-      # Missing after the timeout is not fatal: that platform's build may have
-      # failed, and the dispatcher already reports an absent package by name.
-      # A whole release should not be held for one platform.
+      # Never publish a
+      # dispatcher unless every package it pins exists at the same version.
       - name: Wait for this version's platform packages
         env:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
+          set -euo pipefail
           TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
-          KEYS="darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64"
-          DEADLINE=$(( $(date +%s) + 900 ))
-          for key in $KEYS; do
-            pkg="@artheras/aria-code-${key}@${VERSION}"
-            until npm view "$pkg" version >/dev/null 2>&1; do
-              if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-                echo "::warning::$pkg never appeared; publishing without it"
-                break
-              fi
-              echo "waiting for $pkg …"
-              sleep 20
+          PACKAGE_LINES="$(node - <<'NODE'
+          const manifest = require("./npm/package.json");
+          const dependencies = Object.entries(manifest.optionalDependencies || {});
+          if (dependencies.length === 0 ||
+              dependencies.some(([name, version]) =>
+                !name.startsWith("@artheras/aria-code-") || version !== manifest.version)) {
+            console.error("Dispatcher platform pins are missing or do not match its version.");
+            process.exit(1);
+          }
+          for (const [name, version] of dependencies) console.log(`${name}@${version}`);
+          NODE
+          )"
+          if [ "$VERSION" != "$(node -p 'require("./npm/package.json").version')" ]; then
+            echo "::error::The release tag does not match npm/package.json"
+            exit 1
+          fi
+          PACKAGES=()
+          while IFS= read -r pkg; do PACKAGES+=("$pkg"); done <<< "$PACKAGE_LINES"
+          # Native builds and five large npm uploads can exceed 15 minutes.
+          DEADLINE=$(( $(date +%s) + 1800 ))
+          while :; do
+            MISSING=()
+            for pkg in "${PACKAGES[@]}"; do
+              npm view "$pkg" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1 || MISSING+=("$pkg")
             done
+            if [ "${#MISSING[@]}" -eq 0 ]; then
+              echo "All ${#PACKAGES[@]} platform packages are published at $VERSION"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+              printf '::error::Missing platform package: %s\n' "${MISSING[@]}"
+              echo "::error::Refusing to publish a dispatcher with missing optional dependencies"
+              exit 1
+            fi
+            echo "Waiting for platform packages: ${MISSING[*]}"
+            sleep 20
           done
 
+      - name: Require npm publishing token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not configured"
+            exit 1
+          fi
+
       - name: Publish @artheras/aria-code to npm
-        run: npm publish --access public
         working-directory: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --access public || {
+            echo "::error::npm rejected @artheras/aria-code. Check that the token's account can publish in the @artheras scope and that the token allows package write and CI publishing."
+            exit 1
+          }
 
   publish-pypi:
     name: Publish to PyPI
@@ -294,6 +330,7 @@ jobs:
           NPM_RESULT: ${{ needs.publish-npm.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
         run: |
+          set -euo pipefail
           TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           MISSING=0
@@ -324,13 +361,21 @@ jobs:
           # without them installs a launcher and no binary, and npm reports
           # nothing, because skipping an unresolvable optionalDependency is
           # what npm is supposed to do.
-          for key in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
-            if npm view "@artheras/aria-code-$key@$VERSION" version >/dev/null 2>&1; then
-              echo "npm   ✓ @artheras/aria-code-$key $VERSION"
+          PACKAGE_LINES="$(node - <<'NODE'
+          const manifest = require("./npm/package.json");
+          for (const [name, version] of Object.entries(manifest.optionalDependencies || {})) {
+            console.log(`${name}@${version}`);
+          }
+          NODE
+          )"
+          while IFS= read -r pkg; do
+            if npm view "$pkg" version >/dev/null 2>&1; then
+              echo "npm   ✓ $pkg"
             else
-              echo "::warning::no @artheras/aria-code-$key@$VERSION — users on that platform fall back to pip"
+              echo "::error::no $pkg — the dispatcher is incomplete on that platform"
+              MISSING=1
             fi
-          done
+          done <<< "$PACKAGE_LINES"
 
           if [ "$MISSING" -ne 0 ]; then
             echo

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the per-platform npm packages that carry the prebuilt binaries.
 
-The published shape mirrors Claude Code and Codex: one dispatcher package with
-zero runtime dependencies, plus one package per platform listed in its
-optionalDependencies, so `npm install -g` downloads exactly the binary the
-machine needs and runs no install-time code at all.
+The dispatcher has separate CLI and MCP optional packages for each platform.
+Combining both PyInstaller binaries exceeded the npm registry's payload limit
+on Linux arm64 (307.8 MB at v0.53.0). Each install downloads only the two
+packages matching its platform and runs no install-time code.
 
 Usage:
   python scripts/make_platform_packages.py --version 4.4.3 \\
@@ -13,10 +13,8 @@ Usage:
       --mcp    darwin-arm64=dist/macos-arm64/aria-code-mcp-bin \\
       --out npm/platforms
 
-Each --binary is <platform-key>=<path>. Keys not passed are simply not built;
-the dispatcher already reports a supported-but-absent package clearly, and a
-release that ships fewer platforms is better than one that ships a broken
-package for a platform whose binary failed to build.
+Each --binary and --mcp is <platform-key>=<path>. A release requires both
+binaries for every platform pinned by the dispatcher.
 """
 from __future__ import annotations
 
@@ -57,27 +55,28 @@ def _pairs(values: list[str], flag: str) -> dict[str, pathlib.Path]:
     return out
 
 
-def build_one(key: str, version: str, binaries: dict[str, pathlib.Path],
-              out_root: pathlib.Path) -> pathlib.Path:
+def build_one(key: str, version: str, source: pathlib.Path,
+              out_root: pathlib.Path, *, mcp: bool = False) -> pathlib.Path:
     platform = key.split("-")[0]
     arch = key.split("-", 1)[1]
-    pkg_dir = out_root / f"{BASE}-{key}"
+    suffix = f"mcp-{key}" if mcp else key
+    name = "aria-code-mcp-bin" if mcp else "aria-code-bin"
+    pkg_dir = out_root / f"{BASE}-{suffix}"
     bin_dir = pkg_dir / "bin"
     if pkg_dir.exists():
         shutil.rmtree(pkg_dir)
     bin_dir.mkdir(parents=True)
 
-    for name, source in binaries.items():
-        target = bin_dir / binary_name(key, name)
-        shutil.copy2(source, target)
-        # npm preserves the mode it finds. A binary shipped without +x installs
-        # fine and then fails with EACCES on first run.
-        target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    target = bin_dir / binary_name(key, name)
+    shutil.copy2(source, target)
+    # npm preserves the mode it finds. A binary shipped without +x installs
+    # fine and then fails with EACCES on first run.
+    target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     (pkg_dir / "package.json").write_text(json.dumps({
-        "name": f"{SCOPE}/{BASE}-{key}",
+        "name": f"{SCOPE}/{BASE}-{suffix}",
         "version": version,
-        "description": f"aria-code prebuilt binary for {key}",
+        "description": f"aria-code {'MCP server' if mcp else 'CLI'} binary for {key}",
         "license": "Apache-2.0",
         "os": [OS_FOR[platform]],
         "cpu": [arch],
@@ -102,20 +101,16 @@ def main(argv: list[str]) -> int:
     if not main_bins:
         raise SystemExit("no --binary given; nothing to package")
 
-    stray = set(mcp_bins) - set(main_bins)
-    if stray:
-        # An mcp binary with no CLI binary for the same platform would publish a
-        # package the dispatcher never looks in.
-        raise SystemExit(f"--mcp given for platforms with no --binary: {sorted(stray)}")
+    if set(main_bins) != set(mcp_bins):
+        raise SystemExit("CLI and MCP platform sets must match: "
+                         f"CLI={sorted(main_bins)}, MCP={sorted(mcp_bins)}")
 
     out_root = pathlib.Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
     built = []
     for key, path in sorted(main_bins.items()):
-        binaries = {"aria-code-bin": path}
-        if key in mcp_bins:
-            binaries["aria-code-mcp-bin"] = mcp_bins[key]
-        built.append(build_one(key, args.version, binaries, out_root))
+        built.append(build_one(key, args.version, path, out_root))
+        built.append(build_one(key, args.version, mcp_bins[key], out_root, mcp=True))
 
     print(f"Built {len(built)} platform package(s) in {out_root}:")
     for pkg in built:

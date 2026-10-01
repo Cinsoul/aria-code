@@ -48,6 +48,7 @@ test("an unsupported pair is null, not a guess", () => {
 test("package names are scoped and derived from the key", () => {
   assert.strictEqual(P.packageNameFor("darwin-arm64"), "@artheras/aria-code-darwin-arm64");
   assert.strictEqual(P.packageNameFor("win32-x64"), "@artheras/aria-code-win32-x64");
+  assert.strictEqual(P.packageNameFor("linux-arm64", "aria-code-mcp-bin"), "@artheras/aria-code-mcp-linux-arm64");
 });
 
 test("only Windows gets .exe", () => {
@@ -71,6 +72,21 @@ test("the require path points inside the platform package", () => {
     P.binaryRequestFor("win32-x64"),
     "@artheras/aria-code-win32-x64/bin/aria-code-bin.exe"
   );
+  assert.strictEqual(
+    P.binaryRequestFor("linux-arm64", "aria-code-mcp-bin"),
+    "@artheras/aria-code-mcp-linux-arm64/bin/aria-code-mcp-bin"
+  );
+});
+
+test("dispatcher pins both binaries for every platform", () => {
+  const manifest = require("../package.json");
+  assert.strictEqual(Object.keys(manifest.optionalDependencies).length, P.PLATFORM_KEYS.length * 2);
+  for (const key of P.PLATFORM_KEYS) {
+    for (const binary of ["aria-code-bin", "aria-code-mcp-bin"]) {
+      const name = P.packageNameFor(key, binary);
+      assert.strictEqual(manifest.optionalDependencies[name], manifest.version, name);
+    }
+  }
 });
 
 test("the unsupported message names the platform and a real alternative", () => {

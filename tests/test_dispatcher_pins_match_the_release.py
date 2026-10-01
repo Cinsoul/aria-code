@@ -50,6 +50,7 @@ class ThePinsMatchTheDispatchersOwnVersion(unittest.TestCase):
     def test_every_platform_is_listed(self) -> None:
         listed = set(self.manifest.get("optionalDependencies") or {})
         expected = {f"@artheras/aria-code-{k}" for k in PLATFORM_KEYS}
+        expected |= {f"@artheras/aria-code-mcp-{k}" for k in PLATFORM_KEYS}
         self.assertEqual(
             listed, expected,
             "the dispatcher must list exactly the platform packages the release "
@@ -85,7 +86,8 @@ class BumpingTheVersionMovesThePins(unittest.TestCase):
                 "name": "@artheras/aria-code",
                 "version": "0.47.0",
                 "optionalDependencies": {
-                    f"@artheras/aria-code-{k}": "0.47.0" for k in PLATFORM_KEYS
+                    **{f"@artheras/aria-code-{k}": "0.47.0" for k in PLATFORM_KEYS},
+                    **{f"@artheras/aria-code-mcp-{k}": "0.47.0" for k in PLATFORM_KEYS},
                 },
             }, indent=2) + "\n")
             (work / "scripts" / "bump_version.py").write_text(
