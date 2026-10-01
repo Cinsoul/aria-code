@@ -131,11 +131,10 @@ class AFullSetOfArtifactsAssembles(_Fixture):
                 self.assertIn(f"{platform}=built/{mcp_dir}/{mcp_file}", args)
 
 
-class MissingArtifactsDoNotKillTheStep(_Fixture):
-    """A platform that failed to build must be skipped, not fatal.
+class MissingCliArtifactsStopTheRelease(_Fixture):
+    """A dispatcher must not be published when a pinned CLI package is absent.
 
-    This is the property the workflow comment claims ("A build that failed must
-    not become an empty package") and that bug 2 silently removed.
+    An MCP artifact may be omitted because the CLI still runs without it.
     """
 
     def test_a_missing_mcp_binary_is_a_warning(self) -> None:
@@ -146,22 +145,19 @@ class MissingArtifactsDoNotKillTheStep(_Fixture):
                          f"a missing MCP binary ended the step:\n{proc.stderr[-800:]}")
         self.assertIn("::warning::", proc.stdout)
 
-    def test_a_missing_platform_is_a_warning(self) -> None:
+    def test_a_missing_platform_fails_before_packaging(self) -> None:
         self.place("linux-x64")
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"a missing platform ended the step:\n{proc.stderr[-800:]}")
-        args = [l[4:] for l in proc.stdout.splitlines() if l.startswith("ARG:")]
-        self.assertIn("linux-x64=built/aria-code-linux-x64/aria-code-bin", args)
-        self.assertNotIn("--binary", [a for a in args if "darwin" in a])
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no CLI binary for darwin-arm64", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
 
-    def test_no_artifacts_at_all_still_reaches_python(self) -> None:
-        # Nothing to package is the script's job to report ("no --binary
-        # given"), not something bash should die on first.
+    def test_no_artifacts_at_all_fails_before_packaging(self) -> None:
         self.built.mkdir(parents=True)
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"an empty artifact set ended the step:\n{proc.stderr[-800:]}")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no CLI binary", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
 
 
 if __name__ == "__main__":
