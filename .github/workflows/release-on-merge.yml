@@ -139,12 +139,50 @@ jobs:
           git config user.name  "aria-release[bot]"
           git config user.email "aria-release[bot]@users.noreply.github.com"
           git add pyproject.toml npm/package.json src/aria_code/_version.py CHANGELOG.md
-          git commit -m "release: v${{ steps.next.outputs.version }}"
-          git tag "v${{ steps.next.outputs.version }}"
-          # Push the commit and the tag together. Pushing the tag first would
-          # publish a version whose bump commit is not yet on main, which is
-          # exactly what publish.yml's ancestry gate refuses.
-          git push origin "HEAD:${{ github.ref_name }}" "refs/tags/v${{ steps.next.outputs.version }}"
+          VERSION="${{ steps.next.outputs.version }}"
+          BRANCH="${{ github.ref_name }}"
+          git commit -m "release: v$VERSION"
+          git tag "v$VERSION"
+
+          # --atomic: both refs land or neither does.
+          #
+          # This used to push the commit and the tag in one command without it,
+          # with a comment saying they went "together". They did not: git
+          # pushes each refspec independently unless told otherwise, so when
+          # the branch push was rejected the tag still landed.
+          #
+          # That is how v0.51.0 became a tag pointing at a commit that is not
+          # on main. The next run then computed 0.51.0 again — main's version
+          # was still 0.50.0, because the bump never landed — and refused
+          # because the tag existed. The release pipeline was stuck until
+          # someone deleted the tag by hand.
+          #
+          # The retry is for the cause rather than the symptom. Two merges 24
+          # seconds apart is all it takes: this job checks out, bumps, commits
+          # and pushes, and a merge that lands in that window makes the push a
+          # non-fast-forward. The concurrency group serialises release *runs*,
+          # but a merge is an ordinary push by GitHub and is not in the group.
+          #
+          # Rebasing keeps the version correct: only a release changes the
+          # version files, releases are serialised, so whatever arrived in the
+          # window was a merge and left them alone.
+          for attempt in 1 2 3; do
+            if git push --atomic origin "HEAD:$BRANCH" "refs/tags/v$VERSION"; then
+              echo "pushed v$VERSION on attempt $attempt"
+              exit 0
+            fi
+            echo "::warning::push rejected (attempt $attempt); $BRANCH moved — rebasing"
+            git fetch origin "$BRANCH"
+            git rebase "origin/$BRANCH" || {
+              echo "::error::could not rebase the release commit onto $BRANCH"
+              exit 1
+            }
+            # The commit moved, so the tag has to follow it.
+            git tag -f "v$VERSION"
+          done
+          echo "::error::could not push v$VERSION after 3 attempts. Nothing was"
+          echo "::error::published and no tag was created, because the push is atomic."
+          exit 1
 
       - name: Summary
         run: |
