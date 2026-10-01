@@ -60,10 +60,20 @@ class DoctorReport:
         }
 
 
+# `npm run repair` used to be here as the npm-install branch of this hint. The
+# npm package no longer has that script, or any script but `test`: it was
+# rewritten from a postinstall that built a venv into a dispatcher that runs a
+# prebuilt binary. An npm install therefore has no venv to rebuild, and this
+# hint only applies to a repo checkout.
 VENV_REBUILD_HINT = (
     "Rebuild the venv with your current Python: bash install.sh --rebuild "
-    "(repo checkout) or npm run repair (npm install)."
+    "(repo checkout), or reinstall with pip install -U aria-code."
 )
+
+# What the npm package is today: a zero-dependency launcher that execs a
+# prebuilt binary delivered as an optionalDependency, one package per platform.
+# Nothing to repair in place — the fix for every broken state is a reinstall.
+NPM_REINSTALL_HINT = "Reinstall with: npm install -g @artheras/aria-code@latest"
 
 
 def analyze_python_drift(
@@ -373,6 +383,67 @@ def integration_checks() -> List[DoctorCheck]:
     return checks
 
 
+def npm_platform_key(system: str = "", machine: str = "") -> str:
+    """This machine's platform key, matching npm/lib/platform.js PLATFORM_KEYS.
+
+    Returns "" for a platform with no prebuilt binary, which is a real answer:
+    those users install from pip.
+    """
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    os_part = {"darwin": "darwin", "linux": "linux", "windows": "win32"}.get(system, "")
+    arch_part = {
+        "x86_64": "x64", "amd64": "x64",
+        "arm64": "arm64", "aarch64": "arm64",
+    }.get(machine, "")
+    if not os_part or not arch_part:
+        return ""
+    key = f"{os_part}-{arch_part}"
+    # win32-arm64 and linux-arm64-on-win are not built; see PLATFORM_KEYS.
+    return key if key in (
+        "darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "win32-x64"
+    ) else ""
+
+
+def _platform_package_check(npm: Optional[str]) -> Optional[DoctorCheck]:
+    """Did this machine's prebuilt-binary package actually get installed?
+
+    The launcher lists one package per platform as an optionalDependency, and
+    npm skips an optionalDependency it cannot resolve *silently* — by design,
+    that is what "optional" means. So the failure mode this catches is a
+    launcher with no binary behind it, which reports only when the user tries
+    to run something.
+
+    It is not hypothetical: @artheras/aria-code-darwin-arm64 and its four
+    siblings have never been published, so every npm install to date has been
+    in exactly this state.
+    """
+    key = npm_platform_key()
+    if not key:
+        return _check(
+            "npm_runtime:binary",
+            "skip",
+            f"no prebuilt binary for {platform.system()}/{platform.machine()}",
+            "Install with pip instead: pip install -U aria-code",
+        )
+    pkg = f"@artheras/aria-code-{key}"
+    if not npm:
+        return None
+    code, root = _capture_cmd([npm, "root", "-g"], timeout=1.5)
+    if code != 0 or not root:
+        return None
+    installed = Path(root) / "@artheras" / f"aria-code-{key}"
+    if installed.is_dir():
+        return _check("npm_runtime:binary", "ok", f"{pkg} at {installed}")
+    return _check(
+        "npm_runtime:binary",
+        "err",
+        f"{pkg} is not installed — the launcher has no binary to run",
+        "npm skips an optional dependency it cannot resolve without saying so. "
+        + NPM_REINSTALL_HINT,
+    )
+
+
 def _npm_install_detected(paths: dict) -> bool:
     """Is there an npm-launcher installation for these checks to be about?
 
@@ -431,6 +502,10 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
     else:
         checks.append(_check("npm_runtime:npm", "warn", "npm not found", "Install Node.js/npm if you use npm install -g aria-code."))
 
+    binary_check = _platform_package_check(npm)
+    if binary_check is not None:
+        checks.append(binary_check)
+
     install_status, install_detail = _is_path_ready(paths["install_dir"])
     install_suggestion = ""
     if using_source_checkout:
@@ -452,7 +527,10 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
         "npm_runtime:aria_cli",
         "ok" if actual_cli.is_file() else "err",
         str(actual_cli),
-        "Repair with: node $(npm root -g)/aria-code/scripts/postinstall.js" if not actual_cli.is_file() else "",
+        # Was "node $(npm root -g)/aria-code/scripts/postinstall.js". That file
+        # was deleted with the launcher rewrite, so the suggestion sent anyone
+        # who hit it to a path that does not exist.
+        NPM_REINSTALL_HINT if not actual_cli.is_file() else "",
     ))
 
     actual_venv_py = paths["venv_py"] if paths["venv_py"].is_file() else (source_venv_py if source_venv_py.is_file() else paths["venv_py"])
@@ -460,7 +538,11 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
         "npm_runtime:venv",
         "ok" if actual_venv_py.is_file() else "warn",
         str(actual_venv_py),
-        "Run npm repair/update-engine or reinstall dependencies." if not actual_venv_py.is_file() else "",
+        # No `repair` or `update-engine` script exists any more. A missing venv
+        # is also no longer a fault on an npm install, which ships a binary and
+        # builds no venv at all — so this is only meaningful for the legacy
+        # layout or a source checkout.
+        (NPM_REINSTALL_HINT if not actual_venv_py.is_file() else ""),
     ))
 
     info_hit = next((p for p in paths["info_candidates"] if p.is_file()), None)
@@ -468,7 +550,7 @@ def npm_runtime_checks(*, cwd: Optional[Path] = None) -> List[DoctorCheck]:
         "npm_runtime:install_info",
         "ok" if info_hit else "warn",
         str(info_hit) if info_hit else "none found; checked " + ", ".join(str(p) for p in paths["info_candidates"]),
-        "Run npm repair/update-engine to rewrite install metadata." if not info_hit else "",
+        NPM_REINSTALL_HINT if not info_hit else "",
     ))
 
     config_status, config_detail = _is_path_ready(paths["config_dir"])
