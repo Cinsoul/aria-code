@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.49.0] — 2026-10-01
+
+- Merge pull request #56 from Cinsoul/fix/dispatcher-pins
+
 ## [0.48.0] — 2026-10-01
 
 - Merge pull request #55 from Cinsoul/fix/platform-package-assembly

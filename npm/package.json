@@ -1,6 +1,6 @@
 {
   "name": "@artheras/aria-code",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "description": "AI-powered financial terminal \u2014 local LLM + 19+ cloud providers + real-time market data",
   "keywords": [
     "ai",
@@ -45,10 +45,10 @@
     "access": "public"
   },
   "optionalDependencies": {
-    "@artheras/aria-code-darwin-arm64": "0.48.0",
-    "@artheras/aria-code-darwin-x64": "0.48.0",
-    "@artheras/aria-code-linux-x64": "0.48.0",
-    "@artheras/aria-code-linux-arm64": "0.48.0",
-    "@artheras/aria-code-win32-x64": "0.48.0"
+    "@artheras/aria-code-darwin-arm64": "0.49.0",
+    "@artheras/aria-code-darwin-x64": "0.49.0",
+    "@artheras/aria-code-linux-x64": "0.49.0",
+    "@artheras/aria-code-linux-arm64": "0.49.0",
+    "@artheras/aria-code-win32-x64": "0.49.0"
   }
 }
