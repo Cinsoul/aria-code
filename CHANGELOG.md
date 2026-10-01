@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.53.0] — 2026-10-01
+
+- Merge pull request #64 from Cinsoul/perf/lazy-rebind
+
 ## [0.52.0] — 2026-10-01
 
 - Merge pull request #62 from Cinsoul/fix/release-push-is-atomic
