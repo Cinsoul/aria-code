@@ -55,11 +55,15 @@ jobs:
           # npm install can fetch an already-published optional package even
           # with --omit=optional, making this absence test depend on registry
           # state rather than on the launcher's behavior.
-          PKG=$(ls "${{ runner.temp }}"/artheras-aria-code-*.tgz)
-          mkdir -p "${{ runner.temp }}/dispatcher-no-optional"
-          tar -xzf "$PKG" -C "${{ runner.temp }}/dispatcher-no-optional"
+          TEMP_DIR="${{ runner.temp }}"
+          if command -v cygpath >/dev/null 2>&1; then
+            TEMP_DIR="$(cygpath -u "$TEMP_DIR")"
+          fi
+          PKG=$(ls "$TEMP_DIR"/artheras-aria-code-*.tgz)
+          mkdir -p "$TEMP_DIR/dispatcher-no-optional"
+          tar -xzf "$PKG" -C "$TEMP_DIR/dispatcher-no-optional"
           set +e
-          OUT="$(node "${{ runner.temp }}/dispatcher-no-optional/package/bin/aria-code.js" --version 2>&1)"
+          OUT="$(node "$TEMP_DIR/dispatcher-no-optional/package/bin/aria-code.js" --version 2>&1)"
           CODE=$?
           set -e
           echo "$OUT"
