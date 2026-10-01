@@ -92,15 +92,17 @@ class ThePublishedVersionIsVerified(unittest.TestCase):
 
 class TheNpmPageDescribesTheCurrentProduct(unittest.TestCase):
     def test_the_two_manifests_agree(self) -> None:
+        import ast
         import json
-        import tomllib
+        import re
 
         root = WORKFLOWS.parents[1]
         npm = json.loads((root / "npm" / "package.json").read_text(encoding="utf-8"))
-        with (root / "pyproject.toml").open("rb") as fh:
-            py = tomllib.load(fh)["project"]
+        project_section = (root / "pyproject.toml").read_text(encoding="utf-8").split("[project]", 1)[1].split("\n[", 1)[0]
+        description = re.search(r'^description\s*=\s*(".*")\s*$', project_section, re.MULTILINE)
+        self.assertIsNotNone(description)
         self.assertEqual(
-            npm["description"], py["description"],
+            npm["description"], ast.literal_eval(description.group(1)),
             "the npm page's one-line pitch and PyPI's disagree; npm's said "
             "'AI-powered financial terminal' long after the project was "
             "repositioned, and it is the first line a visitor reads",
