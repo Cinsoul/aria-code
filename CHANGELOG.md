@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.52.0] — 2026-10-01
+
+- Merge pull request #62 from Cinsoul/fix/release-push-is-atomic
+
 ## [0.51.0] — 2026-10-01
 
 - Claimed by hand to step over an orphaned v0.51.0 tag. Two merges 24 seconds
