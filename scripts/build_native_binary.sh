@@ -72,9 +72,11 @@ echo "── Running PyInstaller (--onefile) ──"
   --distpath "$BUILD_DIR/dist" \
   --workpath "$BUILD_DIR/build" \
   --specpath "$BUILD_DIR" \
+  --paths "$PROJECT_ROOT/src/aria_code" \
+  --paths "$PROJECT_ROOT/src" \
   --collect-all rich \
   --collect-all prompt_toolkit \
-  aria_cli.py
+  "$PROJECT_ROOT/src/aria_code/aria_cli.py"
 
 echo "── Running PyInstaller for the MCP server binary (--onefile) ──"
 # Separate entry point, separate binary: the MCP server (packages/aria_mcp/
@@ -91,8 +93,10 @@ echo "── Running PyInstaller for the MCP server binary (--onefile) ──"
   --distpath "$BUILD_DIR/dist" \
   --workpath "$BUILD_DIR/build" \
   --specpath "$BUILD_DIR" \
+  --paths "$PROJECT_ROOT/src/aria_code" \
+  --paths "$PROJECT_ROOT/src" \
   --copy-metadata aria-code \
-  aria_mcp_server.py
+  "$PROJECT_ROOT/src/aria_code/aria_mcp_server.py"
 
 # Both binaries (CLI + MCP server) go through the same sign/notarize/verify
 # pipeline below — iterate rather than duplicate the whole block per binary.
