@@ -75,13 +75,13 @@ class ThePublishedVersionIsVerified(unittest.TestCase):
                       "reporting a missing package without failing is the same "
                       "silence this job exists to break")
 
-    def test_the_platform_packages_are_reported(self) -> None:
-        # Their absence is a warning rather than an error: a platform whose
-        # build failed should not fail the whole release, but it must be said,
-        # because npm skipping an unresolvable optionalDependency is silent.
+    def test_missing_platform_packages_fail_the_release(self) -> None:
+        # npm silently skips unavailable optionalDependencies, so a published
+        # dispatcher without its pinned binaries is not a working release.
         script = "\n".join(str(s.get("run", "")) for s in self.job.get("steps") or [])
         self.assertIn("aria-code-$key", script)
-        self.assertIn("::warning::", script)
+        self.assertIn("::error::no @artheras/aria-code-$key", script)
+        self.assertIn("MISSING=1", script)
 
 
 # The job graph — that publishing no longer waits on the npm binaries, and
