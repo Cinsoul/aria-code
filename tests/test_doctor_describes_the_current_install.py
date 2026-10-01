@@ -116,9 +116,11 @@ class ThePlatformKeyMatchesTheOnesWePublish(unittest.TestCase):
         )
 
     def test_the_dispatcher_lists_exactly_those(self) -> None:
-        listed = {name.rsplit("aria-code-", 1)[-1]
-                  for name in (NPM_PKG.get("optionalDependencies") or {})}
-        self.assertEqual(listed, {v for v in self.CASES.values() if v})
+        names = set(NPM_PKG.get("optionalDependencies") or {})
+        expected = {v for v in self.CASES.values() if v}
+        cli = {f"@artheras/aria-code-{key}" for key in expected}
+        mcp = {f"@artheras/aria-code-mcp-{key}" for key in expected}
+        self.assertEqual(names, cli | mcp)
 
 
 class TheBinaryCheckReportsASilentlyMissingPackage(unittest.TestCase):
