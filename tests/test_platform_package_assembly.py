@@ -26,8 +26,10 @@ of the two shows up.
 from __future__ import annotations
 
 import pathlib
+import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -131,19 +133,16 @@ class AFullSetOfArtifactsAssembles(_Fixture):
                 self.assertIn(f"{platform}=built/{mcp_dir}/{mcp_file}", args)
 
 
-class MissingCliArtifactsStopTheRelease(_Fixture):
-    """A dispatcher must not be published when a pinned CLI package is absent.
+class MissingArtifactsStopTheRelease(_Fixture):
+    """Every binary pinned by the dispatcher must be available."""
 
-    An MCP artifact may be omitted because the CLI still runs without it.
-    """
-
-    def test_a_missing_mcp_binary_is_a_warning(self) -> None:
+    def test_a_missing_mcp_binary_fails_before_packaging(self) -> None:
         for platform in ARTIFACTS:
             self.place(platform, mcp=False)
         proc = _run(self.script, self.built)
-        self.assertEqual(proc.returncode, 0,
-                         f"a missing MCP binary ended the step:\n{proc.stderr[-800:]}")
-        self.assertIn("::warning::", proc.stdout)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("no MCP binary", proc.stdout)
+        self.assertNotIn("ARG:", proc.stdout)
 
     def test_a_missing_platform_fails_before_packaging(self) -> None:
         self.place("linux-x64")
@@ -158,6 +157,31 @@ class MissingCliArtifactsStopTheRelease(_Fixture):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("no CLI binary", proc.stdout)
         self.assertNotIn("ARG:", proc.stdout)
+
+
+class PlatformPackagesAreSplit(_Fixture):
+    def test_cli_and_mcp_have_separate_tarball_inputs(self) -> None:
+        for platform in ARTIFACTS:
+            self.place(platform)
+        out = self.tmp / "packages"
+        args = [sys.executable, str(ROOT / "scripts" / "make_platform_packages.py"),
+                "--version", "9.9.9", "--out", str(out)]
+        for platform, (cli_dir, cli_file, mcp_dir, mcp_file) in ARTIFACTS.items():
+            args += ["--binary", f"{platform}={self.built / cli_dir / cli_file}",
+                     "--mcp", f"{platform}={self.built / mcp_dir / mcp_file}"]
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=20)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(len(list(out.iterdir())), 10)
+        for platform in ARTIFACTS:
+            for kind, name in (("", "aria-code-bin"), ("mcp-", "aria-code-mcp-bin")):
+                package = out / f"aria-code-{kind}{platform}"
+                manifest = json.loads((package / "package.json").read_text())
+                self.assertEqual(manifest["name"], f"@artheras/aria-code-{kind}{platform}")
+                self.assertEqual(manifest["version"], "9.9.9")
+                binaries = list((package / "bin").iterdir())
+                self.assertEqual(len(binaries), 1)
+                extension = ".exe" if platform.startswith("win32") else ""
+                self.assertEqual(binaries[0].name, f"{name}{extension}")
 
 
 if __name__ == "__main__":
