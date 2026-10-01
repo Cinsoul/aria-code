@@ -117,9 +117,44 @@ class CalledWorkflowsAcceptATag(unittest.TestCase):
         for name in ("publish", "build-native-binaries"):
             text = (WORKFLOWS / f"{name}.yml").read_text(encoding="utf-8")
             bare = [line.strip() for line in text.splitlines()
-                    if "github.ref_name" in line and "inputs.tag" not in line]
+                    if "github.ref_name" in line and "inputs.tag" not in line
+                    # Comments explaining the hazard name it; only live
+                    # expressions can cause it.
+                    and not line.lstrip().startswith("#")]
             with self.subTest(workflow=name):
                 self.assertEqual(bare, [], f"{name}.yml reads ref_name unguarded")
+
+    def test_every_checkout_pins_the_tag(self):
+        """The same hazard, in the form the test above cannot see.
+
+        `actions/checkout` with no `ref:` takes the ref that triggered the run.
+        On the workflow_call path that is the caller's branch — main at the
+        merge commit, one before release-on-merge's version bump — so the jobs
+        run against the previous version's tree while claiming to publish the
+        new tag.
+
+        v0.50.0 failed there: head be60f8c had pyproject 0.49.0, tag v0.50.0
+        pointed at cff7dec with 0.50.0, verify-version compared them and
+        failed, and npm, PyPI and the GitHub release were all skipped.
+
+        The assertion above greps for an explicit `github.ref_name`. This one
+        is about its *absence*, which leaves nothing to grep — that is why a
+        test written for this exact hazard did not catch it.
+        """
+        for name in ("publish", "build-native-binaries"):
+            doc = yaml.safe_load((WORKFLOWS / f"{name}.yml").read_text(encoding="utf-8"))
+            for job_id, job in (doc.get("jobs") or {}).items():
+                for step in job.get("steps") or []:
+                    if not str(step.get("uses", "")).startswith("actions/checkout"):
+                        continue
+                    with self.subTest(workflow=name, job=job_id):
+                        ref = (step.get("with") or {}).get("ref")
+                        self.assertIsNotNone(
+                            ref,
+                            f"{name}.yml:{job_id} checks out the triggering ref, "
+                            f"which on a call is the caller's branch, not the tag",
+                        )
+                        self.assertIn("inputs.tag", str(ref))
 
 
 if __name__ == "__main__":

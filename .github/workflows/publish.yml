@@ -22,11 +22,28 @@ on:
         required: false
 
 jobs:
+  # Every checkout below pins `ref` to the tag being released. Without it,
+  # actions/checkout takes the ref that triggered the run — and when this
+  # workflow is *called* rather than triggered by a tag push, that is the
+  # caller's branch, i.e. main at the merge commit, one commit before
+  # release-on-merge's version bump.
+  #
+  # v0.50.0 failed exactly there: the run's head was be60f8c (pyproject
+  # 0.49.0) while the tag pointed at cff7dec (pyproject 0.50.0), so
+  # verify-version compared 0.49.0 against v0.50.0 and failed. Every job
+  # downstream needs it, so npm, PyPI and the GitHub release were all skipped.
+  #
+  # It never broke before because a tag push makes github.ref_name the tag,
+  # which is what the default checkout wanted. The bug only exists on the
+  # workflow_call path — the path that was added to stop tags publishing
+  # nothing.
   verify-version:
     name: Verify version alignment
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -53,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0   # --generate-notes 需要完整历史才能算出上一次 release 以来的提交
       - name: Create the release if it does not exist
         env:
@@ -79,6 +97,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -133,6 +153,8 @@ jobs:
       HAS_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -211,6 +233,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -258,6 +282,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
