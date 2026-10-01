@@ -280,19 +280,37 @@ jobs:
           # Only pass a platform whose artifact actually arrived. A build that
           # failed must not become an empty package.
           ARGS=()
-          add() {   # add <platform-key> <artifact-dir> <cli-name> <mcp-name>
-            if [ -f "built/$2/$3" ]; then
-              ARGS+=(--binary "$1=built/$2/$3")
-              [ -f "built/$4/$3" ] && ARGS+=(--mcp "$1=built/$4/$3")
-            else
+          # add <platform-key> <cli-dir> <cli-file> <mcp-dir> <mcp-file>
+          #
+          # The MCP arguments are a separate file name, not the CLI's. This
+          # previously read `[ -f "built/$4/$3" ]` -- the CLI binary's name
+          # inside the MCP artifact's directory -- which never matches, so no
+          # --mcp was ever passed and the MCP binaries were silently left out
+          # of every platform package.
+          #
+          # It is an if/else rather than `cond && ARGS+=(...)` for a second
+          # reason: a trailing `&&` whose test is false makes the function
+          # return 1, and `run:` executes under `bash -eo pipefail`, so the
+          # step died on the first call before python ran at all. That is what
+          # failed the v0.47.0 release.
+          add() {
+            if [ ! -f "built/$2/$3" ]; then
               echo "::warning::no binary for $1 — its package will not be published"
+              return 0
             fi
+            ARGS+=(--binary "$1=built/$2/$3")
+            if [ -f "built/$4/$5" ]; then
+              ARGS+=(--mcp "$1=built/$4/$5")
+            else
+              echo "::warning::no MCP binary for $1 — its package ships the CLI only"
+            fi
+            return 0
           }
-          add darwin-arm64 aria-code-macos-arm64   aria-code-bin      aria-code-mcp-macos-arm64
-          add darwin-x64   aria-code-macos-x64     aria-code-bin      aria-code-mcp-macos-x64
-          add linux-x64    aria-code-linux-x64     aria-code-bin      aria-code-mcp-linux-x64
-          add linux-arm64  aria-code-linux-arm64   aria-code-bin      aria-code-mcp-linux-arm64
-          add win32-x64    aria-code-windows-x64   aria-code-bin.exe  aria-code-mcp-windows-x64
+          add darwin-arm64 aria-code-macos-arm64   aria-code-bin      aria-code-mcp-macos-arm64  aria-code-mcp-bin
+          add darwin-x64   aria-code-macos-x64     aria-code-bin      aria-code-mcp-macos-x64    aria-code-mcp-bin
+          add linux-x64    aria-code-linux-x64     aria-code-bin      aria-code-mcp-linux-x64    aria-code-mcp-bin
+          add linux-arm64  aria-code-linux-arm64   aria-code-bin      aria-code-mcp-linux-arm64  aria-code-mcp-bin
+          add win32-x64    aria-code-windows-x64   aria-code-bin.exe  aria-code-mcp-windows-x64  aria-code-mcp-bin.exe
           python scripts/make_platform_packages.py --version "$VERSION" \
             --out npm/platforms "${ARGS[@]}"
 
