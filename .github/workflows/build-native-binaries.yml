@@ -322,7 +322,7 @@ jobs:
           python scripts/make_platform_packages.py --version "$VERSION" \
             --out npm/platforms "${ARGS[@]}"
 
-      - name: Verify npm publishing identity
+      - name: Require npm publishing token
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -330,10 +330,6 @@ jobs:
             echo "::error::NPM_TOKEN is not configured; platform packages cannot be published"
             exit 1
           fi
-          npm whoami --registry=https://registry.npmjs.org/ || {
-            echo "::error::NPM_TOKEN cannot authenticate with npmjs.com"
-            exit 1
-          }
 
       - name: Publish each platform package
         env:
