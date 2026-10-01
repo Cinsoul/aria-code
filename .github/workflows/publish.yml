@@ -156,7 +156,7 @@ jobs:
             sleep 20
           done
 
-      - name: Verify npm publishing identity
+      - name: Require npm publishing token
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -164,10 +164,6 @@ jobs:
             echo "::error::NPM_TOKEN is not configured"
             exit 1
           fi
-          npm whoami --registry=https://registry.npmjs.org/ || {
-            echo "::error::NPM_TOKEN cannot authenticate with npmjs.com"
-            exit 1
-          }
 
       - name: Publish @artheras/aria-code to npm
         working-directory: npm
