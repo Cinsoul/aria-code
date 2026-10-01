@@ -30,14 +30,23 @@ The same core runtime is used by the CLI and other Aria surfaces. Model choice a
 
 ## Quick start
 
-Requires Python 3.10 or newer. Install the CLI from PyPI and start an interactive session:
+Install the standalone CLI on macOS or Linux without Python, Node.js, or npm:
 
 ```bash
-python3 -m pip install --upgrade aria-code
-aria-code
+curl -fsSL https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.sh | sh
+~/.local/bin/aria-code --help
 ```
 
-If you prefer the npm launcher, use `npm install -g @artheras/aria-code`. For development from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
+On Windows x64, run this in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.ps1 | iex
+aria-code --help
+```
+
+The installer downloads the binary for your OS from the latest [GitHub release](https://github.com/artherahq/aria-code/releases/latest), checks its SHA-256 digest, and installs it in your user account. Open a new terminal to use `aria-code` by name on macOS or Linux. Set `ARIA_CODE_VERSION=v0.55.0` to pin a release.
+
+Alternative package-manager installs: `npm install -g @artheras/aria-code` (requires npm) or `python3 -m pip install --upgrade aria-code` (requires Python 3.10+). For development from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 To use a local model, install [Ollama](https://ollama.com/download), pull a coding model, and start Aria in local-only mode:
 

@@ -30,14 +30,23 @@ CLI 与 Aria 的其他入口使用同一套核心运行时。模型选择与工�
 
 ## 快速开始
 
-需要 Python 3.10 或更新版本。从 PyPI 安装 CLI 并进入交互会话：
+macOS 和 Linux 可直接安装独立 CLI，无需预装 Python、Node.js 或 npm：
 
 ```bash
-python3 -m pip install --upgrade aria-code
-aria-code
+curl -fsSL https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.sh | sh
+~/.local/bin/aria-code --help
 ```
 
-如果更习惯 npm 启动器，可以使用 `npm install -g @artheras/aria-code`。源码开发方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Windows x64 请在 PowerShell 中运行：
+
+```powershell
+irm https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.ps1 | iex
+aria-code --help
+```
+
+安装脚本从最新的 [GitHub Release](https://github.com/artherahq/aria-code/releases/latest) 下载对应平台的二进制文件，校验 SHA-256 后安装到当前用户目录。在 macOS 或 Linux 上重新打开终端后，即可直接使用 `aria-code` 命令。设置 `ARIA_CODE_VERSION=v0.55.0` 可固定版本。
+
+也可以选择包管理器：`npm install -g @artheras/aria-code`（需要 npm），或 `python3 -m pip install --upgrade aria-code`（需要 Python 3.10+）。源码开发方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 使用本地模型时，先安装 [Ollama](https://ollama.com/download)，拉取一个编码模型，再以仅本地模式启动：
 

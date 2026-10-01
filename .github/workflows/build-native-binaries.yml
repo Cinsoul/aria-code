@@ -233,6 +233,12 @@ jobs:
               esac
             done
           done
+          count="$(find release -maxdepth 1 -type f -name 'aria-code-*' | wc -l | tr -d ' ')"
+          if [ "$count" -ne 10 ]; then
+            echo "::error::expected 10 CLI/MCP release binaries, found $count"
+            exit 1
+          fi
+          (cd release && sha256sum aria-code-* > SHA256SUMS)
           echo "Attaching:"; ls -l release/
       - name: Upload to release
         env:
