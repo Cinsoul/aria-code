@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.54.0] — 2026-10-01
+
+- Merge pull request #63 from artherahq/fix/npm-platform-publishing
+
 ## [0.53.0] — 2026-10-01
 
 - Merge pull request #64 from Cinsoul/perf/lazy-rebind
