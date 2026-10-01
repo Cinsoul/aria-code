@@ -48,15 +48,14 @@ jobs:
         shell: bash
         run: npm pack --pack-destination "${{ runner.temp }}"
 
-      # --no-optional on purpose: the platform packages for this version do not
-      # exist until the tag is published, and this asserts the dispatcher's
-      # behaviour when its binary is absent rather than pretending it is there.
+      # Omit optional packages explicitly: some versions may already exist on
+      # npm, but this test exercises the missing-binary error path.
       - name: Install the dispatcher without its platform package
         shell: bash
         run: |
           set -e
           PKG=$(ls "${{ runner.temp }}"/artheras-aria-code-*.tgz)
-          npm install -g "$PKG" --no-optional
+          npm install -g "$PKG" --omit=optional
 
       - name: It must fail clearly, not silently or vaguely
         shell: bash
