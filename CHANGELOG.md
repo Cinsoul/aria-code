@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.48.0] — 2026-10-01
+
+- Merge pull request #55 from Cinsoul/fix/platform-package-assembly
+
 ## [0.47.0] — 2026-10-01
 
 - Merge pull request #54 from Cinsoul/fix/native-binary-entrypoints
