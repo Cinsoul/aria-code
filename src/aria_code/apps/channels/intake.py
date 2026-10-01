@@ -59,12 +59,12 @@ async def analyze_alert_via_gateway(
     decides its own fallback (the daemon keeps its legacy quick summary).
     """
     if run_turn_fn is None:
-        # stream_ollama borrows 47 bare names from aria_cli's module globals
-        # (verified by AST audit) and only works after aria_cli's import-time
-        # rebinding. Until that module is untangled, any out-of-CLI consumer
-        # of the default Ollama path must import aria_cli first — a one-time
-        # ~1s cost the long-lived daemon amortizes.
-        import aria_cli  # noqa: F401  (side effect: binds stream_ollama globals)
+        # No `import aria_cli` here any more. It was unconditional, for the sake
+        # of the Ollama path's rebind, and cost 1766ms against the 63ms this
+        # module's own dependencies need — paid by every channel alert including
+        # the ones analysed through the cloud, which never reach stream_ollama.
+        # runtime_bridge now imports it inside the ollama branch, so the cost
+        # follows the route that needs it.
         from apps.cli.providers.runtime_bridge import build_tool_executor, make_provider_fn
         from runtime.gateway import run_turn as run_turn_fn_impl
 
