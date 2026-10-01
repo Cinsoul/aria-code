@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.56.0] — 2026-10-01
+
+- fix(cloud-run): start relay server on assigned PORT
+
 ## [0.55.0] — 2026-10-01
 
 - Merge pull request #65 from artherahq/fix/native-one-command-install
