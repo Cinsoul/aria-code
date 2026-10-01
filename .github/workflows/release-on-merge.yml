@@ -136,8 +136,19 @@ jobs:
 
       - name: Commit and tag
         run: |
-          git config user.name  "aria-release[bot]"
-          git config user.email "aria-release[bot]@users.noreply.github.com"
+          # GitHub attributes a commit by matching its email to an account. This
+          # used to be "aria-release[bot]@users.noreply.github.com", a name chosen
+          # without checking whether it was taken — and it was: aria-release[bot]
+          # is a GitHub App belonging to an unrelated organisation
+          # (flylance-apps), so every release commit showed their logo and
+          # linked to their app.
+          #
+          # github-actions[bot] is also the honest identity: the push is made
+          # with GITHUB_TOKEN. The numeric prefix is that account's id
+          # (41898282), which is what makes GitHub resolve it unambiguously
+          # rather than by a login that anyone could have registered.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml npm/package.json src/aria_code/_version.py CHANGELOG.md
           VERSION="${{ steps.next.outputs.version }}"
           BRANCH="${{ github.ref_name }}"
