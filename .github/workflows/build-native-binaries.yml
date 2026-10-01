@@ -303,8 +303,8 @@ jobs:
           # failed the v0.47.0 release.
           add() {
             if [ ! -f "built/$2/$3" ]; then
-              echo "::warning::no binary for $1 — its package will not be published"
-              return 0
+              echo "::error::no CLI binary for $1 — refusing a partial npm release"
+              return 1
             fi
             ARGS+=(--binary "$1=built/$2/$3")
             if [ -f "built/$4/$5" ]; then
@@ -322,19 +322,33 @@ jobs:
           python scripts/make_platform_packages.py --version "$VERSION" \
             --out npm/platforms "${ARGS[@]}"
 
-      - name: Publish each one
-        if: ${{ env.NPM_TOKEN != '' }}
+      - name: Verify npm publishing identity
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for dir in npm/platforms/*/; do
-            echo "── publishing $(basename "$dir")"
-            (cd "$dir" && npm publish --access public)
-          done
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not configured; platform packages cannot be published"
+            exit 1
+          fi
+          npm whoami --registry=https://registry.npmjs.org/ || {
+            echo "::error::NPM_TOKEN cannot authenticate with npmjs.com"
+            exit 1
+          }
 
-      - name: Skipped notice
-        if: ${{ env.NPM_TOKEN == '' }}
+      - name: Publish each platform package
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: echo "::warning::NPM_TOKEN not set — platform packages were built but not published."
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          shopt -s nullglob
+          packages=(npm/platforms/*/)
+          if [ "${#packages[@]}" -ne 5 ]; then
+            echo "::error::Expected five platform packages, found ${#packages[@]}"
+            exit 1
+          fi
+          for dir in "${packages[@]}"; do
+            echo "── publishing $(basename "$dir")"
+            (cd "$dir" && npm publish --access public) || {
+              echo "::error::npm rejected $(basename "$dir"). Check that the token's account can create packages in the @artheras scope and that the token allows package write and CI publishing."
+              exit 1
+            }
+          done
