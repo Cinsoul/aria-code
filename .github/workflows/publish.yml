@@ -330,6 +330,7 @@ jobs:
           NPM_RESULT: ${{ needs.publish-npm.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
         run: |
+          set -euo pipefail
           TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           MISSING=0
@@ -360,14 +361,21 @@ jobs:
           # without them installs a launcher and no binary, and npm reports
           # nothing, because skipping an unresolvable optionalDependency is
           # what npm is supposed to do.
-          for key in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
-            if npm view "@artheras/aria-code-$key@$VERSION" version >/dev/null 2>&1; then
-              echo "npm   ✓ @artheras/aria-code-$key $VERSION"
+          PACKAGE_LINES="$(node - <<'NODE'
+          const manifest = require("./npm/package.json");
+          for (const [name, version] of Object.entries(manifest.optionalDependencies || {})) {
+            console.log(`${name}@${version}`);
+          }
+          NODE
+          )"
+          while IFS= read -r pkg; do
+            if npm view "$pkg" version >/dev/null 2>&1; then
+              echo "npm   ✓ $pkg"
             else
-              echo "::error::no @artheras/aria-code-$key@$VERSION — the dispatcher cannot run on that platform"
+              echo "::error::no $pkg — the dispatcher is incomplete on that platform"
               MISSING=1
             fi
-          done
+          done <<< "$PACKAGE_LINES"
 
           if [ "$MISSING" -ne 0 ]; then
             echo
