@@ -63,17 +63,60 @@ class CounterStart(unittest.TestCase):
     picked to look established.
     """
 
-    def test_the_start_is_above_every_tag_that_exists(self):
-        """Lowering it would make a release collide with a published version,
-        and PyPI refuses that after the tag is already pushed."""
+    @staticmethod
+    def _zerox_tags():
         tags = subprocess.run(["git", "tag", "--list", "v0.*"],
                               capture_output=True, text=True, cwd=ROOT).stdout.split()
-        existing = [t for t in (bump._triple(name[1:]) for name in tags) if t]
+        return [t for t in (bump._triple(name[1:]) for name in tags) if t]
+
+    def test_the_start_is_above_every_tag_while_the_crossing_is_still_ahead(self):
+        """FIRST_ZEROX_MINOR only governs the one-time 4.x -> 0.x crossing.
+
+        cmd_next_release reads it in exactly one branch: when the base version
+        is not already 0.x. Once the crossing has happened — pyproject is on
+        0.x — the constant is never consulted again, and it is a record of
+        where the counter started rather than a live floor.
+
+        This assertion used to run unconditionally. It went red the moment
+        v0.45.0 was tagged, because releases had simply moved past the starting
+        point, which is what a counter does. The invariant it was protecting
+        (never reuse a published version) is the next test, which holds
+        forever.
+        """
+        if bump._zerox(bump._current()):
+            self.skipTest("already on the 0.x line; the constant is historical now")
+        existing = self._zerox_tags()
         if not existing:
             self.skipTest("no 0.x tags yet")
         self.assertGreater((0, bump.FIRST_ZEROX_MINOR, 0), max(existing),
                            f"FIRST_ZEROX_MINOR={bump.FIRST_ZEROX_MINOR} is at or "
                            "below a tag that already exists")
+
+    def test_the_next_release_is_above_every_tag_that_exists(self):
+        """The invariant that actually matters, and that outlives the crossing.
+
+        A release that reuses a published version is refused by PyPI *after*
+        the tag has been pushed, which leaves a tag with nothing behind it.
+        Whether the number comes from the constant or from incrementing the
+        base is irrelevant to that; what matters is that it is higher than
+        anything already out.
+        """
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "bump_version.py"),
+                               "--next-release"],
+                              capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
+        nxt = bump._triple(proc.stdout.strip().splitlines()[-1])
+        self.assertIsNotNone(nxt, f"unparseable next version: {proc.stdout!r}")
+
+        all_tags = subprocess.run(["git", "tag", "--list", "v*"],
+                                  capture_output=True, text=True, cwd=ROOT).stdout.split()
+        same_line = [t for t in (bump._triple(n[1:]) for n in all_tags)
+                     if t and t[0] == nxt[0]]
+        if not same_line:
+            self.skipTest("no tags on this major line yet")
+        self.assertGreater(nxt, max(same_line),
+                           f"--next-release would produce {nxt}, which is not above "
+                           f"the highest existing tag {max(same_line)}")
 
     def test_the_files_agree_with_each_other(self):
         versions = set(bump.read_versions().values())
