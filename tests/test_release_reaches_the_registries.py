@@ -79,8 +79,8 @@ class ThePublishedVersionIsVerified(unittest.TestCase):
         # npm silently skips unavailable optionalDependencies, so a published
         # dispatcher without its pinned binaries is not a working release.
         script = "\n".join(str(s.get("run", "")) for s in self.job.get("steps") or [])
-        self.assertIn("aria-code-$key", script)
-        self.assertIn("::error::no @artheras/aria-code-$key", script)
+        self.assertIn("manifest.optionalDependencies", script)
+        self.assertIn("::error::no $pkg", script)
         self.assertIn("MISSING=1", script)
 
 
