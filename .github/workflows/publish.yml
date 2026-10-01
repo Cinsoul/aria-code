@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: pyproject / package.json / aria_cli.py must agree with the tag
+      - name: pyproject / package.json / _version.py must agree with the tag
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             python scripts/bump_version.py --check "${{ inputs.tag || github.ref_name }}"
@@ -234,3 +234,83 @@ jobs:
         working-directory: npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Did any of that actually publish anything? ──────────────────────────────
+  # Four consecutive releases tagged a version and published nothing: v0.45.0
+  # and v0.46.0 (the release workflow could not start), v0.47.0 (the platform
+  # packages could not be assembled) and v0.48.0 (npm rejected them). Each one
+  # left a tag in the repository pointing at a version that does not exist on
+  # any registry, and nothing anywhere said so.
+  #
+  # A tag is a promise that something shipped. This job is what checks the
+  # promise was kept, and it is the piece that was missing the whole time —
+  # every failure above was found by someone opening a workflow run and
+  # reading it, which is not a control.
+  #
+  # `always()` so this reports on a release where a publish job failed, which
+  # is exactly when it matters. A registry the release deliberately skipped
+  # (no token configured) is reported, not failed: that is a choice, not a
+  # broken release.
+  verify-published:
+    name: Verify the release actually shipped
+    needs: [publish-npm, publish-pypi]
+    if: always() && startsWith(inputs.tag || github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: The tagged version must exist on PyPI and npm
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          NPM_RESULT: ${{ needs.publish-npm.result }}
+          PYPI_RESULT: ${{ needs.publish-pypi.result }}
+        run: |
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          MISSING=0
+
+          echo "Checking that $VERSION is on the registries it claims to be on."
+          echo "  publish-npm:  $NPM_RESULT"
+          echo "  publish-pypi: $PYPI_RESULT"
+          echo
+
+          # PyPI. Queried through the JSON API rather than `pip index`, which
+          # is marked experimental and has changed output more than once.
+          if curl -sf "https://pypi.org/pypi/aria-code/$VERSION/json" >/dev/null; then
+            echo "PyPI  ✓ aria-code $VERSION"
+          else
+            echo "::error::PyPI has no aria-code $VERSION, but $TAG was tagged"
+            MISSING=1
+          fi
+
+          # npm dispatcher.
+          if npm view "@artheras/aria-code@$VERSION" version >/dev/null 2>&1; then
+            echo "npm   ✓ @artheras/aria-code $VERSION"
+          else
+            echo "::error::npm has no @artheras/aria-code $VERSION, but $TAG was tagged"
+            MISSING=1
+          fi
+
+          # The platform packages the dispatcher pins. A dispatcher published
+          # without them installs a launcher and no binary, and npm reports
+          # nothing, because skipping an unresolvable optionalDependency is
+          # what npm is supposed to do.
+          for key in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
+            if npm view "@artheras/aria-code-$key@$VERSION" version >/dev/null 2>&1; then
+              echo "npm   ✓ @artheras/aria-code-$key $VERSION"
+            else
+              echo "::warning::no @artheras/aria-code-$key@$VERSION — users on that platform fall back to pip"
+            fi
+          done
+
+          if [ "$MISSING" -ne 0 ]; then
+            echo
+            echo "::error::$TAG is tagged but not published. Either publish it or delete the tag —"
+            echo "::error::a tag that points at nothing is how v0.45.0 through v0.48.0 accumulated."
+            exit 1
+          fi
+          echo
+          echo "### $TAG is published" >> "$GITHUB_STEP_SUMMARY"

@@ -60,10 +60,31 @@ class ReleaseRunPublishes(unittest.TestCase):
                 self.assertIn("tag", job.get("with") or {})
 
     def test_the_binaries_are_published_before_the_dispatcher(self):
-        """npm skips an optionalDependency it cannot resolve, silently."""
-        publish = self.jobs["publish"]
-        needs = publish.get("needs") or []
-        self.assertIn("binaries", needs)
+        """npm skips an optionalDependency it cannot resolve, silently.
+
+        This used to assert `needs: binaries` on the whole publish job, which
+        enforced the ordering by holding *every* registry behind the npm
+        binaries. v0.48.0 showed the cost: all five binaries built, `npm
+        publish` failed on credentials, and the Python package — which
+        contains no npm artifact — was never published either.
+
+        The requirement is npm's alone, so it is enforced inside publish-npm,
+        which waits for this version's platform packages to appear before
+        publishing the dispatcher.
+        """
+        self.assertNotIn(
+            "binaries", self.jobs["publish"].get("needs") or [],
+            "publishing waits on the npm binaries again, which couples PyPI to "
+            "an npm failure for no reason",
+        )
+        publish_yml = yaml.safe_load(
+            (WORKFLOWS / "publish.yml").read_text(encoding="utf-8"))
+        steps = publish_yml["jobs"]["publish-npm"].get("steps") or []
+        names = [str(s.get("name", "")) for s in steps]
+        self.assertTrue(
+            any("Wait for this version's platform packages" in n for n in names),
+            f"nothing orders the dispatcher after the platform packages: {names}",
+        )
 
     def test_secrets_reach_the_called_workflows(self):
         for name, job in self.jobs.items():
