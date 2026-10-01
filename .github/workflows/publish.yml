@@ -137,7 +137,8 @@ jobs:
           fi
           PACKAGES=()
           while IFS= read -r pkg; do PACKAGES+=("$pkg"); done <<< "$PACKAGE_LINES"
-          DEADLINE=$(( $(date +%s) + 900 ))
+          # Native builds and five large npm uploads can exceed 15 minutes.
+          DEADLINE=$(( $(date +%s) + 1800 ))
           while :; do
             MISSING=()
             for pkg in "${PACKAGES[@]}"; do
