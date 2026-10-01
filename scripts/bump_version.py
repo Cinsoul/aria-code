@@ -81,10 +81,19 @@ def write_version(new: str) -> None:
     # Swap only the top-level "version" value in package.json — a regex line edit,
     # not a JSON round-trip, so the file's hand-formatting (compact arrays, inline
     # objects) is preserved. count=1 hits the first (top-level) version key.
-    PACKAGE_JSON.write_text(
-        re.sub(r'(?m)^(\s*"version":\s*")[^"]+(")', rf"\g<1>{new}\g<2>",
-               PACKAGE_JSON.read_text(), count=1)
-    )
+    text = re.sub(r'(?m)^(\s*"version":\s*")[^"]+(")', rf"\g<1>{new}\g<2>",
+                  PACKAGE_JSON.read_text(), count=1)
+    # The dispatcher pins each per-platform binary package, and those are built
+    # and published from this same release, so the pins have to move with it.
+    # They did not: at 0.47.0 the file still pinned 4.4.1 — versions from the
+    # 4.x line that this release does not produce. npm would then either fetch
+    # a 4.4.1 binary under a 0.47.0 launcher, or, if the pinned version is
+    # absent, skip the optionalDependency *silently* and leave the user a
+    # launcher with no binary. That silent skip is the exact failure
+    # npm/lib/platform.js exists to report.
+    text = re.sub(r'("@artheras/aria-code-[a-z0-9-]+":\s*")[^"]+(")',
+                  rf"\g<1>{new}\g<2>", text)
+    PACKAGE_JSON.write_text(text)
 
 
 def cmd_check(expected: str | None) -> int:
