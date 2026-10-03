@@ -45,3 +45,18 @@ send(reply)
 `aria_feishu_bot.feishu_inbound` is the Feishu version of that first step.
 Conversation keys are `<channel>:<conversation id>`, so the same chat id on
 two platforms is two conversations.
+
+## The shipper digest (`digest.py`)
+
+The first thing the conversation layer enables that a reply-only bot cannot:
+each group bound to a shipper is sent, unprompted, what needs attention —
+reorders, SKUs with too little history to plan, dead stock, waybills to query,
+and safe carrier switches. `run_digests(store, senders)` walks the bindings and
+hands each digest to that channel's sender, so a new channel registers a
+`(conversation_id, title, body) -> bool` function and gets the digest too.
+
+Data comes from the operator's `ARIA_SHIPPER_FEEDS` file, never from chat, and
+is read through the logistics tools under `ARIA_OWNER_SCOPE`, so a shared
+multi-shipper export yields only that shipper's lines. Configuration problems
+go to the log, not the client's group; a day with nothing to report sends
+nothing.

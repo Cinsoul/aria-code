@@ -1080,6 +1080,25 @@ async def _execute_job(job: dict) -> None:
             conn.commit()
 
 
+# ── Shipper digest ───────────────────────────────────────────────────────────
+
+async def _run_shipper_digests() -> None:
+    """Push each bound shipper group its digest (apps/channels/digest.py)."""
+    try:
+        from apps.channels.conversation import ConversationStore
+        from apps.channels.digest import run_digests
+
+        senders = {}
+        if os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"):
+            from aria_feishu_bot import send_digest_card
+            senders["feishu"] = send_digest_card
+        report = await run_digests(ConversationStore(), senders)
+        for line in report:
+            logger.info("shipper digest %s: %s", line["conversation"], line["status"])
+    except Exception as exc:
+        logger.error("shipper digest job failed: %s", exc)
+
+
 # ── APScheduler cron ─────────────────────────────────────────────────────────
 
 def _start_scheduler() -> None:
@@ -1151,6 +1170,20 @@ def _start_scheduler() -> None:
             misfire_grace_time=1800,
         )
         logger.info("Registered 4 default scheduled jobs (morning / US / evening / weekly)")
+
+        # Shipper digest: each group bound to a shipper gets what needs
+        # attention. Only when the operator has said where the data is.
+        if os.environ.get("ARIA_SHIPPER_FEEDS", "").strip():
+            cron = os.environ.get("ARIA_DIGEST_CRON", "30 8 * * 1-6").strip()
+            scheduler.add_job(
+                _run_shipper_digests,
+                CronTrigger.from_crontab(cron, timezone="Asia/Shanghai"),
+                id="default_shipper_digest",
+                name="货主库存与运费提醒",
+                replace_existing=True,
+                misfire_grace_time=1800,
+            )
+            logger.info("Registered shipper digest [%s]", cron)
 
         scheduler.start()
         logger.info("APScheduler started with %d job(s)", len(scheduler.get_jobs()))
