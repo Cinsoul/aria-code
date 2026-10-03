@@ -84,3 +84,14 @@ A channel renders the request with two buttons and calls
 `purchase_order_draft`, writes a CSV to `ARIA_APPROVAL_OUTBOX/<shipper>/` for
 the 3PL's purchasing system: Aria has no integration that places orders, and
 does not pretend to.
+
+## Relay mode
+
+In relay mode the user's machine has no Feishu app credentials — the app
+secret stays on the relay — so `aria_feishu_bot._send_message` hands every
+message back over the relay WebSocket and the relay sends it. The relay
+accepts a send only where the client has standing: a reply to a message it
+forwarded to that client (within an hour), or a post to a chat that client's
+bound user has spoken to the bot in; text or cards, rate-limited. A press on a
+card is routed to the client that posted the card, which holds the approval.
+Attachments still need the app's credentials and are declined with a message.

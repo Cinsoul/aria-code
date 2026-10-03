@@ -1089,9 +1089,11 @@ async def _run_shipper_digests() -> None:
         from apps.channels.digest import run_digests
 
         senders = {}
-        if os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"):
-            from aria_feishu_bot import send_digest_card
-            senders["feishu"] = send_digest_card
+        import aria_feishu_bot
+        # With the app's credentials (self-hosted), or through the relay client
+        # this daemon runs in relay mode — the bot knows which it has.
+        if aria_feishu_bot.can_send():
+            senders["feishu"] = aria_feishu_bot.send_digest_card
         report = await run_digests(ConversationStore(), senders)
         for line in report:
             logger.info("shipper digest %s: %s", line["conversation"], line["status"])
