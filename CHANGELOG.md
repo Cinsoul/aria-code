@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.62.0] — 2026-10-03
+
+- Merge pull request #74 from Cinsoul/feat/operations-evals
+
 ## [0.61.0] — 2026-10-03
 
 - Merge pull request #73 from Cinsoul/feat/operations-evals
