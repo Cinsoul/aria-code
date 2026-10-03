@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.59.0] — 2026-10-03
+
+- Merge pull request #71 from Cinsoul/fix/fast-binary-startup
+
 ## [0.58.0] — 2026-10-03
 
 - Merge pull request #70 from Cinsoul/fix/binary-collects-runtime-imports
