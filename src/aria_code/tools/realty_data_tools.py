@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 try:
     import akshare as ak
     _HAS_AK = True
-except ImportError:
+# Not just ImportError: akshare reads bundled data files and calendars on
+# import, and a partial install (or a frozen binary without its data) raises
+# FileNotFoundError or worse. Optional means optional — never crash the CLI.
+except Exception:  # noqa: BLE001
     _HAS_AK = False
 
 try:

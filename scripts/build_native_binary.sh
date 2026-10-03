@@ -74,6 +74,7 @@ echo "── Running PyInstaller (--onefile) ──"
   --specpath "$BUILD_DIR" \
   --paths "$PROJECT_ROOT/src/aria_code" \
   --paths "$PROJECT_ROOT/src" \
+  $("$VENV_DIR/bin/python" "$PROJECT_ROOT/scripts/pyinstaller_collect_args.py") \
   --collect-all rich \
   --collect-all prompt_toolkit \
   "$PROJECT_ROOT/src/aria_code/aria_cli.py"
@@ -95,6 +96,7 @@ echo "── Running PyInstaller for the MCP server binary (--onefile) ──"
   --specpath "$BUILD_DIR" \
   --paths "$PROJECT_ROOT/src/aria_code" \
   --paths "$PROJECT_ROOT/src" \
+  $("$VENV_DIR/bin/python" "$PROJECT_ROOT/scripts/pyinstaller_collect_args.py") \
   --copy-metadata aria-code \
   "$PROJECT_ROOT/src/aria_code/aria_mcp_server.py"
 

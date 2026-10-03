@@ -127,6 +127,7 @@ jobs:
           pyinstaller --onefile --name ${{ env.BIN_NAME }}
           --distpath dist-native/dist --workpath dist-native/build --specpath dist-native
           --paths src/aria_code --paths src
+          $(python scripts/pyinstaller_collect_args.py)
           --collect-all rich --collect-all prompt_toolkit
           src/aria_code/aria_cli.py
       - name: Smoke test
@@ -140,6 +141,7 @@ jobs:
           pyinstaller --onefile --name ${{ env.MCP_BIN_NAME }}
           --distpath dist-native/dist --workpath dist-native/build --specpath dist-native
           --paths src/aria_code --paths src
+          $(python scripts/pyinstaller_collect_args.py)
           --copy-metadata aria-code
           src/aria_code/aria_mcp_server.py
       - name: Smoke test (MCP server binary)
@@ -179,6 +181,7 @@ jobs:
           pyinstaller --onefile --name ${{ env.BIN_NAME }}
           --distpath dist-native/dist --workpath dist-native/build --specpath dist-native
           --paths src/aria_code --paths src
+          $(python scripts/pyinstaller_collect_args.py)
           --collect-all rich --collect-all prompt_toolkit
           src/aria_code/aria_cli.py
       - name: Smoke test
@@ -192,6 +195,7 @@ jobs:
           pyinstaller --onefile --name ${{ env.MCP_BIN_NAME }}
           --distpath dist-native/dist --workpath dist-native/build --specpath dist-native
           --paths src/aria_code --paths src
+          $(python scripts/pyinstaller_collect_args.py)
           --copy-metadata aria-code
           src/aria_code/aria_mcp_server.py
       - name: Smoke test (MCP server binary)
