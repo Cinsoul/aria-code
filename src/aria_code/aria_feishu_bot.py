@@ -157,6 +157,48 @@ async def _get_access_token() -> Optional[str]:
 
 # ── Send message helpers ───────────────────────────────────────────────────────
 
+# Set by the relay client while it is connected. In relay mode this machine has
+# no Feishu app credentials — by design, the app secret stays on the relay — so
+# every message goes back over the WebSocket and the relay sends it. Before
+# 2026-10-03 nothing did this, and relay mode silently dropped every answer.
+_RELAY_SEND = None
+
+
+def set_relay_sender(sender) -> None:
+    """Route sends through the relay: sender(request) -> Feishu-style result dict."""
+    global _RELAY_SEND
+    _RELAY_SEND = sender
+
+
+def can_send() -> bool:
+    """Whether this process can deliver a message at all."""
+    has_app = bool(os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET"))
+    return has_app or _RELAY_SEND is not None
+
+
+async def _send_message(op: str, target: str, msg_type: str, content: str,
+                        receive_id_type: str = "chat_id") -> Optional[dict]:
+    """The one place a message leaves: directly with app credentials, else via the relay.
+
+    op "reply" answers message `target`; op "send" posts to chat `target`.
+    """
+    token = await _get_access_token()
+    if token:
+        if op == "reply":
+            return await _feishu_post(f"{_FEISHU_API}/im/v1/messages/{target}/reply", token,
+                                      {"msg_type": msg_type, "content": content})
+        return await _feishu_post(f"{_FEISHU_API}/im/v1/messages?receive_id_type={receive_id_type}",
+                                  token, {"receive_id": target, "msg_type": msg_type, "content": content})
+    if _RELAY_SEND is not None:
+        try:
+            return await _RELAY_SEND({"op": op, "target": target, "msg_type": msg_type,
+                                      "content": content, "receive_id_type": receive_id_type})
+        except Exception as exc:
+            logger.warning("relay send failed: %s", exc)
+            return None
+    logger.error("cannot send: no Feishu app credentials and no relay connection")
+    return None
+
 async def _feishu_post(url: str, token: str, payload: dict) -> Optional[dict]:
     """POST to Feishu API; log the response code on error."""
     try:
@@ -187,16 +229,8 @@ async def reply_text(message_id: str, text: str) -> None:
     if not message_id:
         logger.error("reply_text: empty message_id — cannot reply")
         return
-    token = await _get_access_token()
-    if not token:
-        logger.error("reply_text: no access token")
-        return
     logger.info("reply_text → message_id=%s len=%d", message_id, len(text))
-    await _feishu_post(
-        f"{_FEISHU_API}/im/v1/messages/{message_id}/reply",
-        token,
-        {"msg_type": "text", "content": json.dumps({"text": text[:3000]})},
-    )
+    await _send_message("reply", message_id, "text", json.dumps({"text": text[:3000]}))
 
 
 async def reply_card(message_id: str, title: str, body: str,
@@ -205,10 +239,6 @@ async def reply_card(message_id: str, title: str, body: str,
     if not message_id:
         logger.error("reply_card: empty message_id — cannot reply")
         return
-    token = await _get_access_token()
-    if not token:
-        await reply_text(message_id, f"【{title}】\n{body}")
-        return
     elements = _build_card_elements(body, footer)
     card = {
         "config": {"wide_screen_mode": True},
@@ -216,11 +246,7 @@ async def reply_card(message_id: str, title: str, body: str,
         "elements": elements,
     }
     logger.info("reply_card → message_id=%s title=%s", message_id, title[:40])
-    result = await _feishu_post(
-        f"{_FEISHU_API}/im/v1/messages/{message_id}/reply",
-        token,
-        {"msg_type": "interactive", "content": json.dumps(card)},
-    )
+    result = await _send_message("reply", message_id, "interactive", json.dumps(card))
     # If card failed, fall back to plain text
     if result and result.get("code") != 0:
         logger.info("reply_card: card failed (code %s), falling back to text", result.get("code"))
@@ -280,20 +306,13 @@ def _build_card_elements(body: str, footer: str = "") -> list:
 async def _reply_card_raw(message_id: str, title: str, body: str,
                           color: str = "blue", footer: str = "") -> Optional[dict]:
     """Reply with a card; return raw API response dict."""
-    token = await _get_access_token()
-    if not token:
-        return None
     elements = _build_card_elements(body, footer)
     card = {
         "config": {"wide_screen_mode": True},
         "header": {"title": {"tag": "plain_text", "content": title}, "template": color},
         "elements": elements,
     }
-    return await _feishu_post(
-        f"{_FEISHU_API}/im/v1/messages/{message_id}/reply",
-        token,
-        {"msg_type": "interactive", "content": json.dumps(card)},
-    )
+    return await _send_message("reply", message_id, "interactive", json.dumps(card))
 
 
 async def send_card_to_chat(chat_id: str, title: str, body: str,
@@ -305,31 +324,13 @@ async def send_card_to_chat(chat_id: str, title: str, body: str,
     was never read, so every proactive send failed without a trace. Nothing
     scheduled depended on it until the shipper digest.
     """
-    token = await _get_access_token()
-    if not token:
-        return False
     elements = _build_card_elements(body)
     card = {
         "config": {"wide_screen_mode": True},
         "header": {"title": {"tag": "plain_text", "content": title}, "template": color},
         "elements": elements,
     }
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"{_FEISHU_API}/im/v1/messages?receive_id_type={receive_id_type}",
-                headers={"Authorization": f"Bearer {token}"},
-                json={
-                    "receive_id": chat_id,
-                    "msg_type":   "interactive",
-                    "content":    json.dumps(card),
-                },
-            )
-        result = resp.json()
-    except Exception as exc:
-        logger.warning("send_card_to_chat failed: %s", exc)
-        return False
+    result = await _send_message("send", chat_id, "interactive", json.dumps(card), receive_id_type) or {}
     if result.get("code") != 0:
         logger.warning("send_card_to_chat rejected: code=%s msg=%s", result.get("code"), result.get("msg"))
         return False
@@ -1179,10 +1180,7 @@ async def _request_reorder(inbound: InboundMessage, message_id: str) -> None:
         summary=f"**建议订货**\n{summary}\n\n数量未计入起订量和箱规，请审批人核对。",
         requested_by=f"feishu:{inbound.sender_id}",
     )
-    token = await _get_access_token()
-    if token:
-        await _feishu_post(f"{_FEISHU_API}/im/v1/messages/{message_id}/reply", token,
-                           {"msg_type": "interactive", "content": json.dumps(_approval_card(approval))})
+    await _send_message("reply", message_id, "interactive", json.dumps(_approval_card(approval)))
 
 
 async def _handle_card_action(event: Dict[str, Any], *, authorized_by_binding: bool = False) -> Dict[str, Any]:
@@ -1292,6 +1290,13 @@ async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = F
     # with it, this is what stops the bot answering every message in the room.
     # Images, audio and files cannot @ anyone, so in a group they are ignored.
     if msg.get("chat_type") != "p2p" and msg_type not in ("text", "post"):
+        return {"code": 0}
+
+    # Attachments are downloaded with the app's credentials, which relay mode
+    # does not have on this machine; say so instead of failing silently.
+    if msg_type in ("audio", "image", "file") and not (
+            os.environ.get("FEISHU_APP_ID") and os.environ.get("FEISHU_APP_SECRET")):
+        await reply_text(msg_id, "中继模式下暂不支持图片、语音和文件，请直接发送文字。")
         return {"code": 0}
 
     # ── Text message ──────────────────────────────────────────────────────────
