@@ -152,7 +152,7 @@ class DiagnosticOpsCommandsMixin:
         env = (f"v{_get___version__()} · {_pf.system()} · py{_pf.python_version()} · "
                f"model={self.terminal.config.get('model','')}")
         self.terminal._record_feedback("bug", ctx, comment=f"{desc}\n\n[env] {env}")
-        gh = "https://github.com/artherahq/aria-code/issues"
+        gh = "https://github.com/artheras/aria-code/issues"
         if self.context.has_rich:
             self.context.console.print("  [#C08050]✓ 已记录问题（本地）[/#C08050]")
             self.context.console.print(f"  [dim]上传需 /privacy opt-in · 或直接提 issue: {gh}[/dim]")

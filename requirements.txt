@@ -15,6 +15,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # CORE — required for the CLI to start
 # ─────────────────────────────────────────────────────────────────────────────
+google-genai>=1.0.0     # the default model (Gemini / Vertex AI); core since the first-run fix
 aiohttp>=3.9.0          # async HTTP: Ollama streaming + REST API
 rich>=13.7.0            # terminal UI: tables, panels, markdown, syntax highlight
 prompt_toolkit>=3.0.43  # REPL input: history, autocomplete, keybindings

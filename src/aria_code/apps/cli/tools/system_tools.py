@@ -603,7 +603,7 @@ def tool_github(
         message   = params.get("message", "")
         branch    = params.get("branch", "")
         add_files = params.get("files", [])
-        repo      = params.get("repo", "")    # e.g. "artherahq/aria-code"
+        repo      = params.get("repo", "")    # e.g. "artheras/aria-code"
         coauthor  = params.get("coauthor", "")
 
         if not message:
@@ -615,7 +615,7 @@ def tool_github(
                 get_installation_token, get_aria_git_url,
                 aria_bot_env, ARIA_BOT_NAME, ARIA_BOT_EMAIL,
             )
-            owner = (repo.split("/")[0] if repo else None) or "artherahq"
+            owner = (repo.split("/")[0] if repo else None) or "artheras"
             token = get_installation_token(owner)
             bot_env = aria_bot_env()
             auth_available = True

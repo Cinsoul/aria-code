@@ -18,10 +18,10 @@ esac
 
 version=${ARIA_CODE_VERSION:-latest}
 if [ "$version" = latest ]; then
-  release_url=https://github.com/artherahq/aria-code/releases/latest/download
+  release_url=https://github.com/artheras/aria-code/releases/latest/download
 else
   printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || fail 'ARIA_CODE_VERSION must look like v0.55.0'
-  release_url="https://github.com/artherahq/aria-code/releases/download/$version"
+  release_url="https://github.com/artheras/aria-code/releases/download/$version"
 fi
 
 asset="aria-code-$platform-$arch"

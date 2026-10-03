@@ -22,11 +22,11 @@ runtime event layer, not terminal callbacks.
 ## Skills
 
 Research-discipline skills for this plugin live in the standalone
-[`artherahq/skills`](https://github.com/artherahq/skills) catalog so they can be
+[`artheras/skills`](https://github.com/artheras/skills) catalog so they can be
 reused outside Aria. Install them as a marketplace:
 
 ```
-/plugin marketplace add artherahq/skills
+/plugin marketplace add artheras/skills
 /plugin install quant-research-skills@aria-skills
 ```
 

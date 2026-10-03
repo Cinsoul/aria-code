@@ -6,9 +6,9 @@ if ($arch -ne 'X64') { throw "Unsupported Windows architecture: $arch (the relea
 
 $version = if ($env:ARIA_CODE_VERSION) { $env:ARIA_CODE_VERSION } else { 'latest' }
 if ($version -eq 'latest') {
-    $base = 'https://github.com/artherahq/aria-code/releases/latest/download'
+    $base = 'https://github.com/artheras/aria-code/releases/latest/download'
 } elseif ($version -match '^v\d+\.\d+\.\d+$') {
-    $base = "https://github.com/artherahq/aria-code/releases/download/$version"
+    $base = "https://github.com/artheras/aria-code/releases/download/$version"
 } else {
     throw 'ARIA_CODE_VERSION must look like v0.55.0.'
 }
