@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.63.0] — 2026-10-03
+
+- Merge pull request #76 from Cinsoul/fix/feishu-bot-fail-closed
+
 ## [0.62.0] — 2026-10-03
 
 - Merge pull request #74 from Cinsoul/feat/operations-evals
