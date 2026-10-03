@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.67.0] — 2026-10-03
+
+- Merge pull request #80 from Cinsoul/feat/relay-push-and-callbacks
+
 ## [0.66.0] — 2026-10-03
 
 - Merge pull request #79 from Cinsoul/feat/card-approvals
