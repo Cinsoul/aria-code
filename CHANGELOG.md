@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.57.0] — 2026-10-03
+
+- Merge pull request #69 from Cinsoul/feat/logistics-3pl
+
 ## [0.56.0] — 2026-10-01
 
 - fix(cloud-run): start relay server on assigned PORT
