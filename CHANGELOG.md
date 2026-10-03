@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.66.0] — 2026-10-03
+
+- Merge pull request #79 from Cinsoul/feat/card-approvals
+
 ## [0.65.0] — 2026-10-03
 
 - Merge pull request #78 from Cinsoul/feat/shipper-digest
