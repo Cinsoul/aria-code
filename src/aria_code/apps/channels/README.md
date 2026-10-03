@@ -60,3 +60,27 @@ is read through the logistics tools under `ARIA_OWNER_SCOPE`, so a shared
 multi-shipper export yields only that shipper's lines. Configuration problems
 go to the log, not the client's group; a day with nothing to report sends
 nothing.
+
+## Approvals (`approvals.py`)
+
+Bot runs cannot use confirmation-required tools, so a bot that may only
+suggest still leaves someone retyping its suggestion. Approvals are the
+sanctioned way through: the bot stores exactly what it proposes, an
+authorised person presses approve or reject in the chat, and only then does
+the action run — once, under the shipper's scope, with who and when recorded.
+
+| Rule | Why |
+|------|-----|
+| Approvers per channel (`ARIA_CHANNEL_APPROVERS`, plus admins); none by default | fail closed |
+| Only in the conversation that raised it | a forwarded card cannot be approved elsewhere |
+| A single conditional UPDATE claims the request | two presses cannot both execute |
+| Expires after 24 h | stale numbers should be recomputed, not approved |
+| The conversation must still be bound to the same shipper | a rebound group cannot run the old client's action |
+| The payload is frozen at request time | what was approved is what runs |
+| Failures are recorded, not shown in the chat | exceptions can name host paths |
+
+A channel renders the request with two buttons and calls
+`ApprovalStore.decide`; actions are registered in `EXECUTORS`. The first,
+`purchase_order_draft`, writes a CSV to `ARIA_APPROVAL_OUTBOX/<shipper>/` for
+the 3PL's purchasing system: Aria has no integration that places orders, and
+does not pretend to.
