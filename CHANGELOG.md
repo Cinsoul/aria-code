@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.65.0] — 2026-10-03
+
+- Merge pull request #78 from Cinsoul/feat/shipper-digest
+
 ## [0.64.0] — 2026-10-03
 
 - Merge pull request #77 from Cinsoul/feat/conversation-core
