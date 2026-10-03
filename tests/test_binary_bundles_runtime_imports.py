@@ -132,7 +132,7 @@ class EveryBuildUsesTheCollector(unittest.TestCase):
 
     def test_macos_script_builds(self) -> None:
         text = MAC_SCRIPT.read_text(encoding="utf-8")
-        builds = text.count("--onefile --name")
+        builds = text.count("--onedir --name")
         self.assertGreater(builds, 0)
         self.assertEqual(text.count("pyinstaller_collect_args.py"), builds,
                          "a PyInstaller build in the macOS script does not use the collector")
