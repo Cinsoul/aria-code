@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.58.0] — 2026-10-03
+
+- Merge pull request #70 from Cinsoul/fix/binary-collects-runtime-imports
+
 ## [0.57.0] — 2026-10-03
 
 - Merge pull request #69 from Cinsoul/feat/logistics-3pl
