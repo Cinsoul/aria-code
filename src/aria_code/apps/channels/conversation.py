@@ -192,6 +192,12 @@ class ConversationStore:
         with self._db() as db:
             db.execute("DELETE FROM bindings WHERE conversation = ?", (key,))
 
+    def bindings(self) -> List[Tuple[str, str]]:
+        """Every (conversation key, shipper) binding, for jobs that push to them."""
+        with self._db() as db:
+            return [tuple(row) for row in db.execute(
+                "SELECT conversation, owner_id FROM bindings ORDER BY conversation")]
+
     def owner_for(self, key: str) -> Optional[str]:
         with self._db() as db:
             row = db.execute("SELECT owner_id FROM bindings WHERE conversation = ?", (key,)).fetchone()

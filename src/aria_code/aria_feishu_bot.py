@@ -297,11 +297,17 @@ async def _reply_card_raw(message_id: str, title: str, body: str,
 
 
 async def send_card_to_chat(chat_id: str, title: str, body: str,
-                            color: str = "blue", receive_id_type: str = "chat_id") -> None:
-    """Send a new card message to a chat (group or user)."""
+                            color: str = "blue", receive_id_type: str = "chat_id") -> bool:
+    """Send a new card message to a chat (group or user). True if Feishu accepted it.
+
+    The content is the card itself. It was wrapped as {"card": ...} — the
+    custom-webhook format, which /im/v1/messages rejects — and the response
+    was never read, so every proactive send failed without a trace. Nothing
+    scheduled depended on it until the shipper digest.
+    """
     token = await _get_access_token()
     if not token:
-        return
+        return False
     elements = _build_card_elements(body)
     card = {
         "config": {"wide_screen_mode": True},
@@ -311,17 +317,23 @@ async def send_card_to_chat(chat_id: str, title: str, body: str,
     try:
         import httpx
         async with httpx.AsyncClient(timeout=15) as client:
-            await client.post(
+            resp = await client.post(
                 f"{_FEISHU_API}/im/v1/messages?receive_id_type={receive_id_type}",
                 headers={"Authorization": f"Bearer {token}"},
                 json={
                     "receive_id": chat_id,
                     "msg_type":   "interactive",
-                    "content":    json.dumps({"card": card}),
+                    "content":    json.dumps(card),
                 },
             )
+        result = resp.json()
     except Exception as exc:
         logger.warning("send_card_to_chat failed: %s", exc)
+        return False
+    if result.get("code") != 0:
+        logger.warning("send_card_to_chat rejected: code=%s msg=%s", result.get("code"), result.get("msg"))
+        return False
+    return True
 
 
 # ── Command router ─────────────────────────────────────────────────────────────
@@ -1082,6 +1094,34 @@ def feishu_inbound(event: Dict[str, Any], text: str) -> InboundMessage:
     )
 
 
+async def _send_digest_now(conversation: str, message_id: str) -> None:
+    """/digest: this group's shipper digest, now, as a reply."""
+    from aria_code.apps.channels.digest import build_digest, load_feeds
+
+    owner = _conversation_store().owner_for(conversation)
+    if not owner:
+        await reply_text(message_id, "本群未绑定货主，没有可发送的简报。管理员可发送 /owner <货主ID> 绑定。")
+        return
+    try:
+        digest = build_digest(owner, load_feeds())
+    except Exception as exc:
+        logger.warning("digest for %s failed: %s", owner, exc)
+        digest = None
+    if digest is None or digest.problems and not digest.worth_sending:
+        # The details are for the operator's log, not the client's group.
+        await reply_text(message_id, "暂时无法生成简报，已记录到运维日志。")
+        return
+    if not digest.worth_sending:
+        await reply_text(message_id, f"{owner}：今天没有需要处理的补货、呆滞或运费异常。")
+        return
+    await reply_card(message_id, digest.title, digest.body, "orange")
+
+
+async def send_digest_card(chat_id: str, title: str, body: str) -> bool:
+    """The Feishu sender for apps.channels.digest.run_digests."""
+    return await send_card_to_chat(chat_id, title, body, "orange")
+
+
 # ── Main event dispatcher (called by feishu_routes.py or standalone) ──────────
 
 async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = False) -> Dict[str, Any]:
@@ -1162,6 +1202,9 @@ async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = F
         owner_reply = handle_owner_command(inbound, store)
         if owner_reply is not None:
             await reply_text(msg_id, owner_reply)
+            return {"code": 0}
+        if text.strip().lower() in ("/digest", "/简报"):
+            asyncio.create_task(_send_digest_now(inbound.key, msg_id))
             return {"code": 0}
 
         # A task copies the context it is created in, so every aria subprocess
