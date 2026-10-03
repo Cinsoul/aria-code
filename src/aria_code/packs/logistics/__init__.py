@@ -25,6 +25,8 @@ PACK_NAME = "logistics"
 
 LOGISTICS_TOOLS = (
     "analyze_logistics_data",
+    "plan_inventory_policy",
+    "score_carriers",
 )
 
 _VERIFIED = 0.95

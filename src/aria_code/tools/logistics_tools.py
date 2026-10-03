@@ -80,6 +80,13 @@ def tool_analyze_logistics_data(params: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(records, list) or not records:
             raise ValueError("No waybill records available for analysis")
 
+        # Before this, every shipper's waybills were summed into one spend
+        # figure and one carrier table — a 3PL report built from all its
+        # clients' commercial data. See logistics_tenancy for the rules.
+        from .logistics_tenancy import scope_records
+        records, scope = scope_records(records, params.get("owner_id"),
+                                       all_owners=bool(params.get("all_owners")))
+
         spend = 0.0
         known_delivery = 0
         on_time = 0
@@ -111,15 +118,18 @@ def tool_analyze_logistics_data(params: Dict[str, Any]) -> Dict[str, Any]:
             item["on_time_rate"] = round(item["on_time_count"] / item["known_delivery_count"] * 100, 2) if item["known_delivery_count"] else None
             metrics.append({"carrier": carrier, **item})
         rate = round(on_time / known_delivery * 100, 2) if known_delivery else None
-        result = {"total_waybills": len(records), "total_freight_spend": round(spend, 2), "overall_on_time_rate": rate, "known_delivery_count": known_delivery, "carrier_metrics": metrics, "billing_anomalies": anomalies, "data_source": data_source}
+        result = {"scope": scope, "total_waybills": len(records), "total_freight_spend": round(spend, 2), "overall_on_time_rate": rate, "known_delivery_count": known_delivery, "carrier_metrics": metrics, "billing_anomalies": anomalies, "data_source": data_source}
         rate_label = f"{rate}%" if rate is not None else "不可得（无准时状态记录）"
         return {"success": True, "data": result, "source": source, "summary": f"已审计 {len(records)} 单运单（来源：{data_source}），运费总计 ¥{spend:,.2f}，已知准时交付率 {rate_label}，发现 {len(anomalies)} 笔需核实的计费重量异常。"}
     except (OSError, sqlite3.Error, ValueError, TypeError, json.JSONDecodeError) as exc:
+        # TenancyError is a ValueError, so a refusal to mix shippers lands here.
         return {"success": False, "error": str(exc)}
 
 
 def register_logistics_tools(tools_dict: Dict[str, Any], schemas_list: List[Dict[str, Any]]) -> int:
-    """Register the waybill analyzer as a local tool."""
+    """Register the logistics analyses as local tools."""
+    from .logistics_tenancy import owner_params_schema
+
     tools_dict["analyze_logistics_data"] = (tool_analyze_logistics_data, "Analyze supplied freight waybills and billing anomalies")
     schemas_list.append({
         "name": "analyze_logistics_data",
@@ -129,7 +139,16 @@ def register_logistics_tools(tools_dict: Dict[str, Any], schemas_list: List[Dict
             "properties": {
                 "file_path": {"type": "string", "description": "CSV or JSON waybill file path"},
                 "waybills": {"type": "array", "description": "Waybill records with total_cost"},
+                **owner_params_schema(),
             },
         },
     })
-    return 1
+
+    from .logistics_carriers import SCHEMA as _carrier_schema, tool_score_carriers
+    from .logistics_inventory import SCHEMA as _inventory_schema, tool_plan_inventory_policy
+
+    tools_dict["plan_inventory_policy"] = (tool_plan_inventory_policy, _inventory_schema["description"])
+    schemas_list.append(_inventory_schema)
+    tools_dict["score_carriers"] = (tool_score_carriers, _carrier_schema["description"])
+    schemas_list.append(_carrier_schema)
+    return 3

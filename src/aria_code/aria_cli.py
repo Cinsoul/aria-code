@@ -311,7 +311,7 @@ from aria_code.apps.cli.commands.finance_service_cmds import FinanceServiceComma
 from aria_code.apps.cli.commands.orchestrator_cmds import OrchestratorCommandsMixin
 from aria_code.apps.cli.commands.workflow_cmds import WorkflowCommandsMixin
 from aria_code.apps.cli.commands.business_workflow_cmds import BusinessWorkflowCommandsMixin
-from aria_code.apps.cli.commands.warehouse_cmds import WarehouseCommandsMixin
+from aria_code.apps.cli.commands.warehouse_cmds import LogisticsCommandsMixin, WarehouseCommandsMixin
 from aria_code.apps.cli.commands.session_cmds import SessionCommandsMixin
 from aria_code.apps.cli.session_export import build_session_export_payload  # 同上
 from aria_code.apps.cli.commands.workspace_cmds import WorkspaceCommandsMixin
@@ -3363,7 +3363,7 @@ import apps.cli.broker_render as _broker_render_module
 _rebind_module_function_globals(_broker_render_module, _broker_render_module.__all__)
 
 class SlashCommands(
-    CoreCommandsMixin,BrokerCommandsMixin, CanvasCommandsMixin, BacktestCommandsMixin, AnalysisCommandsMixin, ASharePredictionCommandsMixin, DataCommandsMixin, OpsCommandsMixin, DiagnosticCommandsMixin, DiagnosticOpsCommandsMixin, UiCommandsMixin, SessionUxCommandsMixin, AuthCommandsMixin, FileCommandsMixin, FxCommodityCommandsMixin, FinanceServiceCommandsMixin, OrchestratorCommandsMixin, WorkflowCommandsMixin, BusinessWorkflowCommandsMixin, WarehouseCommandsMixin, SessionCommandsMixin, WorkspaceCommandsMixin, ModelCommandsMixin, MarketCommandsMixin, PortfolioCommandsMixin, PdfExportCommandsMixin):
+    CoreCommandsMixin,BrokerCommandsMixin, CanvasCommandsMixin, BacktestCommandsMixin, AnalysisCommandsMixin, ASharePredictionCommandsMixin, DataCommandsMixin, OpsCommandsMixin, DiagnosticCommandsMixin, DiagnosticOpsCommandsMixin, UiCommandsMixin, SessionUxCommandsMixin, AuthCommandsMixin, FileCommandsMixin, FxCommodityCommandsMixin, FinanceServiceCommandsMixin, OrchestratorCommandsMixin, WorkflowCommandsMixin, BusinessWorkflowCommandsMixin, WarehouseCommandsMixin, LogisticsCommandsMixin, SessionCommandsMixin, WorkspaceCommandsMixin, ModelCommandsMixin, MarketCommandsMixin, PortfolioCommandsMixin, PdfExportCommandsMixin):
     """Claude Code-style slash command system."""
 
 
@@ -3491,6 +3491,8 @@ class SlashCommands(
             "/analyze":   (self.cmd_analyze,  "Deep market analysis: /analyze AAPL"),
             "/team":      (self.cmd_team,     "Multi-agent research team: /team AAPL [--full]"),
             "/warehouse": (self.cmd_warehouse, "Read-only warehouse ERP analysis: /warehouse WH-CN-01 [--json]"),
+            "/inventory": (self.cmd_inventory, "3PL inventory policy: reorder points, safety stock, ABC/XYZ, dead stock: /inventory skus.csv --owner ACME"),
+            "/carriers": (self.cmd_carriers, "3PL carrier scorecard by lane, cost anomalies and savings: /carriers waybills.csv --owner ACME"),
             "/deep":      (self.cmd_deep,     "Deep layered research (P0–P3): /deep AAPL [--deep|--brief]"),
             "/ta":        (self.cmd_ta,       "Technical indicators: /ta AAPL [days=120]"),
             "/market":    (self.cmd_market,   "Market overview: /market [indices|sectors]"),
@@ -3618,6 +3620,10 @@ class SlashCommands(
         # ── Financial analysis ──────────────────────────────────────────────
         "/team":      ("Usage: /team [SYMBOL] [--agents a,b] [--full]", ["/team NVDA", "/team AAPL --agents technical,risk", "/team watchlist", "/team SPY --full"]),
         "/warehouse": ("Usage: /warehouse <warehouse_id> [--json]", ["/warehouse WH-CN-01", "/warehouse WH-CN-01 --json"]),
+        "/inventory": ("Usage: /inventory <skus.csv|json> [--owner ID | --all-owners] [--service-level 0.95] [--review-days 7] [--json]",
+                       ["/inventory skus.csv --owner ACME", "/inventory skus.json --owner ACME --service-level 0.98"]),
+        "/carriers": ("Usage: /carriers <waybills.csv|json> [--owner ID | --all-owners] [--min-shipments 20] [--json]",
+                      ["/carriers waybills.csv --owner ACME", "/carriers waybills.csv --all-owners"]),
         "/deep":      ("Usage: /deep [SYMBOL] [--brief|--deep] [--agents a,b]", ["/deep NVDA", "/deep AAPL --deep", "/deep 000333 --brief", "/deep TSLA --agents technical,risk,macro", "/deep calibrate"]),
         "/architecture": ("Usage: /architecture [--gaps]", ["/architecture", "/architecture --gaps"]),
         "/ta":        ("Usage: /ta [SYMBOL] [days=N]", ["/ta AAPL", "/ta NVDA days=60"]),
