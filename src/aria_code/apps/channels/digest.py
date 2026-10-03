@@ -116,7 +116,8 @@ def build_digest(owner_id: str, feeds: Dict[str, Dict[str, str]]) -> Digest:
                 if reorder:
                     sections.append(_section("建议补货", [
                         f"{i['sku']}：订 {i['suggested_order_qty']}（现有可用 {i['inventory_position']:g}，"
-                        f"补货点 {i['reorder_point']}，约可撑 {i['days_of_cover']} 天）" for i in reorder]))
+                        f"补货点 {i['reorder_point']}，约可撑 {i['days_of_cover']} 天）" for i in reorder])
+                        + "\n在群里 @Aria 发送 /补货，可发起采购单草稿审批。")
                 if thin:
                     sections.append(_section("历史不足、未给建议", [
                         f"{i['sku']}：仅 {i['history_days']} 天出库记录" for i in thin]))

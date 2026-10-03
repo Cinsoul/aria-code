@@ -1117,6 +1117,107 @@ async def _send_digest_now(conversation: str, message_id: str) -> None:
     await reply_card(message_id, digest.title, digest.body, "orange")
 
 
+# ── Approvals (apps/channels/approvals.py) ────────────────────────────────────
+
+def _approval_card(approval) -> Dict[str, Any]:
+    """The request as a card: buttons while pending, the outcome once decided."""
+    from aria_code.apps.channels.approvals import PENDING, status_label
+
+    elements = _build_card_elements(approval.summary)
+    if approval.status == PENDING:
+        elements.append({"tag": "note", "elements": [{"tag": "plain_text", "content":
+            f"审批编号 {approval.id[:8]} · 24 小时内有效 · 批准后生成采购单草稿文件，不会自动下单"}]})
+        elements.append({"tag": "action", "actions": [
+            {"tag": "button", "type": "primary", "text": {"tag": "plain_text", "content": "批准"},
+             "value": {"aria_approval": approval.id, "decision": "approve"}},
+            {"tag": "button", "type": "danger", "text": {"tag": "plain_text", "content": "驳回"},
+             "value": {"aria_approval": approval.id, "decision": "reject"}},
+        ]})
+        template = "orange"
+    else:
+        outcome = f"{status_label(approval.status)} · {approval.decided_by}"
+        # The file name, not the host path; a failure's details stay in the
+        # approval record and the log, not in the client's group.
+        if approval.status == "approved" and approval.result:
+            outcome += f"\n已生成：{Path(approval.result).name}"
+        elif approval.status == "failed":
+            outcome += "\n详情已记录在审批记录中"
+        elements.append({"tag": "note", "elements": [{"tag": "plain_text", "content": outcome}]})
+        template = "green" if approval.status == "approved" else "grey"
+    return {
+        "config": {"wide_screen_mode": True, "update_multi": True},
+        "header": {"title": {"tag": "plain_text", "content": f"🧾 {approval.owner_id} 采购单草稿"},
+                   "template": template},
+        "elements": elements,
+    }
+
+
+async def _request_reorder(inbound: InboundMessage, message_id: str) -> None:
+    """/补货: propose a purchase-order draft from the reorder list, for approval."""
+    from aria_code.apps.channels.approvals import ApprovalStore, propose_reorder
+    from aria_code.apps.channels.digest import feeds_for, load_feeds
+
+    owner = _conversation_store().owner_for(inbound.key)
+    if not owner:
+        await reply_text(message_id, "本群未绑定货主，无法发起补货审批。管理员可发送 /owner <货主ID> 绑定。")
+        return
+    try:
+        inventory = feeds_for(owner, load_feeds()).get("inventory")
+        if not inventory:
+            raise ValueError(f"no inventory feed configured for {owner}")
+        proposal = propose_reorder(owner, inventory)
+    except Exception as exc:
+        logger.warning("reorder proposal for %s failed: %s", owner, exc)
+        await reply_text(message_id, "暂时无法生成补货建议，已记录到运维日志。")
+        return
+    if proposal is None:
+        await reply_text(message_id, f"{owner}：当前没有需要补货的 SKU。")
+        return
+    summary, payload = proposal
+    approval = ApprovalStore(_conversation_db_path()).request(
+        conversation=inbound.key, owner_id=owner, kind="purchase_order_draft", payload=payload,
+        summary=f"**建议订货**\n{summary}\n\n数量未计入起订量和箱规，请审批人核对。",
+        requested_by=f"feishu:{inbound.sender_id}",
+    )
+    token = await _get_access_token()
+    if token:
+        await _feishu_post(f"{_FEISHU_API}/im/v1/messages/{message_id}/reply", token,
+                           {"msg_type": "interactive", "content": json.dumps(_approval_card(approval))})
+
+
+async def _handle_card_action(event: Dict[str, Any], *, authorized_by_binding: bool = False) -> Dict[str, Any]:
+    """An approve/reject press. The response's toast and card are what the presser sees."""
+    from aria_code.apps.channels.approvals import ApprovalStore, can_decide
+
+    operator = event.get("operator") or {}
+    ids = tuple(i for i in (operator.get("open_id", ""), operator.get("user_id", "")) if i)
+    value = (event.get("action") or {}).get("value") or {}
+    chat_id = (event.get("context") or {}).get("open_chat_id", "")
+    approval_id = str(value.get("aria_approval", ""))
+    if not approval_id:
+        return {}
+
+    def toast(kind: str, text: str, card=None) -> Dict[str, Any]:
+        out: Dict[str, Any] = {"toast": {"type": kind, "content": text}}
+        if card is not None:
+            out["card"] = {"type": "raw", "data": card}
+        return out
+
+    if not authorized_by_binding and not _is_allowed_user(*ids):
+        return toast("error", "你还没有使用 Aria 的权限。")
+    conversation = f"feishu:{chat_id}"
+    decision = ApprovalStore(_conversation_db_path()).decide(
+        approval_id,
+        conversation=conversation,
+        current_owner=_conversation_store().owner_for(conversation),
+        decided_by=f"feishu:{ids[0] if ids else ''}",
+        approve=value.get("decision") == "approve",
+        authorised=can_decide("feishu", ids),
+    )
+    card = _approval_card(decision.approval) if decision.approval is not None else None
+    return toast("success" if decision.ok else "error", decision.message, card)
+
+
 async def send_digest_card(chat_id: str, title: str, body: str) -> bool:
     """The Feishu sender for apps.channels.digest.run_digests."""
     return await send_card_to_chat(chat_id, title, body, "orange")
@@ -1143,6 +1244,10 @@ async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = F
     header     = raw.get("header", {})
     event      = raw.get("event", {})
     event_type = header.get("event_type") or raw.get("type", "")
+
+    # A press on an approval card's button (callback schema 2.0).
+    if event_type == "card.action.trigger":
+        return await _handle_card_action(event, authorized_by_binding=authorized_by_binding)
 
     if event_type not in ("im.message.receive_v1", "message"):
         return {"code": 0}
@@ -1205,6 +1310,9 @@ async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = F
             return {"code": 0}
         if text.strip().lower() in ("/digest", "/简报"):
             asyncio.create_task(_send_digest_now(inbound.key, msg_id))
+            return {"code": 0}
+        if text.strip().lower() in ("/reorder", "/补货"):
+            asyncio.create_task(_request_reorder(inbound, msg_id))
             return {"code": 0}
 
         # A task copies the context it is created in, so every aria subprocess
