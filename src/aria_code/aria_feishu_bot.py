@@ -15,7 +15,18 @@ OpenClaw 同款设计：任意输入（文字/语音/图片/文件）→ Aria AI
        FEISHU_APP_ID=cli_xxx        FEISHU_APP_SECRET=xxx
        ANTHROPIC_API_KEY=xxx        # 图片理解 / LLM
        OPENAI_API_KEY=xxx           # Whisper 语音转文字（可选）
-       FEISHU_ALLOWED_USER_IDS=uid1,uid2   # 留空=不限制
+       FEISHU_ALLOWED_USER_IDS=ou_xxx,ou_yyy   # 必填：留空 = 谁都不能用
+       FEISHU_ENCRYPT_KEY=xxx 或 FEISHU_VERIFICATION_TOKEN=xxx   # 独立运行时必填其一
+       ARIA_BOT_ALLOW_TOOLS=write_file      # 可选：机器人可免审批使用的工具
+
+安全边界（2026-10-03）：
+  - 白名单为空时拒绝所有人。之前留空 = 不限制，而机器人调用 aria 时自动批准
+    全部工具，于是任何能给它发消息的人都能在这台机器上跑 shell 命令。
+  - 机器人不再自动批准需要确认的工具（run_command / write_file / edit_file /
+    multi_edit）；没有人能在飞书里点「同意」，这些调用会被拒绝。确实需要的，
+    由管理员用 ARIA_BOT_ALLOW_TOOLS 逐个列出。
+  - 独立运行时校验飞书事件签名；未配置 Encrypt Key 或 Verification Token 时
+    拒绝一切事件。之前任何能访问端口的人都能伪造发件人。
 
 支持的消息类型：
   📝 文字（非命令）→ Aria LLM 自然语言回答
@@ -661,12 +672,27 @@ async def _async_run_aria(cmd: str, message_id: str) -> None:
 
 # ── Multimodal helpers ────────────────────────────────────────────────────────
 
-def _is_allowed_user(user_id: str) -> bool:
-    """Check FEISHU_ALLOWED_USER_IDS allowlist (empty = allow all)."""
-    raw = os.environ.get("FEISHU_ALLOWED_USER_IDS", "").strip()
-    if not raw:
-        return True
-    return user_id in {u.strip() for u in raw.split(",") if u.strip()}
+def _is_allowed_user(*sender_ids: str) -> bool:
+    """Whether any of the sender's ids (user_id, open_id) is on the allowlist.
+
+    Fails closed: an empty FEISHU_ALLOWED_USER_IDS allows nobody. It used to
+    allow everybody, and the bot runs aria with tools — so an unconfigured
+    deployment answered anyone who could message it.
+    """
+    raw = os.environ.get("FEISHU_ALLOWED_USER_IDS", "")
+    allowed = {u.strip() for u in raw.split(",") if u.strip()}
+    return any(i in allowed for i in sender_ids if i)
+
+
+def _bot_cli_flags() -> list[str]:
+    """Extra aria CLI flags for bot-run commands: only an explicit tool allowlist.
+
+    Bot mode no longer approves every tool. A tool that needs confirmation is
+    refused, because nobody in the chat can answer the prompt; an operator who
+    needs one names it in ARIA_BOT_ALLOW_TOOLS.
+    """
+    tools = [t.strip() for t in os.environ.get("ARIA_BOT_ALLOW_TOOLS", "").split(",") if t.strip()]
+    return ["--allow-tools", ",".join(tools)] if tools else []
 
 
 async def _query_aria_direct(text: str, timeout: int = 90) -> str:
@@ -709,10 +735,11 @@ async def _query_aria_llm(text: str, timeout: int = 120) -> str:
     if not aria_cli.exists():
         return "❌ aria_cli.py 未找到，请检查 ARIA_CODE_DIR 配置。"
     try:
-        # ARIA_BOT_MODE=1: auto-approves tools + suppresses visual diffs in aria_cli
+        # ARIA_BOT_MODE=1: plain output for a chat card. It no longer approves
+        # tools; see _bot_cli_flags.
         bot_env = {**os.environ, "ARIA_BOT_MODE": "1"}
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, str(aria_cli), "-p", text,
+            sys.executable, str(aria_cli), "-p", text, *_bot_cli_flags(),
             stdin=asyncio.subprocess.DEVNULL,   # no interactive prompts
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -939,23 +966,57 @@ async def _analyze_file(file_bytes: bytes, filename: str) -> str:
 
 # ── Event verifier ────────────────────────────────────────────────────────────
 
-def verify_feishu_signature(timestamp: str, nonce: str, body_bytes: bytes,
-                            encrypt_key: str) -> bool:
-    """Verify Feishu event signature (optional but recommended in production)."""
-    if not encrypt_key:
-        return True
-    s = (timestamp + nonce + encrypt_key).encode() + body_bytes
-    return hmac.compare_digest(
-        hashlib.sha256(s).hexdigest(),
-        ""  # caller should pass the X-Lark-Signature header value
-    )
+def verify_feishu_request(headers: Dict[str, str], body: bytes, payload: Dict[str, Any]) -> tuple[bool, str]:
+    """(trusted, reason) for an event received directly from Feishu.
+
+    The same two checks the relay applies (aria_relay_server._verify_feishu_request),
+    kept separate because the relay ships without this module's dependencies:
+      - Encrypt Key: X-Lark-Signature = sha256(timestamp + nonce + key + body)
+      - Verification Token: the token field in the event body
+    With neither configured every event is refused, unless
+    FEISHU_ALLOW_UNVERIFIED_EVENTS=1 is set for local testing.
+
+    This replaces verify_feishu_signature, which compared the digest with an
+    empty string and was never called: the standalone server dispatched any
+    POST, so anyone who could reach the port chose the sender — including one
+    on the allowlist.
+    """
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    encrypt_key = os.environ.get("FEISHU_ENCRYPT_KEY", "")
+    token = os.environ.get("FEISHU_VERIFICATION_TOKEN", "")
+    if encrypt_key:
+        signature = headers.get("x-lark-signature", "")
+        if not signature:
+            return False, "missing X-Lark-Signature"
+        digest = hashlib.sha256(
+            (headers.get("x-lark-request-timestamp", "") + headers.get("x-lark-request-nonce", "")
+             + encrypt_key).encode("utf-8") + body
+        ).hexdigest()
+        if not hmac.compare_digest(digest, signature):
+            return False, "signature mismatch"
+        return True, ""
+    if token:
+        sent = payload.get("token") or (payload.get("header") or {}).get("token", "")
+        if not hmac.compare_digest(str(sent), token):
+            return False, "verification token mismatch"
+        return True, ""
+    if os.environ.get("FEISHU_ALLOW_UNVERIFIED_EVENTS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return True, ""
+    return False, ("neither FEISHU_ENCRYPT_KEY nor FEISHU_VERIFICATION_TOKEN is set; "
+                   "unverified events are refused")
 
 
 # ── Main event dispatcher (called by feishu_routes.py or standalone) ──────────
 
-async def dispatch_event(raw: Dict[str, Any]) -> Dict[str, Any]:
+async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = False) -> Dict[str, Any]:
     """
     Handle one Feishu event payload.
+
+    authorized_by_binding: the relay client passes True. The relay forwards an
+    event only to the machine its sender bound with a code shown on that
+    machine, so the binding is the authorization; a local allowlist would add
+    nothing, since the relay knows the bound id. What limits a compromised
+    relay is that bot-run commands cannot use confirmation-required tools.
     Supports: text / audio / image / file / post (富文本)
     Returns a dict to be sent as JSON response (HTTP 200 required by Feishu).
     """
@@ -985,8 +1046,18 @@ async def dispatch_event(raw: Dict[str, Any]) -> Dict[str, Any]:
                      json.dumps(raw, ensure_ascii=False)[:600])
         return {"code": 0}
 
-    if not _is_allowed_user(user_id):
-        logger.warning("Blocked user %s (not in FEISHU_ALLOWED_USER_IDS)", user_id)
+    open_id = sender.get("open_id", "")
+    if not authorized_by_binding and not _is_allowed_user(sender.get("user_id", ""), open_id):
+        logger.warning("Blocked sender user_id=%s open_id=%s (not in FEISHU_ALLOWED_USER_IDS)",
+                       sender.get("user_id", ""), open_id)
+        # Say why only in a direct chat: in a group the bot would answer every
+        # message from everyone not on the list.
+        if msg.get("chat_type") == "p2p":
+            await reply_text(
+                msg_id,
+                "⛔ 你还没有使用 Aria 的权限。请把下面的 ID 发给管理员，"
+                f"加入 FEISHU_ALLOWED_USER_IDS：\n{open_id or sender.get('user_id', '')}",
+            )
         return {"code": 0}
 
     content_raw = msg.get("content", "{}")
@@ -1386,6 +1457,33 @@ async def _handle_file(file_key: str, filename: str, message_id: str) -> None:
 
 # ── Standalone HTTP server (for testing without FastAPI) ──────────────────────
 
+async def _standalone_handle(request):
+    """POST /feishu/event for the standalone server: verify, then dispatch."""
+    from aiohttp import web
+
+    raw = await request.read()
+    try:
+        body = json.loads(raw)
+    except Exception:
+        return web.json_response({"code": 1, "msg": "bad json"}, status=400)
+    # Before anything else, the URL-verification challenge included: it
+    # carries the token too, and answering it unverified is a free probe.
+    trusted, reason = verify_feishu_request(dict(request.headers), raw, body)
+    if not trusted:
+        logger.warning("refused an unverified Feishu event: %s", reason)
+        return web.json_response({"code": 1, "msg": "unverified event"}, status=401)
+    return web.json_response(await dispatch_event(body))
+
+
+def _standalone_app():
+    from aiohttp import web
+
+    app = web.Application()
+    app.router.add_post("/feishu/event", _standalone_handle)
+    app.router.add_post("/api/v1/feishu/event", _standalone_handle)
+    return app
+
+
 async def _standalone_server(host: str = "0.0.0.0", port: int = 8888) -> None:
     """Minimal aiohttp-based server for standalone Feishu event reception."""
     try:
@@ -1394,17 +1492,7 @@ async def _standalone_server(host: str = "0.0.0.0", port: int = 8888) -> None:
         logger.error("aiohttp not installed. pip install aiohttp")
         return
 
-    async def handle(request):
-        try:
-            body = await request.json()
-        except Exception:
-            return web.json_response({"code": 1, "msg": "bad json"}, status=400)
-        result = await dispatch_event(body)
-        return web.json_response(result)
-
-    app = web.Application()
-    app.router.add_post("/feishu/event", handle)
-    app.router.add_post("/api/v1/feishu/event", handle)
+    app = _standalone_app()
 
     runner = web.AppRunner(app)
     await runner.setup()
