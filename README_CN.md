@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=flat-square&logo=npm&label=npm" alt="npm 版本"></a>
   <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=flat-square&logo=pypi&label=PyPI" alt="PyPI 版本"></a>
-  <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI 状态"></a>
+  <a href="https://github.com/artheras/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artheras/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI 状态"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
@@ -33,18 +33,18 @@ CLI 与 Aria 的其他入口使用同一套核心运行时。模型选择与工�
 macOS 和 Linux 可直接安装独立 CLI，无需预装 Python、Node.js 或 npm：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.sh | sh
 ~/.local/bin/aria-code --help
 ```
 
 Windows x64 请在 PowerShell 中运行：
 
 ```powershell
-irm https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.ps1 | iex
 aria-code --help
 ```
 
-安装脚本从最新的 [GitHub Release](https://github.com/artherahq/aria-code/releases/latest) 下载对应平台的二进制文件，校验 SHA-256 后安装到当前用户目录。在 macOS 或 Linux 上重新打开终端后，即可直接使用 `aria-code` 命令。设置 `ARIA_CODE_VERSION=v0.55.0` 可固定版本。
+安装脚本从最新的 [GitHub Release](https://github.com/artheras/aria-code/releases/latest) 下载对应平台的二进制文件，校验 SHA-256 后安装到当前用户目录。在 macOS 或 Linux 上重新打开终端后，即可直接使用 `aria-code` 命令。设置 `ARIA_CODE_VERSION=v0.55.0` 可固定版本。
 
 也可以选择包管理器：`npm install -g @artheras/aria-code`（需要 npm），或 `python3 -m pip install --upgrade aria-code`（需要 Python 3.10+）。源码开发方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 

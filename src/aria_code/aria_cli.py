@@ -6506,7 +6506,11 @@ class ArtheraTerminal:
 async def main():
     parser = argparse.ArgumentParser(
         prog="aria-code",
-        description="Aria Code — Quantitative Investment Terminal",
+        # Same sentence as pyproject's description, so `--help`, PyPI and npm
+        # describe one product. It used to say "Quantitative Investment
+        # Terminal" here while the package metadata had been repositioned;
+        # tests/test_first_run_works.py keeps the two in step.
+        description="Aria Code — AI coding and research workspace with optional finance and connected-domain tools",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

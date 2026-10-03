@@ -4,7 +4,7 @@ Usage:
     from apps.cli.github_app_auth import get_installation_token, get_aria_git_url
 
     token = get_installation_token()          # raises if not configured
-    url   = get_aria_git_url("artherahq/aria-code", token)
+    url   = get_aria_git_url("artheras/aria-code", token)
     # git push with url as remote
 """
 
@@ -92,7 +92,7 @@ def _gh_api(path: str, token: str, *, method: str = "GET") -> dict:
         return json.loads(resp.read())
 
 
-def get_installation_token(owner: str = "artherahq") -> str:
+def get_installation_token(owner: str = "artheras") -> str:
     """Return a short-lived installation token (valid ~1 hour)."""
     pem   = _find_pem()
     jwt   = _make_jwt(pem, ARIA_APP_ID)

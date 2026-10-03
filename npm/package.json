@@ -15,13 +15,13 @@
     "investment",
     "quant"
   ],
-  "homepage": "https://github.com/artherahq/aria-code#readme",
+  "homepage": "https://github.com/artheras/aria-code#readme",
   "bugs": {
-    "url": "https://github.com/artherahq/aria-code/issues"
+    "url": "https://github.com/artheras/aria-code/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/artherahq/aria-code.git"
+    "url": "git+https://github.com/artheras/aria-code.git"
   },
   "license": "Apache-2.0",
   "author": "Cinsoul",

@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_ORG = os.environ.get("ARTHERA_GITHUB_ORG", "artherahq")
+EXPECTED_ORG = os.environ.get("ARTHERA_GITHUB_ORG", "artheras")
 EXPECTED_REPO = os.environ.get("ARIA_GITHUB_REPO", "aria-code")
 BRANCH_PATTERN = re.compile(
     r"^(main|develop|dev|agent/.+|feature/.+|fix/.+|refactor/.+|chore/.+|docs/.+|release/v.+|codex/.+)$"

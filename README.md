@@ -15,7 +15,7 @@ Work in your project, use local or cloud models, and connect domain tools when y
 <p align="center">
   <a href="https://www.npmjs.com/package/@artheras/aria-code"><img src="https://img.shields.io/npm/v/@artheras/aria-code?style=flat-square&logo=npm&label=npm" alt="npm version"></a>
   <a href="https://pypi.org/project/aria-code/"><img src="https://img.shields.io/pypi/v/aria-code?style=flat-square&logo=pypi&label=PyPI" alt="PyPI version"></a>
-  <a href="https://github.com/artherahq/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artherahq/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI status"></a>
+  <a href="https://github.com/artheras/aria-code/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/artheras/aria-code/ci.yml?branch=main&style=flat-square&logo=githubactions&label=CI" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
@@ -33,18 +33,18 @@ The same core runtime is used by the CLI and other Aria surfaces. Model choice a
 Install the standalone CLI on macOS or Linux without Python, Node.js, or npm:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.sh | sh
 ~/.local/bin/aria-code --help
 ```
 
 On Windows x64, run this in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/artherahq/aria-code/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.ps1 | iex
 aria-code --help
 ```
 
-The installer downloads the binary for your OS from the latest [GitHub release](https://github.com/artherahq/aria-code/releases/latest), checks its SHA-256 digest, and installs it in your user account. Open a new terminal to use `aria-code` by name on macOS or Linux. Set `ARIA_CODE_VERSION=v0.55.0` to pin a release.
+The installer downloads the binary for your OS from the latest [GitHub release](https://github.com/artheras/aria-code/releases/latest), checks its SHA-256 digest, and installs it in your user account. Open a new terminal to use `aria-code` by name on macOS or Linux. Set `ARIA_CODE_VERSION=v0.55.0` to pin a release.
 
 Alternative package-manager installs: `npm install -g @artheras/aria-code` (requires npm) or `python3 -m pip install --upgrade aria-code` (requires Python 3.10+). For development from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

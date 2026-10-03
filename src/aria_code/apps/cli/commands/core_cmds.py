@@ -1050,7 +1050,7 @@ class CoreCommandsMixin:
             return
 
         if sub == "policy":
-            url = "https://github.com/artherahq/aria-code/blob/aria-code/PRIVACY.md"
+            url = "https://github.com/artheras/aria-code/blob/main/PRIVACY.md"
             local = pathlib.Path(__file__).resolve().parent / "PRIVACY.md"
             lines = [
                 "Aria Code is local-first: by default nothing is collected or uploaded.",

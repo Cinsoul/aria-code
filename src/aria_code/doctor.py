@@ -150,7 +150,13 @@ def _format_age(seconds: float | int | None) -> str:
 
 
 def _has_module(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
+    # find_spec on a dotted name imports the parent package first, and raises
+    # rather than returning None when that parent is absent ("google.genai"
+    # with no "google" installed). Absent is the answer either way.
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def _is_writable(path: Path) -> tuple[bool, str]:
@@ -662,6 +668,11 @@ def provider_health_summary(snapshot: Optional[List[Dict[str, Any]]] = None) -> 
 
 
 def _iter_required_modules() -> Iterable[tuple[str, str]]:
+    """Core dependencies: a plain `pip install aria-code` must provide these.
+
+    Kept in step with [project].dependencies in pyproject.toml;
+    tests/test_first_run_works.py fails if one is listed here but not there.
+    """
     yield "aiohttp", "async HTTP"
     yield "rich", "terminal UI"
     yield "prompt_toolkit", "interactive input"
@@ -669,7 +680,20 @@ def _iter_required_modules() -> Iterable[tuple[str, str]]:
     yield "pandas", "dataframes"
     yield "numpy", "numeric processing"
     yield "yfinance", "US/HK/global market data"
-    yield "akshare", "China market data"
+    # The default model is google/gemini-2.5-pro, so without this a fresh
+    # install cannot answer a single prompt.
+    yield "google.genai", "Gemini / Vertex AI (the default model)"
+
+
+def _iter_optional_modules() -> Iterable[tuple[str, str, str]]:
+    """Optional extras: (module, purpose, extra that installs it).
+
+    These used to sit in the required list, so a clean install of aria-code
+    always ended doctor with "1 errors" — for akshare, which pyproject has
+    always declared as the optional `cn` extra. Missing an optional extra is a
+    choice the user made, not a fault.
+    """
+    yield "akshare", "China A-share market data", "cn"
 
 
 def run_doctor(
@@ -711,7 +735,15 @@ def run_doctor(
         if _has_module(module):
             checks.append(_check(f"package:{module}", "ok", purpose))
         else:
-            checks.append(_check(f"package:{module}", "err", f"{purpose} missing", f"pip install {module}"))
+            checks.append(_check(f"package:{module}", "err", f"{purpose} missing",
+                                 "Reinstall: pip install -U aria-code"))
+
+    for module, purpose, extra in _iter_optional_modules():
+        if _has_module(module):
+            checks.append(_check(f"package:{module}", "ok", purpose))
+        else:
+            checks.append(_check(f"package:{module}", "skip", f"{purpose} not installed (optional)",
+                                 f"pip install 'aria-code[{extra}]'"))
 
     for module in ("data_service", "artifacts", "report_generator", "backtest_report"):
         checks.append(

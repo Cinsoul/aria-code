@@ -1,5 +1,7 @@
 # GitHub Enterprise Migration Runbook
 
+> **Historical.** This records the move into the `artherahq` organisation. That organisation has since been renamed to **`artheras`**; the canonical repository is now `https://github.com/artheras/aria-code`. Do not use the `artherahq` URLs below — GitHub only redirects them until someone else registers the old name.
+
 This runbook moves Aria Code from a personal GitHub repository to an Arthera
 organization repository without losing local history, open work, or deployment
 secrets.
