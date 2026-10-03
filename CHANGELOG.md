@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.60.0] — 2026-10-03
+
+- Merge pull request #72 from Cinsoul/fix/release-after-onedir
+
 ## [0.59.0] — 2026-10-03
 
 - Merge pull request #71 from Cinsoul/fix/fast-binary-startup
