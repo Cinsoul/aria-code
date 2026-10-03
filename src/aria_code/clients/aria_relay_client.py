@@ -80,7 +80,9 @@ async def _handle_message(raw_msg: dict, ws) -> None:
         result = {"error": "aria_feishu_bot unavailable"}
     else:
         try:
-            result = await bot.dispatch_event(payload)
+            # The relay routes an event only to the machine its sender bound
+            # with a code shown here, so that binding is the authorization.
+            result = await bot.dispatch_event(payload, authorized_by_binding=True)
         except Exception as e:
             logger.exception("dispatch_event error")
             result = {"error": str(e)[:300]}
