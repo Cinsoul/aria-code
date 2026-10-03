@@ -36,9 +36,11 @@ ENV_KEYS = ("FEISHU_ALLOWED_USER_IDS", "FEISHU_ENCRYPT_KEY", "FEISHU_VERIFICATIO
 
 
 @pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
+def clean_env(monkeypatch, tmp_path):
     for key in ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
+    # Served messages are recorded per conversation; keep that out of ~/.aria.
+    monkeypatch.setenv("ARIA_CONVERSATIONS_DB", str(tmp_path / "conversations.db"))
 
 
 def _event(text="/run /price AAPL", *, open_id="ou_stranger", user_id="", chat_type="p2p"):

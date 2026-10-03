@@ -53,8 +53,19 @@ import re
 import sys
 import tempfile
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from aria_code.apps.channels.conversation import (
+    ChannelTurn,
+    ConversationStore,
+    InboundMessage,
+    handle_owner_command,
+    prepare_turn,
+    should_respond,
+)
+from aria_code.tools.logistics_tenancy import OWNER_SCOPE_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -695,7 +706,7 @@ def _bot_cli_flags() -> list[str]:
     return ["--allow-tools", ",".join(tools)] if tools else []
 
 
-async def _query_aria_direct(text: str, timeout: int = 90) -> str:
+async def _query_aria_direct(text: str, timeout: int = 90, history: Optional[list] = None) -> str:
     """
     Query the LLM directly via providers/llm/registry.py — no subprocess, no tool use.
     Used for conversational NL queries where we want a clean text answer.
@@ -709,7 +720,7 @@ async def _query_aria_direct(text: str, timeout: int = 90) -> str:
 
         collected: list[str] = []
         result = await _aio.wait_for(
-            stream_cloud_fallback(text, history=[], on_token=collected.append),
+            stream_cloud_fallback(text, history=list(history or []), on_token=collected.append),
             timeout=timeout,
         )
         if result.get("success") and collected:
@@ -738,6 +749,11 @@ async def _query_aria_llm(text: str, timeout: int = 120) -> str:
         # ARIA_BOT_MODE=1: plain output for a chat card. It no longer approves
         # tools; see _bot_cli_flags.
         bot_env = {**os.environ, "ARIA_BOT_MODE": "1"}
+        # A conversation bound to a shipper confines every tool in this run to
+        # that shipper; the logistics tools enforce it (logistics_tenancy).
+        bot_env.pop(OWNER_SCOPE_ENV, None)
+        if _TURN_OWNER.get():
+            bot_env[OWNER_SCOPE_ENV] = _TURN_OWNER.get()
         proc = await asyncio.create_subprocess_exec(
             sys.executable, str(aria_cli), "-p", text, *_bot_cli_flags(),
             stdin=asyncio.subprocess.DEVNULL,   # no interactive prompts
@@ -1006,6 +1022,66 @@ def verify_feishu_request(headers: Dict[str, str], body: bytes, payload: Dict[st
                    "unverified events are refused")
 
 
+# ── Conversation layer (apps/channels/conversation.py) ───────────────────────
+
+# The shipper the current conversation is bound to, for every task it spawns.
+_TURN_OWNER: ContextVar[Optional[str]] = ContextVar("aria_feishu_turn_owner", default=None)
+_STORE: Optional[ConversationStore] = None
+_MENTION_TOKEN = re.compile(r"@_user_\d+")
+
+
+def _conversation_store() -> ConversationStore:
+    global _STORE
+    if _STORE is None or str(_STORE.path) != str(_conversation_db_path()):
+        _STORE = ConversationStore(_conversation_db_path())
+    return _STORE
+
+
+def _conversation_db_path() -> Path:
+    from aria_code.apps.channels.conversation import default_db_path
+    return default_db_path()
+
+
+def _strip_mentions(text: str) -> str:
+    """Feishu writes each @ as a placeholder (@_user_1); the model needs the words."""
+    return re.sub(r"\s+", " ", _MENTION_TOKEN.sub(" ", text or "")).strip()
+
+
+def _mentions_bot(message: Dict[str, Any]) -> bool:
+    """Whether a group message addresses this bot.
+
+    With FEISHU_BOT_OPEN_ID set, the bot's own id must be among the mentions.
+    Without it, any mention counts — correct for an app without the
+    read-all-group-messages permission, which receives only @-mentions of
+    itself; set the id if the app has that permission.
+    """
+    mentions = message.get("mentions") or []
+    own_id = os.environ.get("FEISHU_BOT_OPEN_ID", "").strip()
+    if own_id:
+        return any((m.get("id") or {}).get("open_id") == own_id for m in mentions)
+    return bool(mentions)
+
+
+def feishu_inbound(event: Dict[str, Any], text: str) -> InboundMessage:
+    """A Feishu im.message.receive_v1 event as a platform-neutral message."""
+    message = event.get("message") or {}
+    sender = (event.get("sender") or {}).get("sender_id") or {}
+    open_id = sender.get("open_id", "")
+    user_id = sender.get("user_id", "")
+    direct = message.get("chat_type") == "p2p"
+    return InboundMessage(
+        channel="feishu",
+        conversation_id=message.get("chat_id", ""),
+        kind="direct" if direct else "group",
+        sender_id=open_id or user_id,
+        sender_aliases=(user_id,) if open_id and user_id else (),
+        text=text,
+        message_id=message.get("message_id", ""),
+        mentions_bot=direct or _mentions_bot(message),
+        reply_to=message.get("parent_id", ""),
+    )
+
+
 # ── Main event dispatcher (called by feishu_routes.py or standalone) ──────────
 
 async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = False) -> Dict[str, Any]:
@@ -1066,22 +1142,44 @@ async def dispatch_event(raw: Dict[str, Any], *, authorized_by_binding: bool = F
     except Exception:
         content = {}
 
+    # Groups: only what is addressed to the bot. Feishu delivers just the
+    # @-mentions unless the app holds the read-all-group-messages permission;
+    # with it, this is what stops the bot answering every message in the room.
+    # Images, audio and files cannot @ anyone, so in a group they are ignored.
+    if msg.get("chat_type") != "p2p" and msg_type not in ("text", "post"):
+        return {"code": 0}
+
     # ── Text message ──────────────────────────────────────────────────────────
     if msg_type == "text":
-        text = content.get("text", "").strip()
-        # Strip @bot mention (飞书群里 @ 机器人会带前缀)
-        if text.startswith("@"):
-            text = " ".join(text.split()[1:]).strip()
+        text = _strip_mentions(content.get("text", ""))
         if not text:
             return {"code": 0}
+        inbound = feishu_inbound(event, text)
+        if not should_respond(inbound):
+            return {"code": 0}
 
-        if text.startswith("/"):
-            logger.info("Feishu /cmd from %s: %s", user_id, text[:80])
-            asyncio.create_task(_handle_command(text, msg_id, user_id, chat_id))
-        else:
-            # Free-form natural language → Aria LLM
-            logger.info("Feishu NL query from %s: %s", user_id, text[:80])
-            asyncio.create_task(_handle_nl_query(text, msg_id, chat_id))
+        store = _conversation_store()
+        owner_reply = handle_owner_command(inbound, store)
+        if owner_reply is not None:
+            await reply_text(msg_id, owner_reply)
+            return {"code": 0}
+
+        # A task copies the context it is created in, so every aria subprocess
+        # the tasks below start runs under this conversation's shipper scope.
+        # Reset afterwards: dispatch_event runs in its caller's context.
+        scope_token = _TURN_OWNER.set(store.owner_for(inbound.key))
+        try:
+            if text.startswith("/"):
+                logger.info("Feishu /cmd from %s: %s", user_id, text[:80])
+                asyncio.create_task(_handle_command(text, msg_id, user_id, chat_id))
+            else:
+                # Free-form natural language → Aria LLM, with this conversation's context
+                logger.info("Feishu NL query from %s: %s", user_id, text[:80])
+                turn = prepare_turn(inbound, store)
+                asyncio.create_task(_handle_nl_query(text, msg_id, chat_id, turn=turn,
+                                                     conversation=inbound.key))
+        finally:
+            _TURN_OWNER.reset(scope_token)
 
     # ── Voice / Audio ─────────────────────────────────────────────────────────
     elif msg_type == "audio":
@@ -1341,7 +1439,8 @@ def _resolve_cn_company(text: str) -> str:
     return result
 
 
-async def _handle_nl_query(text: str, message_id: str, chat_id: str = "") -> None:
+async def _handle_nl_query(text: str, message_id: str, chat_id: str = "", *,
+                           turn: Optional[ChannelTurn] = None, conversation: str = "") -> None:
     """Route free-form natural language to Aria LLM and reply."""
     import re as _re_nl
     _low = text.strip().lower()
@@ -1406,8 +1505,16 @@ async def _handle_nl_query(text: str, message_id: str, chat_id: str = "") -> Non
                 return
 
     await reply_or_send(message_id, chat_id, "🤔 思考中…", f"> {_orig[:120]}", "blue")
-    # Use direct LLM call (no subprocess, no tool execution) for conversational queries
-    result = await _query_aria_direct(text, timeout=120)
+    # Use direct LLM call (no subprocess, no tool execution) for conversational queries.
+    # With a turn, the model sees this conversation's recent messages and, when
+    # the conversation is bound to a shipper, which one.
+    if turn is not None:
+        prompt = turn.prompt if resolved == _orig else f"{turn.prompt}\n({text})"
+        result = await _query_aria_direct(prompt, timeout=120, history=turn.history)
+        if conversation and not result.startswith("❌"):
+            _conversation_store().record(conversation, "assistant", result[:2000])
+    else:
+        result = await _query_aria_direct(text, timeout=120)
     color = "red" if result.startswith("❌") else "green"
     await reply_or_send(message_id, chat_id, "💡 Aria 回答", result[:2000], color,
                         footer="Aria Code · AI 分析")
