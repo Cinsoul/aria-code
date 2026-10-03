@@ -372,13 +372,17 @@ jobs:
             echo "::error::Expected five CLI and five MCP packages, found ${#packages[@]}"
             exit 1
           fi
-          # Check every tarball before publishing any package. A combined CLI
-          # and MCP Linux arm64 tarball was 307.8 MB and npm rejected it with
-          # E413 after the macOS packages had already been published.
+          # Check every tarball before publishing any package. npm sends the
+          # tarball base64-encoded, so the 256 MiB publish limit is ~201 MB
+          # packed. v0.59.0's linux-x64 package was 201.6 MB: the old 240 MB
+          # threshold let it through, npm rejected it, and the three packages
+          # published before it were left without a dispatcher. 190 MB keeps
+          # a margin for normal growth between releases.
           for dir in "${packages[@]}"; do
             size="$(cd "$dir" && npm pack --dry-run --json | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(String(JSON.parse(s)[0].size)))')"
-            if [ "$size" -ge 240000000 ]; then
-              echo "::error::$(basename "$dir") is $size bytes packed; split or slim it before publishing"
+            echo "$(basename "$dir"): $size bytes packed"
+            if [ "$size" -ge 190000000 ]; then
+              echo "::error::$(basename "$dir") is $size bytes packed; npm's limit is ~201 MB. Slim it before publishing: EXCLUDED in the PyInstaller collector script lists what is left out"
               exit 1
             fi
           done
@@ -390,7 +394,7 @@ jobs:
             fi
             echo "── publishing $spec"
             (cd "$dir" && npm publish --access public) || {
-              echo "::error::npm rejected $(basename "$dir"). Check that the token's account can create packages in the @artheras scope and that the token allows package write and CI publishing."
+              echo "::error::npm rejected $(basename "$dir"). E413 or a closed connection means it is too large (~201 MB packed limit); E403/E404 means the token cannot publish to the @artheras scope. The npm error is above."
               exit 1
             }
           done
