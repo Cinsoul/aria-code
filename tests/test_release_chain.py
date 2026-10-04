@@ -179,18 +179,24 @@ class NpmDispatcherGate(unittest.TestCase):
                 "if [ \"$1\" = -p ]; then echo 0.52.0; "
                 "else echo @artheras/aria-code-linux-x64@0.52.0; fi\n"
             )
-            npm = bin_dir / "npm"
-            npm.write_text(f"#!/bin/sh\nexit {0 if npm_available else 1}\n")
+            # The registry is asked directly (curl), not through npm's cache.
+            calls = bin_dir / "calls"
+            curl = bin_dir / "curl"
+            curl.write_text(f"#!/bin/sh\necho \"$@\" >> {calls}\nexit {0 if npm_available else 22}\n")
             node.chmod(0o755)
-            npm.chmod(0o755)
+            curl.chmod(0o755)
             env = dict(os.environ, PATH=f"{tmp}:{os.environ.get('PATH', '')}",
                        INPUT_TAG="v0.52.0")
-            return subprocess.run(["bash", "-c", script], env=env,
-                                  capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["bash", "-c", script], env=env,
+                                    capture_output=True, text=True, timeout=10)
+            self.asked = calls.read_text() if calls.exists() else ""
+            return result
 
     def test_dispatcher_waits_for_its_platform_packages(self):
         present = self._run_wait(True)
         self.assertEqual(present.returncode, 0, present.stderr)
+        self.assertIn("https://registry.npmjs.org/@artheras%2Faria-code-linux-x64/0.52.0?nocache=", self.asked)
+        self.assertIn("Cache-Control: no-cache", self.asked)
         missing = self._run_wait(False)
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("Refusing to publish a dispatcher", missing.stdout)
