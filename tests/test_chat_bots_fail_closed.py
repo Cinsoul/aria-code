@@ -158,9 +158,16 @@ class TestFeishuEventVerification:
 
 class TestBotsDoNotApproveTools:
     def test_bot_mode_starts_with_nothing_approved(self):
+        # pyproject's pytest `pythonpath` applies to this process only. The
+        # Python-package workflow does not install the package, so without
+        # this the child could not import aria_code at all — which is how this
+        # test failed there on every run since it was added, while passing
+        # anywhere the package was pip-installed.
+        paths = [str(ROOT / "src"), str(ROOT / "src" / "aria_code"), os.environ.get("PYTHONPATH", "")]
         proc = subprocess.run(
             [sys.executable, "-c", "import aria_code.aria_cli as c; print(c._auto_approve_session)"],
-            capture_output=True, text=True, timeout=120, env={**os.environ, "ARIA_BOT_MODE": "1"},
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "ARIA_BOT_MODE": "1", "PYTHONPATH": os.pathsep.join(p for p in paths if p)},
         )
         assert proc.returncode == 0, proc.stderr[-1000:]
         assert proc.stdout.strip().splitlines()[-1] == "False"
