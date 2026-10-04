@@ -184,7 +184,8 @@ class TestCardPresses:
 class TestOverTheWebSocket:
     def test_a_refused_send_comes_back_as_a_send_result(self, relay):
         with TestClient(relay.app).websocket_connect("/ws") as ws:
-            ws.send_text(json.dumps({"type": "register", "client_id": "aria-a"}))
+            ws.send_text(json.dumps({"type": "register", "client_id": "aria-a",
+                                     "token": "t" * 43, "bind_code": "ABCDEFGHJKLM"}))
             assert json.loads(ws.receive_text())["ok"]
             ws.send_text(json.dumps({"type": "send", "id": "s1", **_send("oc_not_mine")}))
             answer = json.loads(ws.receive_text())
