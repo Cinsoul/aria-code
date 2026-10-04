@@ -19,8 +19,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
-<p align="center"><img src="docs/assets/demo-coding.gif" alt="Aria Code 真实会话：Gemini 2.5 Pro 编写 fx.py 和测试，每一步经批准后运行测试，随后 /review 在新代码里发现一个 P1 精度问题" width="860"></p>
-<p align="center"><sub>真实会话，模型为 Gemini 2.5 Pro（Vertex AI）：Aria 编写 <code>fx.py</code> 和测试，每一步经你批准后运行测试，随后 <code>/review</code> 在它刚写的代码里找出一个真实的精度问题。仅缩短了等待时间，其余未做改动。<a href="docs/assets/demo-coding.png">静态截图</a> · <a href="scripts/record_demo.py">录制脚本</a> · <a href="scripts/render_demo.py">渲染脚本</a></sub></p>
+<p align="center"><img src="docs/assets/demo-coding.gif" alt="Aria Code 真实会话：Gemini 2.5 Pro 编写 fx.py 和测试，每一步经批准后运行测试，随后 /review 审查这次改动" width="860"></p>
+<p align="center"><sub>真实会话，模型为 Gemini 2.5 Pro（Vertex AI）：Aria 编写 <code>fx.py</code> 和测试，每一步经你批准后运行测试，随后 <code>/review</code> 审查这次改动并给出结论。仅缩短了等待时间，其余未做改动。<a href="docs/assets/demo-coding.png">静态截图</a> · <a href="scripts/record_demo.py">录制脚本</a> · <a href="scripts/render_demo.py">渲染脚本</a></sub></p>
 
 ## Aria Code 能做什么
 

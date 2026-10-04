@@ -19,8 +19,8 @@ Numbers you can check, client data kept apart, actions a person approves.</p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
-<p align="center"><img src="docs/assets/demo-coding.gif" alt="Real Aria Code session: Gemini 2.5 Pro writes fx.py and its tests, runs them after each step is approved, then /review flags a P1 precision problem in the new code" width="860"></p>
-<p align="center"><sub>A real session on Gemini 2.5 Pro (Vertex AI): Aria writes <code>fx.py</code> and its tests, runs them once each step is approved, then <code>/review</code> finds a real precision problem in the code it just wrote. Waiting is shortened; nothing else is changed. <a href="docs/assets/demo-coding.png">Still</a> · <a href="scripts/record_demo.py">Recorder</a> · <a href="scripts/render_demo.py">Renderer</a></sub></p>
+<p align="center"><img src="docs/assets/demo-coding.gif" alt="Real Aria Code session: Gemini 2.5 Pro writes fx.py and its tests, runs them after each step is approved, then /review checks the change" width="860"></p>
+<p align="center"><sub>A real session on Gemini 2.5 Pro (Vertex AI): Aria writes <code>fx.py</code> and its tests, runs them once each step is approved, then <code>/review</code> checks the change and gives its verdict. Waiting is shortened; nothing else is changed. <a href="docs/assets/demo-coding.png">Still</a> · <a href="scripts/record_demo.py">Recorder</a> · <a href="scripts/render_demo.py">Renderer</a></sub></p>
 
 ## What Aria Code does
 

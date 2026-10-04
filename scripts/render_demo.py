@@ -118,6 +118,10 @@ def _blend(color: str, toward: str, amount: float) -> str:
     return "#" + "".join(f"{round(x + (y - x) * amount):02X}" for x, y in zip(a, b))
 
 
+def _hex_rgb(colour: str) -> tuple[int, int, int]:
+    return tuple(int(colour[i:i + 2], 16) for i in (1, 3, 5))
+
+
 def _colour(name: str, default: str) -> str:
     if name == "default":
         return default
@@ -382,8 +386,27 @@ def write_gif(timeline: list[tuple[Frame, float]], painter: Painter, gif: Path, 
         canvas = Image.new("RGB", (body.width + 2 * pad, body.height + 2 * pad), painter.background)
         canvas.paste(body, (pad, pad))
         images.append(canvas)
-    # One palette for every frame, so colours do not shimmer between frames.
-    palette = images[-1].quantize(colors=128, method=Image.Quantize.MEDIANCUT)
+    # One palette for every frame, so colours do not shimmer between frames —
+    # built from the first, middle and last frames together: the last alone
+    # has usually scrolled past the banner, and the robot's orange was lost.
+    samples = [images[0], images[len(images) // 2], images[-1]]
+    sheet = Image.new("RGB", (samples[0].width, sum(i.height for i in samples)))
+    for n, sample in enumerate(samples):
+        sheet.paste(sample, (0, n * samples[0].height))
+    # Every colour the CLI itself sent gets an exact slot; median cut alone
+    # folded small areas — the robot's orange dash — into larger neighbours.
+    exact = {_hex_rgb(painter.background), _hex_rgb(painter.foreground)}
+    for frame, _ in timeline[::max(1, len(timeline) // 40)]:
+        for row in frame.cells:
+            for cell in row:
+                for name in (cell.fg, cell.bg):
+                    colour = _colour(name, "")
+                    if colour:
+                        exact.add(_hex_rgb(colour))
+    exact = sorted(exact)[:200]
+    fill = sheet.quantize(colors=256 - len(exact), method=Image.Quantize.MEDIANCUT).getpalette()[:3 * (256 - len(exact))]
+    palette = Image.new("P", (1, 1))
+    palette.putpalette([v for rgb in exact for v in rgb] + fill)
     frames = [image.quantize(palette=palette, dither=Image.Dither.NONE) for image in images]
     durations = [max(20, round(seconds * 100) * 10) for _, seconds in timeline]
     gif.parent.mkdir(parents=True, exist_ok=True)
