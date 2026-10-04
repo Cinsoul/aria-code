@@ -422,6 +422,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
+# Library internals are not the user's business: on a fresh install the first
+# /ta printed "WARNING:matplotlib.font_manager:Matplotlib is building the font
+# cache; this may take a moment." into the middle of its output.
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 logging.getLogger("curl_cffi").setLevel(logging.CRITICAL)
 
