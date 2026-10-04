@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.71.0] — 2026-10-04
+
+- Merge pull request #83 from Cinsoul/docs/positioning
+
 ## [0.70.0] — 2026-10-04
 
 - Merge pull request #82 from Cinsoul/fix/relay-secret-required
