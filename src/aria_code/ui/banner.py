@@ -375,37 +375,6 @@ def render_startup_dashboard(
     console.print(Panel(body, title=panel_title, title_align="left", box=panel_box, border_style=border_style, padding=(0, 1)))
 
 
-def render_session_banner(
-    session_id: str,
-    *,
-    console,
-    has_rich: bool,
-    lang: str = "en",
-    web_url: str = "https://arthera.finance",
-) -> None:
-    """Render the 'Keep working from anywhere' card with session sync link."""
-    is_zh = lang.lower().startswith("zh")
-    title = "随时随地继续工作" if is_zh else "Keep working from anywhere"
-    line1 = (
-        f"在网页端、移动 App 或飞书中查看或回复此会话："
-        if is_zh else
-        f"Check progress or reply to any session from mobile app, desktop app, or"
-    )
-    line2 = f"{web_url}/sessions/{session_id}"
-    line3 = "仅在本终端保留请运行 /remote-control" if is_zh else "To keep session in this terminal only, run /remote-control"
-
-    if has_rich:
-        console.print(f"[dim]│[/dim] [bold]{title}[/bold]")
-        console.print(f"[dim]│[/dim] [dim]{line1}[/dim]")
-        console.print(f"[dim]│[/dim] [underline]{line2}[/underline]. [dim]{line3}[/dim]")
-        console.print()
-    else:
-        print(f"| {title}")
-        print(f"| {line1}")
-        print(f"| {line2}. {line3}")
-        print()
-
-
 def render_compact_banner(
     *,
     version: str,

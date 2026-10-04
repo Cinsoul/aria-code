@@ -6067,17 +6067,6 @@ class ArtheraTerminal:
         """Run the interactive REPL loop."""
         self.print_header()
         await self._startup_health_check()
-        try:
-            from ui.banner import render_session_banner
-            render_session_banner(
-                self.session_id,
-                console=console,
-                has_rich=HAS_RICH,
-                lang=self.config.get("ui_lang", "en") or "en",
-                web_url=self.config.get("web_url", "https://arthera.finance"),
-            )
-        except Exception:
-            pass
 
         # Background: settle pending market calls (>24h) vs live prices so the
         # prediction track record + DPO signals accrue with zero user effort.

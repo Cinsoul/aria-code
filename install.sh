@@ -91,10 +91,18 @@ if [[ "$REBUILD" == "1" && -d "$VENV_DIR" ]]; then
 fi
 
 # ── China mirror support (avoids GitHub / PyPI timeouts) ──────
-# Opt in with ARIA_CN=1, or it is auto-applied as a retry when a download fails.
+# Opt in with ARIA_CN=1. Only then: switching where packages and a Python
+# interpreter come from is the user's decision, not a silent retry — this used
+# to kick in automatically on any failed download, so a brief network error
+# anywhere routed the whole install through third-party mirrors.
+#
+# The Python builds come from npmmirror (Alibaba's mirror of the official
+# python-build-standalone releases, same layout); uv still checks each build
+# against the SHA-256 it ships with. They came through ghfast.top before, a
+# public GitHub proxy whose operator is unknown.
 ARIA_CN="${ARIA_CN:-0}"
 CN_PYPI="https://pypi.tuna.tsinghua.edu.cn/simple"
-CN_PY_REPO="https://ghfast.top/https://github.com/astral-sh/python-build-standalone/releases/download"
+CN_PY_REPO="https://registry.npmmirror.com/-/binary/python-build-standalone"
 enable_cn_mirror() {
     export UV_DEFAULT_INDEX="${UV_DEFAULT_INDEX:-$CN_PYPI}"
     export UV_PYTHON_INSTALL_MIRROR="${UV_PYTHON_INSTALL_MIRROR:-$CN_PY_REPO}"
@@ -131,14 +139,11 @@ if [[ "$USE_UV" -eq 1 ]]; then
     # so there's no "please install Python first" prerequisite.
     if [[ ! -d "$VENV_DIR" ]]; then
         if ! uv venv "$VENV_DIR" --python 3.12 --seed 2>/dev/null; then
-            # Python download may have timed out — try a China mirror, then bare venv
+            # Python download may have timed out: fall back to any local Python.
             if [[ "$ARIA_CN" != "1" ]]; then
-                warn "Python download failed — retrying via China mirror…"
-                enable_cn_mirror
-                uv venv "$VENV_DIR" --python 3.12 --seed 2>/dev/null || uv venv "$VENV_DIR" --seed
-            else
-                uv venv "$VENV_DIR" --seed
+                warn "Python download failed. In mainland China, re-run with ARIA_CN=1 to use mirrors."
             fi
+            uv venv "$VENV_DIR" --seed
         fi
         ok "Virtual environment created (uv)"
     else
@@ -191,9 +196,10 @@ install_pkgs() {
 
 if install_pkgs "$TARGET"; then
     ok "Dependencies installed"
-elif [[ "$ARIA_CN" != "1" ]] && enable_cn_mirror && install_pkgs "$TARGET"; then
-    ok "Dependencies installed (via China mirror)"
 else
+    if [[ "$ARIA_CN" != "1" ]]; then
+        warn "Install failed. In mainland China, re-run with ARIA_CN=1 to use mirrors."
+    fi
     warn "Full install failed — retrying with slim core so the CLI still works…"
     if install_pkgs "$CLI_DIR"; then
         ok "Core installed (some optional features unavailable — use /install later)"
