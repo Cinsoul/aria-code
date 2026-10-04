@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.73.0] — 2026-10-04
+
+- Merge pull request #86 from Cinsoul/fix/foreign-endpoints
+
 ## [0.72.0] — 2026-10-04
 
 - Merge pull request #84 from Cinsoul/fix/relay-persistent-store
