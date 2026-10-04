@@ -20,11 +20,22 @@ ANALYSIS_COMMENTARY_PROMPT_ZH = (
 )
 
 
+ANALYSIS_COMMENTARY_PROMPT_EN = (
+    "Using the market data just fetched, give an analysis of about 300 words:"
+    " where the price stands and the short-term trend, the balance of buyers and"
+    " sellers (comparing the instruments if there are several), key support and"
+    " resistance, and a suggested course of action with its risks."
+    " Start with the analysis; do not repeat the table."
+)
+
+
 def build_base_message(
     message: str,
     *,
     wants_analysis_commentary: bool,
     decomposition_plan: str = "",
+    snapshot: str = "",
+    lang: str = "zh",
 ) -> str:
     """Pick the effective prompt body for this turn.
 
@@ -35,7 +46,15 @@ def build_base_message(
     message is sent unchanged.
     """
     if wants_analysis_commentary:
-        return ANALYSIS_COMMENTARY_PROMPT_ZH
+        # The data goes in the prompt itself. The instruction used to say "the
+        # data above", but the turn's history is conversation[:-1], and after a
+        # pre-fetch the last entry IS the data — so the model was asked to
+        # comment on figures it never received.
+        en = not str(lang).lower().startswith("zh")
+        prompt = ANALYSIS_COMMENTARY_PROMPT_EN if en else ANALYSIS_COMMENTARY_PROMPT_ZH
+        if snapshot.strip():
+            prompt += ("\n\n[Market data]\n" if en else "\n\n[行情数据]\n") + snapshot.strip()
+        return prompt
     if decomposition_plan:
         return f"[执行计划]\n{decomposition_plan}\n\n[用户请求]\n{message}"
     return message
