@@ -21,7 +21,7 @@ import os
 import shutil
 from typing import Optional
 
-from .startup_dashboard import StartupDashboardViewModel, select_dashboard_layout
+from .startup_dashboard import StartupDashboardViewModel
 
 
 def _t(key: str, lang: str) -> str:
@@ -205,96 +205,47 @@ def _robot_text():
     return face
 
 
-def _identity_markup(view: StartupDashboardViewModel) -> str:
+def _summary_lines(view: StartupDashboardViewModel) -> list[str]:
+    """The four lines beside the robot — one per robot row, as Claude Code does."""
     from rich.markup import escape
 
-    welcome_text = "欢迎使用 Aria!" if view.is_zh else "Welcome to Aria!"
-    lines = [
-        f"{_mark('primary', welcome_text)}",
-        _normalize_dim_markup(view.runtime_label),
-        _mark("muted", escape(view.cwd)),
-    ]
+    model = _normalize_dim_markup(view.runtime_label)
+    if view.compact_health:
+        model += f" {_mark('dim', '·')} {_mark('muted', escape(view.compact_health))}"
+    place = _mark("muted", escape(view.cwd))
     if view.workspace_state:
-        lines.append(_mark("muted", escape(view.workspace_state)))
+        place += f"  {_mark('dim', escape(view.workspace_state))}"
+    control = " · ".join(view.control_status.split(" · ")[:2])
+    return [
+        f"{_mark('primary', 'Aria Code')} {_mark('subtle', f'v{view.version}')}",
+        model,
+        place,
+        _mark("muted", escape(view.capabilities)) + f" {_mark('dim', '·')} " + _normalize_dim_markup(control),
+    ]
+
+
+def _notes(view: StartupDashboardViewModel) -> list[str]:
+    """What goes under the robot, only when there is something to say."""
+    from rich.markup import escape
+
+    notes = []
+    if view.first_run:
+        notes.append(_mark("muted", " · ".join(view.getting_started_lines)))
+    if view.update_notice:
+        notes.append(view.update_notice)
     if view.auto_healed_from:
-        lines.append(
+        notes.append(
             f"{_mark('muted', '⚙ ' + _t('auto_matched', view.lang))}  "
             f"[yellow]{escape(view.auto_healed_from)}[/yellow]"
             f" {_mark('dim', '→')} [bold]{escape(view.current_id)}[/bold]"
         )
     if view.badge == "Fast" and view.best_lite_id and not view.best_lite_installed:
-        lines.append(
+        notes.append(
             f"[yellow]{_t('tip', view.lang)}[/yellow]  "
             f"{_mark('muted', _t('lite', view.lang) + ' model · ')}"
             f"[bold]ollama pull {escape(view.best_lite_id)}[/bold]"
         )
-    return "\n".join(lines)
-
-
-def _runtime_markup(view: StartupDashboardViewModel, *, include_heading: bool = True) -> str:
-    from rich.markup import escape
-
-    lines = []
-    if include_heading:
-        lines.append(_mark("primary", view.runtime_title))
-    lines.extend([
-        _normalize_dim_markup(view.control_status),
-        _normalize_dim_markup(view.health_status),
-        _mark("muted", escape(view.capabilities)),
-    ])
-    return "\n".join(line for line in lines if line)
-
-
-def _compact_runtime_markup(view: StartupDashboardViewModel) -> str:
-    control_parts = view.control_status.split(" · ")
-    control_line = " · ".join(control_parts[:2])
-    retention = " · ".join(control_parts[2:])
-    health_line = " · ".join(part for part in (retention, view.compact_health) if part)
-    lines = [
-        _mark("primary", view.runtime_title),
-        _normalize_dim_markup(control_line),
-        _normalize_dim_markup(health_line),
-        _mark("muted", view.capabilities),
-    ]
-    return "\n".join(line for line in lines if line)
-
-
-def _compact_guidance_markup(view: StartupDashboardViewModel) -> str:
-    if not view.first_run and not view.update_notice:
-        return "\n".join(f" {line}" for line in _compact_runtime_markup(view).splitlines())
-    compact_health = view.compact_health.replace("Local: ", "").replace("本地: ", "")
-    quick_counts = []
-    if view.mcp_server_count:
-        quick_counts.append(f"MCP {view.mcp_server_count}")
-    quick_counts.append(f"{view.tool_count} {'个工具' if view.is_zh else 'tools'}")
-
-    lines = [
-        _mark("primary", view.getting_started_title),
-        *(_mark("muted", line) for line in view.getting_started_lines),
-        f"{_mark('primary', view.runtime_title)} {_mark('dim', '·')} "
-        f"{_normalize_dim_markup(' · '.join(view.control_status.split(' · ')[:2]))}",
-        _mark("muted", " · ".join([compact_health, *quick_counts])),
-    ]
-    if view.update_notice:
-        lines.append(f"{_mark('primary', view.whats_new_title)} {_mark('dim', '·')} {view.update_notice}")
-    return "\n".join(f" {line}" for line in lines)
-
-
-def _guidance_markup(view: StartupDashboardViewModel) -> str:
-    from rich.markup import escape
-
-    sections = []
-    if view.first_run:
-        start_lines = "\n".join(_mark("muted", escape(line)) for line in view.getting_started_lines)
-        sections.append(f"{_mark('primary', view.getting_started_title)}\n{start_lines}")
-    else:
-        sections.append(_runtime_markup(view))
-
-    if view.update_notice:
-        sections.append(f"{_mark('primary', view.whats_new_title)}\n{view.update_notice}")
-    elif view.first_run:
-        sections.append(_runtime_markup(view))
-    return "\n\n".join(sections)
+    return notes
 
 
 def render_startup_dashboard(
@@ -302,77 +253,42 @@ def render_startup_dashboard(
     *,
     console,
     has_rich: bool,
-    rich_box,
+    rich_box=None,
     terminal_width: Optional[int] = None,
     terminal_height: Optional[int] = None,
 ) -> None:
-    """Render startup state using a layout selected from terminal width."""
-    if not has_rich:
-        from .robot import ROBOT_ROW_COUNT, get_robot_row
+    """The robot with four lines beside it, then any notes — no frame.
 
+    It used to be a framed two-column dashboard with three width-dependent
+    layouts and a 15×8 robot; at common widths that was most of the first
+    screen. Now it is one compact block at every width, like Claude Code's.
+    """
+    del rich_box, terminal_height
+    from .robot import ROBOT_ROW_COUNT, get_robot_row
+
+    if not has_rich:
+        import re
+
+        plain = [re.sub(r"\[/?[^\]]*\]", "", line) for line in _summary_lines(view)]
         for row in range(ROBOT_ROW_COUNT):
-            print("  " + "".join(fragment for _, fragment in get_robot_row(0, row)))
-        print(f"\n  Aria Code v{view.version}")
-        print(f"  {view.runtime_label}")
-        print(f"  {view.cwd}")
-        print(f"  {view.control_status}")
-        print(f"  {view.health_status}")
-        print(f"  {view.capabilities}")
-        print("─" * 60)
+            glyphs = "".join(fragment for _, fragment in get_robot_row(0, row))
+            print(f" {glyphs}  {plain[row] if row < len(plain) else ''}".rstrip())
+        for note in _notes(view):
+            print("  " + re.sub(r"\[/?[^\]]*\]", "", note))
         return
 
-    from rich.console import Group
-    from rich.markup import escape
-    from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
 
-    terminal_size = shutil.get_terminal_size((80, 24))
     width = terminal_width or _console_width(console)
-    height = terminal_height or terminal_size.lines
-    layout = select_dashboard_layout(width, height)
-
-    if layout == "minimal":
-        identity = Table.grid(padding=(0, 1))
-        identity.add_column(no_wrap=True, vertical="top")
-        identity.add_column(vertical="top")
-        identity.add_row(
-            _robot_text(),
-            Text.from_markup(
-                f"{_mark('primary', 'Aria Code')} {_mark('subtle', f'v{view.version}')}\n"
-                f"{_normalize_dim_markup(view.runtime_label)}\n"
-                f"{_mark('muted', escape(view.cwd))}\n"
-                f"{_mark('muted', escape(view.capabilities))}"
-            ),
-        )
-        console.print(identity)
-        return
-
-    identity = Table.grid(padding=(0, 2))
-    identity.add_column(no_wrap=True, vertical="top")
-    identity.add_column(vertical="top")
-    identity.add_row(_robot_text(), Text.from_markup(_identity_markup(view)))
-
-    border_style = _banner_style("dim")
-    panel_box = getattr(rich_box, "ROUNDED", None)
-    panel_title = f"[bold #C08050]Aria Code[/bold #C08050] [dim]v{view.version}[/dim]"
-
-    if layout == "stacked":
-        details = _compact_guidance_markup(view)
-        if view.update_notice and not view.first_run:
-            details = f"{details}\n{_mark('primary', view.whats_new_title)} {_mark('dim', '·')} {view.update_notice}"
-        content = Group(identity, Text.from_markup("\n" + details))
-        console.print(Panel(content, title=panel_title, title_align="left", box=panel_box, border_style=border_style, padding=(0, 1)))
-        return
-
-    body = Table.grid(expand=True, padding=0)
-    body.add_column(ratio=5, vertical="top")
-    body.add_column(width=1, vertical="top")
-    body.add_column(ratio=6, vertical="top")
-    from .robot import ROBOT_ROW_COUNT
-    divider = Text("\n".join("│" for _ in range(ROBOT_ROW_COUNT)), style=_banner_style("dim"))
-    body.add_row(identity, divider, Text.from_markup(_compact_guidance_markup(view)))
-    console.print(Panel(body, title=panel_title, title_align="left", box=panel_box, border_style=border_style, padding=(0, 1)))
+    block = Table.grid(padding=(0, 2))
+    block.add_column(no_wrap=True)
+    # One line per row, cut rather than wrapped, so the block keeps its height.
+    block.add_column(no_wrap=True, overflow="ellipsis", max_width=max(10, width - 14))
+    block.add_row(_robot_text(), Text.from_markup("\n".join(_summary_lines(view)), overflow="ellipsis"))
+    console.print(block)
+    for note in _notes(view):
+        console.print(Text.from_markup("  " + note, overflow="ellipsis"), no_wrap=True)
 
 
 def render_compact_banner(

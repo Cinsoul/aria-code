@@ -40,6 +40,7 @@ def _render(width, **overrides):
 
 
 def test_layout_breakpoints_are_stable():
+    # Kept for callers of select_dashboard_layout; the banner itself has one layout.
     assert select_dashboard_layout(55) == "minimal"
     assert select_dashboard_layout(70) == "stacked"
     assert select_dashboard_layout(70, height=24) == "minimal"
@@ -47,50 +48,39 @@ def test_layout_breakpoints_are_stable():
     assert select_dashboard_layout(120) == "wide"
 
 
-def test_wide_first_run_uses_two_section_dashboard():
-    rendered = _render(120, first_run=True)
-
-    assert "Quick start" in rendered
-    assert "Runtime" in rendered
-    assert "71 tools" in rendered
-    assert "workspace-write" in rendered
-    assert "╭" in rendered
-
-
-def test_80_column_layout_is_compact_two_column_dashboard():
-    rendered = _render(80)
-
-    assert "Runtime" in rendered
-    assert "Quick start" not in rendered
-    assert "Local: Ollama 3" in rendered
-    assert "│" in rendered
-    assert len(rendered.splitlines()) <= 11
-    assert all(len(line) <= 80 for line in rendered.splitlines())
+def test_one_compact_block_at_every_width():
+    """The robot beside four lines — Claude Code's shape — with no frame, at any width."""
+    for width in (120, 80, 55):
+        lines = _render(width).rstrip("\n").splitlines()
+        assert len(lines) == 4, (width, lines)
+        assert all(len(line) <= width for line in lines), width
+        assert not any(ch in "\n".join(lines) for ch in "╭╰│")
+        assert lines[0].startswith("▗▛▀▀▀▀▀▜▖")
 
 
-def test_80_column_first_run_does_not_wrap():
-    rendered = _render(
-        80,
-        first_run=True,
-        git_branch="main",
-        git_dirty=True,
-        mcp_server_count=1,
-    )
+def test_the_four_lines_say_what_and_where():
+    lines = _render(100, git_branch="main", git_dirty=True, mcp_server_count=1).splitlines()
 
-    assert "Quick start" in rendered
-    assert "main · dirty" in rendered
-    assert "MCP 1 · 71 tools" in rendered
-    assert len(rendered.splitlines()) <= 11
+    assert "Aria Code" in lines[0] and "v4.1.1" in lines[0]
+    assert "GPT-OSS 120B" in lines[1] and "Local: Ollama 3" in lines[1]
+    assert "~/Desktop/aria-code" in lines[2] and "main · dirty" in lines[2]
+    assert "MCP 1 · 71 tools · 14 skills" in lines[3] and "workspace-write · network on" in lines[3]
 
 
-def test_minimal_layout_drops_panel_chrome():
-    rendered = _render(55)
+def test_a_narrow_terminal_cuts_lines_instead_of_wrapping():
+    lines = _render(50).rstrip("\n").splitlines()
 
-    assert "Aria Code" in rendered
-    assert "71 tools · 14 skills" in rendered
-    assert "╭" not in rendered
-    assert "Runtime" not in rendered
-    assert "▄▄▄▄▄▄▄▄▄▄▄" in rendered
+    assert len(lines) == 4
+    assert all(len(line) <= 50 for line in lines)
+
+
+def test_notes_go_under_the_robot_only_when_needed():
+    plain = _render(100).rstrip("\n").splitlines()
+    first = _render(100, first_run=True, update_notice="Update available v4.1.1 → v4.2.0").rstrip("\n").splitlines()
+
+    assert len(plain) == 4
+    assert "Describe the task naturally" in first[4]
+    assert "Update available" in first[5]
 
 
 def test_plain_terminal_also_shows_robot():
@@ -99,7 +89,9 @@ def test_plain_terminal_also_shows_robot():
         render_startup_dashboard(
             _view(), console=None, has_rich=False, rich_box=None,
         )
-    assert "▄▄▄▄▄▄▄▄▄▄▄" in output.getvalue()
+    text = output.getvalue()
+    assert "▗▛▀▀▀▀▀▜▖  Aria Code v4.1.1" in text
+    assert "[dim]" not in text
 
 
 def test_chinese_view_model_localizes_sections():

@@ -140,6 +140,15 @@ _BOX = {
 }
 
 
+# Quadrant blocks as (top-left, top-right, bottom-left, bottom-right) — drawn,
+# not taken from the font, so the mascot's edges meet exactly.
+_QUADRANTS = {
+    "▖": (0, 0, 1, 0), "▗": (0, 0, 0, 1), "▘": (1, 0, 0, 0), "▝": (0, 1, 0, 0),
+    "▙": (1, 0, 1, 1), "▚": (1, 0, 0, 1), "▛": (1, 1, 1, 0), "▜": (1, 1, 0, 1),
+    "▞": (0, 1, 1, 0), "▟": (0, 1, 1, 1),
+}
+
+
 class Painter:
     def __init__(self, cell_w: int = 10, cell_h: int = 20, font_size: int = 15,
                  background: str = BACKGROUND, foreground: str = FOREGROUND):
@@ -182,6 +191,14 @@ class Painter:
             return True
         if ch == "▀":
             draw.rectangle([x, y, x + w - 1, y + h // 2 - 1], fill=colour)
+            return True
+        if ch in _QUADRANTS:                               # ▖▗▘▙▚▛▜▝▞▟: 2×2 sub-cells
+            for i, on in enumerate(_QUADRANTS[ch]):
+                if on:
+                    left, top = x + (w // 2) * (i % 2), y + (h // 2) * (i // 2)
+                    right = x + w - 1 if i % 2 else x + w // 2 - 1
+                    bottom = y + h - 1 if i // 2 else y + h // 2 - 1
+                    draw.rectangle([left, top, right, bottom], fill=colour)
             return True
         if ch in "▌▐":
             left = x if ch == "▌" else x + w // 2
