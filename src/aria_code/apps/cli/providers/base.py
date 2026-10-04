@@ -300,6 +300,80 @@ def _opt_in(config: dict, key: str, default: bool = True) -> bool:
     return default if value is None else bool(value)
 
 
+def _gcloud(*args: str, timeout: float = 20) -> str:
+    import subprocess
+
+    result = subprocess.run(["gcloud", *args], capture_output=True, text=True, timeout=timeout,
+                            stdin=subprocess.DEVNULL)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _adc_available() -> bool:
+    """Application-default credentials exist (file, env, or running on Google Cloud)."""
+    import os
+
+    if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or os.getenv("K_SERVICE") or os.getenv("GCE_METADATA_HOST"):
+        return True
+    if os.name == "nt":
+        folder = os.getenv("CLOUDSDK_CONFIG") or os.path.join(os.getenv("APPDATA", ""), "gcloud")
+    else:
+        folder = os.getenv("CLOUDSDK_CONFIG") or os.path.join(os.path.expanduser("~"), ".config", "gcloud")
+    return os.path.isfile(os.path.join(folder, "application_default_credentials.json"))
+
+
+def _google_api_key(config: dict) -> str:
+    import os
+
+    from aria_code.providers.llm.registry import _load_provider_cfg_from_file
+
+    for value in (config.get("api_key"), config.get("gemini_key"), os.getenv("GEMINI_API_KEY"),
+                  os.getenv("GOOGLE_API_KEY"), _load_provider_cfg_from_file("google").get("api_key")):
+        if str(value or "").strip():
+            return str(value).strip()
+    return ""
+
+
+def _gcloud_login_only(config: dict) -> bool:
+    """No ADC and no Gemini key, but a gcloud CLI to borrow a token from."""
+    import shutil
+
+    return not _adc_available() and not _google_api_key(config) and bool(shutil.which("gcloud"))
+
+
+def vertex_openai_endpoint(config: dict) -> dict:
+    """Vertex AI's OpenAI-compatible endpoint and a token from the gcloud login.
+
+    Returns {} when gcloud is not installed (the caller reports the missing
+    API key), {"error": …} when gcloud is there but the request cannot be
+    made, otherwise {"token", "base_url", "project", "location"}.
+
+    This path used to read the project from `gcloud config get-value project`
+    alone; with no default project set that is empty, and every request went
+    to ".../projects//locations/...". The region was fixed to us-central1,
+    and both gcloud calls ran without a timeout on the event loop.
+    """
+    import os
+    import shutil
+
+    if not shutil.which("gcloud"):
+        return {}
+    try:
+        project = (os.getenv("GOOGLE_CLOUD_PROJECT") or str(config.get("gcp_project") or "")
+                   or _gcloud("config", "get-value", "project", timeout=10)).strip()
+        if not project or project == "(unset)":
+            return {"error": "vertex_needs_project: set GOOGLE_CLOUD_PROJECT, /config set gcp_project=<id>, "
+                             "or `gcloud config set project <id>`"}
+        location = (os.getenv("GOOGLE_CLOUD_LOCATION") or str(config.get("gcp_location") or "") or "global").strip()
+        token = _gcloud("auth", "print-access-token")
+    except Exception as exc:          # timeout, permissions: report, never hang the chat
+        return {"error": f"vertex_gcloud_failed: {type(exc).__name__}"}
+    if not token:
+        return {"error": "vertex_not_logged_in: run `gcloud auth login`"}
+    host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
+    return {"token": token, "project": project, "location": location,
+            "base_url": f"https://{host}/v1/projects/{project}/locations/{location}/endpoints/openapi"}
+
+
 class ConfiguredProvider:
     """Adapter for the provider selected by ``/model provider/model``.
 
@@ -394,9 +468,16 @@ class ConfiguredProvider:
     ) -> AsyncGenerator[LLMEvent, None]:
         prepared = self._messages(messages)
         
-        if self.backend in ("vertexai", "vertex-ai", "google-genai") or (
+        native_vertex = self.backend in ("vertexai", "vertex-ai", "google-genai") or (
             self.backend in ("google", "gemini") and _opt_in(self.config, "use_vertexai")
-        ):
+        )
+        if native_vertex and self.backend in ("google", "gemini") and _gcloud_login_only(self.config):
+            # The SDK route accepts only application-default credentials. With
+            # just a `gcloud auth login` it failed outright, so a logged-in
+            # user could not reach Gemini; the OpenAI-compatible Vertex
+            # endpoint below takes the gcloud login's token instead.
+            native_vertex = False
+        if native_vertex:
             from aria_code.apps.cli.providers.vertexai_stream import VertexAIProvider
             provider = VertexAIProvider(
                 model=self.model,
@@ -425,17 +506,15 @@ class ConfiguredProvider:
                 model_name = self.model
 
                 if not api_key and self.backend in ("google", "gemini"):
-                    import subprocess
-                    try:
-                        api_key = subprocess.check_output(["gcloud", "auth", "print-access-token"], text=True).strip()
-                        project = subprocess.check_output(["gcloud", "config", "get-value", "project"], text=True).strip()
-                        region = "us-central1"
-                        base_url = f"https://{region}-aiplatform.googleapis.com/v1beta1/projects/{project}/locations/{region}/endpoints/openapi"
-                        
+                    # No Gemini API key: use Vertex AI with the gcloud login.
+                    vertex = await asyncio.to_thread(vertex_openai_endpoint, self.config)
+                    if vertex.get("error"):
+                        yield LLMDone(response="", provider="vertexai", success=False, error=vertex["error"])
+                        return
+                    if vertex:
+                        api_key, base_url = vertex["token"], vertex["base_url"]
                         if not model_name.startswith("google/"):
                             model_name = f"google/{model_name}"
-                    except Exception:
-                        pass
 
                 if not api_key:
                     yield LLMDone(

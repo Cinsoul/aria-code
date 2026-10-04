@@ -58,6 +58,33 @@ def disable_broken_proxy(timeout: float = 1.5) -> None:
             os.environ.pop(name, None)
 
 
+_LOOPBACK = ("localhost", "127.0.0.1", "::1")
+
+
+def ensure_loopback_bypasses_proxy() -> None:
+    """With a proxy set, keep local services (Ollama, LM Studio, the API) off it.
+
+    HTTP clients honour HTTP(S)_PROXY, so a machine with a system proxy and no
+    NO_PROXY would send requests for localhost:11434 to the proxy and fail.
+    """
+    if not any(os.environ.get(name) for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+                                                 "ALL_PROXY", "all_proxy")):
+        return
+    current = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
+    entries = [item.strip() for item in current.split(",") if item.strip()]
+    missing = [host for host in _LOOPBACK if host not in entries]
+    if missing:
+        value = ",".join(entries + missing)
+        os.environ["NO_PROXY"] = value
+        os.environ["no_proxy"] = value
+
+
+def prepare_network() -> None:
+    """Proxy settings every entry point needs before its first request."""
+    disable_broken_proxy()
+    ensure_loopback_bypasses_proxy()
+
+
 def use_system_trust_store() -> bool:
     """Verify TLS against the OS trust store instead of certifi's bundle.
 
@@ -105,7 +132,7 @@ def use_macos_ca_bundle() -> bool:
 def initialize_cli_environment() -> None:
     os.environ.setdefault("TQDM_DISABLE", "1")
     load_aria_env()
-    disable_broken_proxy()
+    prepare_network()
     if not use_system_trust_store():
         use_macos_ca_bundle()
 

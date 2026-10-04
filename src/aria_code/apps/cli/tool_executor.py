@@ -576,7 +576,7 @@ async def execute_aria_tool(base_url: str, tool_name: str, params: dict,
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(url, json=payload, headers=headers,
                                         timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
                     result = await resp.json()

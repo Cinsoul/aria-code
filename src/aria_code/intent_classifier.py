@@ -351,7 +351,7 @@ async def classify_intent_async(
     }
     url = ollama_url.rstrip("/") + "/api/chat"
     try:
-        async with aiohttp.ClientSession() as sess:
+        async with aiohttp.ClientSession(trust_env=True) as sess:
             async with sess.post(
                 url, json=payload,
                 timeout=aiohttp.ClientTimeout(total=timeout),

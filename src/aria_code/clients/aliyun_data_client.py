@@ -284,7 +284,7 @@ class AliyunDataClient:
             return None
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=15, connect=5)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            self._session = aiohttp.ClientSession(trust_env=True, timeout=timeout)
         return self._session
 
     def _headers(self, auth: bool = False) -> Dict[str, str]:

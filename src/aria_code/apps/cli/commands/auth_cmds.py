@@ -99,7 +99,7 @@ class AuthCommandsMixin:
             self.context.console.print("[dim]Authenticating...[/dim]")
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(
                     f"{self.terminal.api_url}/auth/login",
                     json={"email": email, "password": password},

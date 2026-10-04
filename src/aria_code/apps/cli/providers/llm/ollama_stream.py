@@ -1094,7 +1094,7 @@ async def stream_ollama(ollama_url: str, message: str, history: list,
         _buffered_tokens: list[str] = []
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(url, json=payload,
                                         timeout=aiohttp.ClientTimeout(total=300)) as resp:
                     if resp.status != 200:

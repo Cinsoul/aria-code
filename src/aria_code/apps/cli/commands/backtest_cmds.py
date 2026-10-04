@@ -475,7 +475,7 @@ class BacktestCommandsMixin:
                 "include_monte_carlo": False,
             }
             try:
-                async with aiohttp.ClientSession() as sess:
+                async with aiohttp.ClientSession(trust_env=True) as sess:
                     async with sess.post(f"{api_url}/api/v1/backtest", json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                         if resp.status == 200:
                             body = await resp.json()
@@ -675,7 +675,7 @@ class BacktestCommandsMixin:
                 "end_date": __import__("datetime").date.today().isoformat(),
                 "train_period_days": 252, "test_period_days": 63, "step_days": 21,
             }
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(f"{api_url}/api/v1/backtest/walk-forward", json=payload, timeout=aiohttp.ClientTimeout(total=90)) as resp:
                     if resp.status != 200:
                         raise RuntimeError(f"HTTP {resp.status}")

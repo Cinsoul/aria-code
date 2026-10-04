@@ -356,7 +356,7 @@ class DataCommandsMixin:
         async def _do():
             payload = {"symbol": symbol, "strategies": _STRATS,
                        "start_date": start, "end_date": end, "initial_capital": 100000, "commission_rate": 0.0003}
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(f"{api_url}/api/v1/backtest/compare-strategies", json=payload, timeout=aiohttp.ClientTimeout(total=90)) as resp:
                     if resp.status != 200:
                         raise RuntimeError(f"HTTP {resp.status}")

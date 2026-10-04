@@ -103,7 +103,7 @@ async def resolve_model_async(base_url: str, requested: str) -> str:
     tags_url = base_url.rstrip("/") + "/api/tags"
     try:
         if _HAS_AIOHTTP:
-            async with aiohttp.ClientSession() as s:
+            async with aiohttp.ClientSession(trust_env=True) as s:
                 async with s.get(tags_url, timeout=aiohttp.ClientTimeout(total=3)) as r:
                     data = await r.json()
         else:
@@ -396,7 +396,7 @@ class LocalLLMProvider:
         full_text = ""
 
         try:
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(url, json=payload,
                                      timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                     if resp.status != 200:
@@ -447,7 +447,7 @@ class LocalLLMProvider:
                                 yield {"type": "token", "text": token}
 
         except Exception as exc:
-            yield {"type": "error", "message": f"Ollama stream error: {exc}"}
+            yield {"type": "error", "message": f"Ollama stream error: {exc or type(exc).__name__}"}
             return
 
         # Fallback: parse text-based tool calls
@@ -481,7 +481,7 @@ class LocalLLMProvider:
         tool_call_accumulator: Dict[int, Dict] = {}   # index → partial call
 
         try:
-            async with aiohttp.ClientSession(headers=headers) as sess:
+            async with aiohttp.ClientSession(trust_env=True, headers=headers) as sess:
                 async with sess.post(url, json=payload,
                                      timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                     if resp.status != 200:
@@ -538,7 +538,7 @@ class LocalLLMProvider:
                             break
 
         except Exception as exc:
-            yield {"type": "error", "message": f"OpenAI-compat stream error: {exc}"}
+            yield {"type": "error", "message": f"OpenAI-compat stream error: {exc or type(exc).__name__}"}
             return
 
         # Emit accumulated tool calls

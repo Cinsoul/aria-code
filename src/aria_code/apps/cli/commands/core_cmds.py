@@ -869,14 +869,10 @@ class CoreCommandsMixin:
         else:
             print(f"Generating: {description}")
 
-        # Use best available model for code gen
-        original_model = self.terminal.config.get("model", "qwen2.5:7b")
-        self.terminal.config["model"] = "qwen2.5:7b"
-
+        # The configured model writes the code. This used to switch to
+        # qwen2.5:7b for the call, whatever the user had chosen — a Gemini or
+        # Claude user got a small local model, or an error without Ollama.
         await self.terminal.send_message(prompt)
-
-        # Restore model
-        self.terminal.config["model"] = original_model
 
         # Extract code from last AI response and save if requested
         if save_path or description:
@@ -986,7 +982,7 @@ class CoreCommandsMixin:
                     "response_id":   self.terminal.session_id,  # latest-in-session match
                     "value":         comment or None,
                 }
-                async with aiohttp.ClientSession() as session:
+                async with aiohttp.ClientSession(trust_env=True) as session:
                     async with session.post(
                         f"{self.terminal.api_url}/feedback",
                         json=payload,
@@ -2322,13 +2318,15 @@ class CoreCommandsMixin:
         from aria_cli import _generate_chart_sync, parse_technical_args, print_ta_result
         from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _chart_period_from_ta_days, _display_value
+        zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+        T = (lambda zh_text, en_text: zh_text) if zh else (lambda zh_text, en_text: en_text)
         parsed = parse_technical_args(args)
         symbol = parsed.symbol
         days = parsed.days
 
         service_result = None
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]计算 {symbol} 技术指标...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{T(f'计算 {symbol} 技术指标', f'Calculating {symbol} indicators')}...[/dim]", spinner="dots"):
                 from packages.aria_services.data import DataService
                 service_result = DataService().technical_indicators(symbol, days=days)
         else:
@@ -2343,16 +2341,19 @@ class CoreCommandsMixin:
             # Show current price when we have partial data (e.g. new IPO with 1 bar)
             _price_line = ""
             if _ta_data.get("price"):
-                _price_line = f"  当前价格  [bold]{_display_value(_ta_data['price'])}[/bold]"
+                _price_line = f"  {T('当前价格', 'Price')}  [bold]{_display_value(_ta_data['price'])}[/bold]"
                 if _ta_data.get("history_bars"):
-                    _price_line += f"  [dim]({_ta_data['history_bars']} 个交易日数据)[/dim]"
+                    _price_line += f"  [dim]({_ta_data['history_bars']} {T('个交易日数据', 'trading days of data')})[/dim]"
                 _price_line += "\n"
             if "数据不足" in _all_msgs or "新上市" in _all_msgs:
-                _reason = f"[yellow]历史数据不足[/yellow] — {symbol} 上市时间较短（< 14 个交易日），TA 指标无法计算\n  [dim]可待更多交易日积累后重试，或运行 `/analyze {symbol}` 查看基本面[/dim]"
+                _reason = T(
+                    f"[yellow]历史数据不足[/yellow] — {symbol} 上市时间较短（< 14 个交易日），TA 指标无法计算\n  [dim]可待更多交易日积累后重试，或运行 `/analyze {symbol}` 查看基本面[/dim]",
+                    f"[yellow]Not enough history[/yellow] — {symbol} has fewer than 14 trading days, so indicators cannot be computed\n  [dim]Try again later, or run `/analyze {symbol}` for fundamentals[/dim]")
             elif "rate" in _all_msgs or "429" in _all_msgs or "too many" in _all_msgs:
-                _reason = "[yellow]数据源频率限制[/yellow] — 稍后重试，或用 `/apikey set finnhub <KEY>` 切换数据源"
+                _reason = T("[yellow]数据源频率限制[/yellow] — 稍后重试，或用 `/apikey set finnhub <KEY>` 切换数据源",
+                            "[yellow]Rate-limited by the data source[/yellow] — retry later, or switch sources with `/apikey set finnhub <KEY>`")
             else:
-                _err = "; ".join(_ta_errs or _ta_warns) or "数据源暂时不可用"
+                _err = "; ".join(_ta_errs or _ta_warns) or T("数据源暂时不可用", "data source temporarily unavailable")
                 _reason = f"[red]{_err[:120]}[/red]"
                 if _missing:
                     _reason += f"  [dim]missing: {_missing}[/dim]"
@@ -2372,6 +2373,7 @@ class CoreCommandsMixin:
             days=days,
             service_result=service_result,
             formatter=_display_value,
+            lang="zh" if zh else "en",
         )
 
         period = _chart_period_from_ta_days(days)
@@ -2383,12 +2385,12 @@ class CoreCommandsMixin:
         }
         chart_result = None
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]生成 {symbol} 技术图表 HTML/PNG...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{T(f'生成 {symbol} 技术图表', f'Drawing the {symbol} chart')} HTML/PNG...[/dim]", spinner="dots"):
                 chart_result = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: _generate_chart_sync(symbol, period=period)
                 )
         else:
-            print(f"  生成 {symbol} 技术图表 HTML/PNG...")
+            print(f"  {T(f'生成 {symbol} 技术图表', f'Drawing the {symbol} chart')} HTML/PNG...")
             chart_result = await asyncio.get_event_loop().run_in_executor(
                 None, lambda: _generate_chart_sync(symbol, period=period)
             )
@@ -2407,27 +2409,27 @@ class CoreCommandsMixin:
             }
             if self.context.has_rich:
                 self.context.console.print()
-                self.context.console.print("  [green]✓[/green] 技术图表已生成")
+                self.context.console.print(f"  [green]✓[/green] {T('技术图表已生成', 'Chart saved')}")
                 if html_path:
                     self.context.console.print(f"  [dim]HTML:[/dim] [link={html_path}]{_display_path(html_path)}[/link]")
                 if png_path:
                     self.context.console.print(f"  [dim]PNG :[/dim] [link={png_path}]{_display_path(png_path)}[/link]")
                 elif png_error:
-                    self.context.console.print(f"  [yellow]PNG 跳过:[/yellow] {png_error[:90]}")
+                    self.context.console.print(f"  [yellow]{T('PNG 跳过', 'PNG skipped')}:[/yellow] {png_error[:90]}")
             else:
-                print("\n  技术图表已生成")
+                print(f"\n  {T('技术图表已生成', 'Chart saved')}")
                 if html_path:
                     print(f"  HTML: {_display_path(html_path)}")
                 if png_path:
                     print(f"  PNG : {_display_path(png_path)}")
                 elif png_error:
-                    print(f"  PNG 跳过: {png_error[:90]}")
+                    print(f"  {T('PNG 跳过', 'PNG skipped')}: {png_error[:90]}")
         elif chart_result:
-            err = chart_result.get("error") or "图表生成失败"
+            err = chart_result.get("error") or T("图表生成失败", "chart failed")
             if self.context.has_rich:
-                self.context.console.print(f"  [yellow]图表生成跳过:[/yellow] {err[:120]}")
+                self.context.console.print(f"  [yellow]{T('图表生成跳过', 'Chart skipped')}:[/yellow] {err[:120]}")
             else:
-                print(f"  图表生成跳过: {err[:120]}")
+                print(f"  {T('图表生成跳过', 'Chart skipped')}: {err[:120]}")
     def _extract_last_code(self) -> str:
         """从对话历史中提取最后一段 Python 代码块."""
         import re
