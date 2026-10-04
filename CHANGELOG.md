@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.76.0] — 2026-10-04
+
+- Merge pull request #91 from Cinsoul/docs/intro-video-and-demo
+
 ## [0.75.0] — 2026-10-04
 
 - Merge pull request #89 from Cinsoul/fix/cli-output-language
