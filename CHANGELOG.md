@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.74.0] — 2026-10-04
+
+- Build the production relay with minimal runtime dependencies
+
 ## [0.73.0] — 2026-10-04
 
 - Merge pull request #86 from Cinsoul/fix/foreign-endpoints
