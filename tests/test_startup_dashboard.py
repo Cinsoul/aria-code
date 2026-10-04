@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from rich import box
 from rich.console import Console
 
-import ui.robot as robot
+import aria_code.ui.robot as robot
 from aria_code.ui.banner import control_status_label, render_startup_dashboard
 from aria_code.ui.startup_dashboard import StartupDashboardViewModel, select_dashboard_layout
 
@@ -44,7 +44,8 @@ def test_layout_breakpoints_are_stable():
     assert select_dashboard_layout(55) == "minimal"
     assert select_dashboard_layout(70) == "stacked"
     assert select_dashboard_layout(70, height=24) == "minimal"
-    assert select_dashboard_layout(80) == "wide"
+    assert select_dashboard_layout(80, height=24) == "minimal"
+    assert select_dashboard_layout(80, height=40) == "stacked"
     assert select_dashboard_layout(120) == "wide"
 
 
@@ -81,6 +82,12 @@ def test_notes_go_under_the_robot_only_when_needed():
     assert len(plain) == 4
     assert "Describe the task naturally" in first[4]
     assert "Update available" in first[5]
+
+
+def test_narrow_terminal_keeps_update_reminder_visible():
+    rendered = _render(55, update_notice="Update available: aria update")
+
+    assert "Update available: aria update" in rendered
 
 
 def test_plain_terminal_also_shows_robot():

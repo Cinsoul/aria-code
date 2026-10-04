@@ -31,7 +31,7 @@ class UpdateAndHealthTests(unittest.TestCase):
             update_check._worker("0.56.0", "en")
         self.assertIn("v0.62.0", update_check._notice)
         self.assertNotIn("vv0.62.0", update_check._notice)
-        self.assertIn("scripts/install.sh", update_check._notice)
+        self.assertIn("aria update", update_check._notice)
 
     def test_each_install_channel_has_its_own_source_and_command(self):
         self.assertEqual(update_check._update_command("npm"), "npm install -g @artheras/aria-code@latest")
@@ -46,7 +46,7 @@ class UpdateAndHealthTests(unittest.TestCase):
             update_check._worker("0.56.0", "en", "npm")
         self.assertEqual(fetch.call_args.args[0].full_url, update_check._NPM_URL)
         self.assertEqual(save.call_args.args[0]["source"], update_check._NPM_URL)
-        self.assertIn("npm install -g @artheras/aria-code@latest", update_check._notice)
+        self.assertIn("aria update", update_check._notice)
 
     def test_pypi_s_old_4x_line_is_never_offered_as_an_update(self):
         """PyPI's latest is 4.4.2, an older numbering; v0.73.0 users were told to 'upgrade' to it."""
