@@ -170,7 +170,7 @@ def create_example_hooks(path: Path) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     example = {
-        "_comment": "Aria Code hooks — https://aria.code/docs/hooks",
+        "_comment": "Aria Code hooks — schema: https://github.com/artheras/aria-code/blob/main/src/aria_code/apps/cli/hooks.py",
         "PreToolUse": [],
         "PostToolUse": [],
         "ResponseDone": [],
