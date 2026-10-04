@@ -371,8 +371,11 @@ def setup_feishu(env: dict[str, str]) -> None:
 
 def _setup_feishu_relay(env: dict[str, str]) -> None:
     """Connect via Aria Relay Server — no Feishu developer account needed."""
-    relay_url = env.get("ARIA_RELAY_URL", "wss://relay.aria.ai")
-    relay_url = _ask("中继服务器地址", default=relay_url)
+    from aria_code.clients.aria_relay_client import default_relay_url, relay_url_problem
+    relay_url = _ask("中继服务器地址", default=default_relay_url(env.get("ARIA_RELAY_URL", "")))
+    while relay_url_problem(relay_url):
+        print(f"  ✗ {relay_url_problem(relay_url)}")
+        relay_url = _ask("中继服务器地址", default=default_relay_url(""))
     env["ARIA_RELAY_URL"] = relay_url
     env["ARIA_RELAY_MODE"] = "relay"
 

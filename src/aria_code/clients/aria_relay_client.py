@@ -10,7 +10,7 @@ aria_relay_client.py — 连接 Aria 中继服务器的 WebSocket 客户端
   python3 aria_relay_client.py --once       # 调试：收到第一条消息后退出
 
 所需环境变量（读取 ~/.aria/.env）:
-  ARIA_RELAY_URL        wss://relay.aria.ai（或自建服务器地址）
+  ARIA_RELAY_URL        中继地址，配置向导默认填 Arthera 运营的中继（见 OFFICIAL_RELAY_URL）
   ARIA_RELAY_CLIENT_ID  setup_wizard 生成的 12 位 hex id
 """
 
@@ -92,7 +92,44 @@ def ensure_credentials(env_file: Path = Path.home() / ".aria" / ".env") -> tuple
     return token, code
 
 
-_RELAY_URL = os.environ.get("ARIA_RELAY_URL", "wss://relay.aria.ai")
+# The relay Arthera runs. Offered as the setup wizard's default, never used as
+# a silent fallback.
+OFFICIAL_RELAY_URL = "wss://aria-code-741336310848.europe-west2.run.app/ws"
+
+# The default used to be wss://relay.aria.ai. aria.ai belongs to an unrelated
+# party (registered 2017); the subdomain does not resolve today, but its owner
+# could create it at any time, and every client left on the default would then
+# send its machine token, bind code and Feishu traffic there. Anyone who ran
+# the wizard before 2026-10-04 has it saved in ~/.aria/.env, so it is refused
+# by name, not merely no longer suggested.
+_UNOWNED_RELAY_HOSTS = {"relay.aria.ai"}
+
+
+def relay_url_problem(url: str) -> str:
+    """"" when the client may connect to `url`, otherwise why not."""
+    from urllib.parse import urlparse
+
+    if not url:
+        return "ARIA_RELAY_URL is not set — run the setup wizard (relay mode) to configure it"
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host in _UNOWNED_RELAY_HOSTS or host.endswith(".aria.ai") or host == "aria.ai":
+        return (f"{host} is not run by Arthera; run the setup wizard again to switch to "
+                f"{OFFICIAL_RELAY_URL}")
+    if parsed.scheme == "wss" and host:
+        return ""
+    if parsed.scheme == "ws" and host in ("localhost", "127.0.0.1", "::1"):
+        return ""
+    return "ARIA_RELAY_URL must be wss:// — this machine's token is sent when it connects (ws:// only to localhost)"
+
+
+def default_relay_url(current: str) -> str:
+    """What the setup wizard offers: the saved URL, unless it is unusable."""
+    current = (current or "").strip()
+    return current if current and not relay_url_problem(current) else OFFICIAL_RELAY_URL
+
+
+_RELAY_URL = os.environ.get("ARIA_RELAY_URL", "").strip()
 _CLIENT_ID = os.environ.get("ARIA_RELAY_CLIENT_ID", "")
 _RECONNECT_DELAY_MAX = 60   # seconds
 _RECONNECT_DELAY_BASE = 3
@@ -189,6 +226,11 @@ async def _connect_and_serve(once: bool = False) -> None:
         import websockets  # type: ignore
     except ImportError:
         logger.error("websockets package not installed — run: pip install websockets")
+        sys.exit(1)
+
+    problem = relay_url_problem(_RELAY_URL)
+    if problem:
+        logger.error("Not connecting to the relay: %s", problem)
         sys.exit(1)
 
     if not _CLIENT_ID:
