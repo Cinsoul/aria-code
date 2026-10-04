@@ -1,7 +1,7 @@
 """Background version checker for the active Aria Code install channel.
 
-Checks GitHub, scoped npm, or PyPI once per 24 hours in a daemon thread so startup is
-never blocked.  The result is cached to ~/.arthera/update_check.json and read
+Checks GitHub releases or scoped npm once per 24 hours in a daemon thread so
+startup is never blocked.  The result is cached to ~/.arthera/update_check.json and read
 at banner render time.
 
 Public API
@@ -26,7 +26,6 @@ from aria_code.packages.aria_core.paths import aria_home
 
 _RELEASE_URL   = "https://api.github.com/repos/artheras/aria-code/releases/latest"
 _NPM_URL       = "https://registry.npmjs.org/@artheras%2Faria-code/latest"
-_PYPI_URL      = "https://pypi.org/pypi/aria-code/json"
 _CACHE_FILE    = aria_home() / "update_check.json"
 _CACHE_TTL_S   = 86_400      # 24 hours
 _FETCH_TIMEOUT = 4           # seconds — fail cleanly on slow networks
@@ -73,14 +72,24 @@ def _install_channel() -> str:
     executable = str(getattr(sys, "executable", "") or "").lower()
     if "node_modules" in executable and "aria" in executable:
         return "npm"
-    return "native" if getattr(sys, "frozen", False) else "pip"
+    if getattr(sys, "frozen", False):
+        return "native"
+    root = Path(__file__).resolve().parents[4]
+    if (root / ".git").exists() and (root / "pyproject.toml").exists():
+        return "source"
+    return "pip"
 
 
-def _update_command(channel: str) -> str:
+def _update_command(channel: str, latest: str = "") -> str:
     if channel == "npm":
         return "npm install -g @artheras/aria-code@latest"
+    if channel == "source":
+        return "git pull && python3 -m pip install -e ."
     if channel == "pip":
-        return "python3 -m pip install --upgrade aria-code"
+        # Pinned: PyPI still lists an older 4.x numbering, so an unpinned
+        # --upgrade "updates" 0.73.0 to 4.4.2, which is older code.
+        return f'python3 -m pip install --upgrade "aria-code=={latest}"' if latest else \
+            'python3 -m pip install --upgrade "aria-code<4"'
     if sys.platform == "win32":
         return "irm https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.ps1 | iex"
     return "curl -fsSL https://raw.githubusercontent.com/artheras/aria-code/main/scripts/install.sh | sh"
@@ -89,7 +98,7 @@ def _update_command(channel: str) -> str:
 def _build_notice(latest: str, current: str, lang: str, channel: str = "native") -> str:
     latest = latest.removeprefix("v")
     current = current.removeprefix("v")
-    cmd = _update_command(channel)
+    cmd = _update_command(channel, latest)
     if lang == "zh":
         return (
             f"[yellow]⬆  新版本可用[/yellow] "
@@ -107,12 +116,9 @@ def _build_notice(latest: str, current: str, lang: str, channel: str = "native")
 
 def _worker(current: str, lang: str, channel: str = "native") -> None:
     global _notice
-    sources = {
-        "native": (_RELEASE_URL, "tag_name"),
-        "npm": (_NPM_URL, "version"),
-        "pip": (_PYPI_URL, "info"),
-    }
-    source_url, version_field = sources[channel]
+    # GitHub releases are the version of record for every channel but npm.
+    # PyPI's own "latest" is not: it still points at the old 4.x line.
+    source_url, version_field = (_NPM_URL, "version") if channel == "npm" else (_RELEASE_URL, "tag_name")
 
     # 1. Serve from cache if still fresh
     cache = _read_cache()
@@ -134,8 +140,6 @@ def _worker(current: str, lang: str, channel: str = "native") -> None:
         with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:
             data   = json.loads(resp.read())
             latest = data[version_field]
-            if channel == "pip":
-                latest = latest["version"]
     except Exception:
         return   # network error → silently skip, try again next day
 
