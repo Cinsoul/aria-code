@@ -52,7 +52,7 @@ aria
 
 安装脚本从最新的 [GitHub Release](https://github.com/artheras/aria-code/releases/latest) 下载对应平台的二进制文件，校验 SHA-256 后安装到当前用户目录。重新打开终端后，可用 `aria`、`aria code` 或 `aria-code` 打开交互界面。设置 `ARIA_CODE_VERSION=v0.55.0` 可固定版本。
 
-也可以选择包管理器：`npm install -g @artheras/aria-code`（需要 npm），或 `python3 -m pip install --upgrade aria-code`（需要 Python 3.10+）。源码开发方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+也可以选择包管理器：`npm install -g @artheras/aria-code`（需要 npm），或 `python3 -m pip install --upgrade "aria-code<4"`（需要 Python 3.10+；`<4` 用来跳过 PyPI 上仍保留的旧 4.x 版本号）。源码开发方式见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 使用本地模型时，先安装 [Ollama](https://ollama.com/download)，拉取一个编码模型，再以仅本地模式启动：
 
