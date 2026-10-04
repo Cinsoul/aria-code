@@ -1,7 +1,7 @@
 {
   "name": "@artheras/aria-code",
   "version": "0.70.0",
-  "description": "AI coding and research workspace with optional finance and connected-domain tools",
+  "description": "Open-source AI agent for logistics and finance work: numbers you can check, client data kept apart, actions a person approves",
   "keywords": [
     "ai",
     "llm",
@@ -13,7 +13,10 @@
     "quantitative",
     "ollama",
     "investment",
-    "quant"
+    "quant",
+    "logistics",
+    "3pl",
+    "stablecoin"
   ],
   "homepage": "https://github.com/artheras/aria-code#readme",
   "bugs": {

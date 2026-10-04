@@ -7,8 +7,8 @@
 
 <h1 align="center">Aria Code</h1>
 
-<p align="center">A terminal-first AI workspace for code and research.<br>
-Work in your project, use local or cloud models, and connect domain tools when you need them.</p>
+<p align="center">An open-source AI agent for logistics and finance work.<br>
+Numbers you can check, client data kept apart, actions a person approves.</p>
 
 <p align="center"><a href="README_CN.md">简体中文</a> · English</p>
 
@@ -24,9 +24,15 @@ Work in your project, use local or cloud models, and connect domain tools when y
 
 ## What Aria Code does
 
-Aria Code can inspect project files, propose and apply edits, run commands and tests, and explain the resulting changes. It also supports research and optional domain tools, including financial analysis and read-only warehouse operations. Those tools require their own data sources or integrations; a fresh install does not provide live business data.
+A general-purpose assistant aims for an answer that reads well. In logistics and finance the number gets acted on — one purchase order left out of a reorder quantity and the stock is bought twice. Aria Code is built around three things that follow from that.
 
-The same core runtime is used by the CLI and other Aria surfaces. Model choice and tool permissions are separate: you can use a local Ollama model, configure a supported cloud provider, or sign in to the Arthera service. A cloud model or live data source needs network access.
+**Numbers you can check.** Reorder points, safety stock and carrier rankings come from stated formulas, with the formula and every assumption in the result — as does stablecoin settlement reconciliation, from the [Artheras skills](https://github.com/artheras/skills) Aria Code can install. When the data cannot support an answer — under 14 days of demand history, rows that name no shipper — it says so instead of estimating. The [`operations` eval suite](docs/verifiable-evals.md) checks exactly these traps.
+
+**Client data kept apart.** A third-party logistics provider holds many clients' stock side by side. A chat group bound to one shipper confines every analysis to that shipper, and the logistics tools themselves refuse another shipper's data or an unattributable file — the rule holds below the prompt, whatever the model asks for.
+
+**Actions a person approves.** In Feishu, each shipper's group gets a daily digest of reorders, dead stock and freight anomalies. `/补货` turns the reorder list into a purchase-order draft card; nothing happens until an authorised approver presses approve, and what runs is exactly what was shown. The draft is a file for your own purchasing system — Aria Code places no orders.
+
+Underneath is a terminal coding agent: it inspects project files, applies edits, runs commands and tests, and explains the changes, with a local Ollama model or a supported cloud provider. A fresh install has no live business data; the logistics tools read your exports (CSV or JSON), and the chat features need a Feishu app or the Aria relay.
 
 ## Quick start
 
