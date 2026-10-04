@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.78.0] — 2026-10-04
+
+- fix: wait for npm registry visibility before publishing releases (#92)
+
 ## [0.77.0] — 2026-10-04
 
 - Merge pull request #90 from Cinsoul/feat/review-service
