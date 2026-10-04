@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.68.0] — 2026-10-04
+
+- Merge pull request #81 from Cinsoul/fix/ci-subprocess-pythonpath
+
 ## [0.67.0] — 2026-10-03
 
 - Merge pull request #80 from Cinsoul/feat/relay-push-and-callbacks
