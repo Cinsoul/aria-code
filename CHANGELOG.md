@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.69.0] — 2026-10-04
+
+- Fix CLI updates, startup, and verified release publishing (#75)
+
 ## [0.68.0] — 2026-10-04
 
 - Merge pull request #81 from Cinsoul/fix/ci-subprocess-pythonpath
