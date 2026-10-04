@@ -349,7 +349,11 @@ class LocalLLMProvider:
         cap      = self.capability
 
         temp  = temperature if temperature is not None else cap.temperature
-        mtoks = max_tokens  if max_tokens  is not None else 4096
+        # Gemini 2.5 counts its thinking against the output cap, so 4096 left a
+        # long answer — a structured review, a whole file — cut off mid-JSON.
+        # Gemini allows 65k; other backends keep 4096 (DeepSeek, for one,
+        # rejects anything above 8192).
+        mtoks = max_tokens if max_tokens is not None else (32768 if "gemini" in self.model.lower() else 4096)
 
         # Inject tool system prompt for text-only models
         if tools and not cap.tool_calls:

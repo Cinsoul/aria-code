@@ -81,11 +81,15 @@ def _bt_volume_summary(data: dict) -> dict:
     return summary if isinstance(summary, dict) else {}
 
 
-def _bt_result_summary(data: dict) -> str:
+def _bt_result_summary(data: dict, lang: str = "zh") -> str:
     total = _bt_num(data.get("total_return"))
     benchmark = _bt_num(_bt_value(data, "buy_hold_return", "benchmark_return", default=0))
     sharpe = _bt_num(data.get("sharpe_ratio"))
     max_dd = _bt_num(data.get("max_drawdown"))
+    if not str(lang).lower().startswith("zh"):
+        relation = "above" if total > benchmark else "below" if total < benchmark else "level with"
+        return (f"Result: the strategy returned {_bt_pct(total)}, {relation} buy-and-hold at {_bt_pct(benchmark)}; "
+                f"Sharpe {sharpe:.2f}, max drawdown {_bt_pct(max_dd)}.")
     relation = "高于" if total > benchmark else "低于" if total < benchmark else "持平"
     return (
         f"结论：策略收益 {_bt_pct(total)}，{relation}买入持有 {_bt_pct(benchmark)}；"
@@ -542,7 +546,8 @@ class BacktestCommandsMixin:
                 for r in rows:
                     tbl.add_row(*r)
                 self.context.console.print(tbl)
-                self.context.console.print(f"  [bold]{self._bt_result_summary(d)}[/bold]")
+                self.context.console.print(
+                    f"  [bold]{self._bt_result_summary(d, lang=self.terminal.config.get('ui_lang', 'en') or 'en')}[/bold]")
 
                 actual_start = self._bt_value(d, "start", "start_date", default=start_date)
                 actual_end = self._bt_value(d, "end", "end_date", default=end_date)
@@ -579,7 +584,11 @@ class BacktestCommandsMixin:
                         else "  [#57606a]volume:[/#57606a] unavailable"
                     )
                 if d.get("report_path"):
-                    self.context.console.print(f"  [#57606a]report:[/#57606a] {d['report_path']}")
+                    _report = str(d["report_path"])
+                    _home = str(pathlib.Path.home())
+                    if _report.startswith(_home + os.sep):
+                        _report = "~" + _report[len(_home):]
+                    self.context.console.print(f"  [#57606a]report:[/#57606a] {_report}")
                 if trades == 0:
                     self.context.console.print(
                         "  [yellow]注意:[/yellow] # Trades 为 0，表示本次规则没有触发入场；"

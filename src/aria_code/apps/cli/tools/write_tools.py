@@ -387,9 +387,13 @@ def _attach_verification_hint(result_data: dict, path, console=None, has_rich: b
     result_data["suggested_verification"] = (
         f"Verification recommended ({plan.reason}): run `{joined}`"
     )
+    try:
+        shown = joined.replace(str(path), str(pathlib.Path(path).relative_to(pathlib.Path(os.getcwd()).resolve())))
+    except ValueError:
+        shown = joined
     if has_rich and console is not None:
         try:
-            console.print(f"  [cyan]✓ {'推荐验证命令' if _ui_zh() else 'Suggested check'}: {joined}[/cyan]")
+            console.print(f"  [cyan]✓ {'推荐验证命令' if _ui_zh() else 'Suggested check'}: {shown}[/cyan]")
         except Exception:
             pass
 
@@ -523,6 +527,16 @@ def tool_write_file(params: dict) -> dict:
 
         desktop = pathlib.Path.home() / "Desktop"
         is_on_desktop = str(p).startswith(str(desktop))
+        # In the project the user is working in, a written file is where they
+        # expect it: name it relative to the project, and do not open Finder.
+        # Revealing every .py write popped a Finder window per file in a coding
+        # session; that, and the "saved to" hint, are for files that land
+        # somewhere else (the generated folder).
+        try:
+            in_project = p.is_relative_to(pathlib.Path.cwd().resolve())
+        except (OSError, ValueError):
+            in_project = False
+        shown = str(p.relative_to(pathlib.Path.cwd().resolve())) if in_project else str(p)
 
         import platform as _platform
         import subprocess as _sub
@@ -535,18 +549,18 @@ def tool_write_file(params: dict) -> dict:
             _reveal_hint = f'xdg-open "{p.parent}"'
 
         if has_rich and console:
-            console.print(f"  [dim]{action} [bold]{p}[/bold] ({lines} lines)[/dim]")
-            if not is_on_desktop and p.suffix == ".py":
+            console.print(f"  [dim]{action} [bold]{shown}[/bold] ({lines} lines)[/dim]")
+            if not in_project and not is_on_desktop and p.suffix == ".py":
                 zh = _ui_zh()
                 console.print(
                     f"  [dim]{'提示: 文件保存在' if zh else 'Saved to'} [yellow]{p}[/yellow]\n"
                     f"  {'打开所在目录' if zh else 'Show in folder'}: [cyan]{_reveal_hint}[/cyan][/dim]"
                 )
         else:
-            print(f"  {action} {p} ({lines} lines)")
+            print(f"  {action} {shown} ({lines} lines)")
 
         # Auto-reveal .py/.ipynb strategy files in file manager (non-blocking)
-        if p.suffix in (".py", ".ipynb"):
+        if p.suffix in (".py", ".ipynb") and not in_project:
             try:
                 if _sys_name == "Darwin":
                     _sub.Popen(["open", "-R", str(p)],

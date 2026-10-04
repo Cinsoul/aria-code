@@ -460,20 +460,14 @@ def render_try_hints(console, has_rich: bool, lang: str = "en") -> None:
     tcols = shutil.get_terminal_size((80, 24)).columns
     # Hints are natural language sentences — NOT slash commands.
     # The point: users should feel free to just type what they want.
-    if lang == "zh":
-        hints = [
-            (_mark("accent", "宁德时代今天怎么样?"),          19),  # 9 CJK×2 + 1
-            (_mark("accent", "帮我分析一下持仓风险"),          20),  # 10 CJK×2
-            (_mark("accent", "生成今日A股晨报看板"),           19),  # 9 CJK×2 + "A"×1
-            (_mark("subtle", "/help"),                         5),
-        ]
-    else:
-        hints = [
-            (_mark("accent", "How's NVDA this week?"),          18),
-            (_mark("accent", "Analyze my portfolio risk"),       24),
-            (_mark("accent", "Generate a morning brief HTML"),   30),
-            (_mark("subtle", "/help"),                            5),
-        ]
+    # One example per thing Aria does — code, finance, logistics — so the first
+    # screen says what the tool is for. Widths are measured, not hand-counted.
+    from wcwidth import wcswidth
+
+    examples = (["给 utils.py 补上测试", "宁德时代今天怎么样?", "/inventory skus.csv"] if lang == "zh"
+                else ["Add tests for utils.py", "How's NVDA this week?", "/inventory skus.csv"])
+    hints = [(_mark("accent", text), max(wcswidth(text), len(text))) for text in examples]
+    hints.append((_mark("subtle", "/help"), 5))
     sep   = f"  {_mark('dim', '·')}  "
     parts = []
     used  = 8

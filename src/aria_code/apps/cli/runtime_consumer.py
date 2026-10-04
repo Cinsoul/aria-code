@@ -478,7 +478,8 @@ class TerminalRuntimeEventConsumer:
         # Cursor/Windsurf 风格的实时加载动画
         if self.has_rich and hasattr(self, 'console'):
             hint = _tool_activity_hint(tool, params)
-            label = f"[bold cyan]调用工具[/bold cyan] [green]{tool}[/green]"
+            verb = "调用工具" if str(self.ui_lang).lower().startswith("zh") else "Running"
+            label = f"[bold cyan]{verb}[/bold cyan] [green]{tool}[/green]"
             if hint:
                 label += f" [dim]({hint})[/dim]"
             self.tool_spinner = self.console.status(label, spinner="dots12", spinner_style="cyan")

@@ -217,7 +217,7 @@ def _write_ta_png_artifact(record, hist, symbol: str, name: str, currency: str,
         import pandas as _pd
         import math as _math
     except Exception as exc:
-        return "", f"PNG 依赖不可用: {exc}"
+        return "", f"needs matplotlib — pip install 'aria-code[charts]' ({exc})"
 
     try:
         png_path = record.path.with_suffix(".png")
