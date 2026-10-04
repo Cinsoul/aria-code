@@ -38,7 +38,8 @@ WebSocket 注册流程:
                         飞书 Verification Token（次选）——校验事件体里的 token
                         ⚠️ 二者至少配一个，否则 /feishu/event 一律拒绝。
                         仅本地联调可设 RELAY_ALLOW_UNVERIFIED_EVENTS=1 绕过。
-  RELAY_SECRET          WebSocket 注册鉴权（可选，留空则不鉴权）
+  RELAY_SECRET          部署级别的注册口令（可选）。每台电脑另有自己的令牌和绑定码，
+                        见下方 client_credentials：没有它们，任何人都能冒充或绑定别人的电脑。
   DB_PATH               SQLite 路径（默认 ./relay.db）
   MESSAGE_TIMEOUT       等待用户本机回复的超时秒数（默认 90）
 """
@@ -93,6 +94,23 @@ def _db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS pending_binds (
             client_id  TEXT PRIMARY KEY,
             created_at REAL NOT NULL
+        )
+    """)
+    # Each machine's own credentials, recorded the first time it registers
+    # (trust on first use) and only as hashes:
+    #   token_hash     — later registrations of this client_id must present the
+    #                    same token, so knowing a client_id is not enough to
+    #                    impersonate the machine and take over its messages;
+    #   bind_code_hash — /bind accepts only this code, which is generated and
+    #                    shown on the machine itself. The bind code used to be the
+    #                    client_id, so anyone who learned one could bind their own
+    #                    Feishu account to someone else's machine.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS client_credentials (
+            client_id      TEXT PRIMARY KEY,
+            token_hash     TEXT NOT NULL,
+            bind_code_hash TEXT NOT NULL,
+            created_at     REAL NOT NULL
         )
     """)
     # Chats a client's bound user has spoken to the bot in: the only chats the
@@ -160,6 +178,45 @@ def _is_valid_client_id(client_id: str) -> bool:
         "SELECT client_id FROM pending_binds WHERE client_id = ?", (client_id,)
     ).fetchone()
     return row is not None
+
+
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _normalise_bind_code(code: str) -> str:
+    return "".join(ch for ch in code.upper() if ch.isalnum())
+
+
+def _admit_client(client_id: str, token: str, bind_code: str) -> str:
+    """"" when this registration may proceed, otherwise why not."""
+    if len(token or "") < 32:
+        return "this Aria version is too old for the relay; upgrade aria-code"
+    if len(_normalise_bind_code(bind_code or "")) < 10:
+        return "bind code missing; upgrade aria-code"
+    row = get_db().execute(
+        "SELECT token_hash FROM client_credentials WHERE client_id = ?", (client_id,)).fetchone()
+    if row is None:
+        get_db().execute("INSERT INTO client_credentials VALUES (?, ?, ?, ?)",
+                         (client_id, _digest(token), _digest(_normalise_bind_code(bind_code)), time.time()))
+        get_db().commit()
+        return ""
+    if not hmac.compare_digest(row["token_hash"], _digest(token)):
+        return "client_id is registered to another installation"
+    # The machine may rotate its bind code; the token proves it is the same one.
+    get_db().execute("UPDATE client_credentials SET bind_code_hash = ? WHERE client_id = ?",
+                     (_digest(_normalise_bind_code(bind_code)), client_id))
+    get_db().commit()
+    return ""
+
+
+def _client_for_bind_code(code: str) -> Optional[str]:
+    normalised = _normalise_bind_code(code)
+    if len(normalised) < 10:
+        return None
+    row = get_db().execute("SELECT client_id FROM client_credentials WHERE bind_code_hash = ?",
+                           (_digest(normalised),)).fetchone()
+    return row["client_id"] if row else None
 
 
 # ── WebSocket connection registry ─────────────────────────────────────────────
@@ -402,9 +459,15 @@ async def ws_endpoint(websocket: WebSocket):
             await websocket.send_text(json.dumps({"ok": False, "reason": "client_id required"}))
             return
 
-        # Validate RELAY_SECRET if configured
-        if _RELAY_SECRET and msg.get("secret") != _RELAY_SECRET:
+        # Validate RELAY_SECRET if configured (constant-time: it is a secret)
+        if _RELAY_SECRET and not hmac.compare_digest(str(msg.get("secret") or ""), _RELAY_SECRET):
             await websocket.send_text(json.dumps({"ok": False, "reason": "invalid secret"}))
+            return
+
+        refused = _admit_client(client_id, str(msg.get("token") or ""), str(msg.get("bind_code") or ""))
+        if refused:
+            logger.warning("refused registration for %s: %s", client_id, refused)
+            await websocket.send_text(json.dumps({"ok": False, "reason": refused}))
             return
 
         # Register in-memory + mark as pending bind (if first time)
@@ -561,15 +624,21 @@ async def feishu_event(request: Request):
             text_content = ""
 
         if text_content.upper().startswith("/BIND ") or text_content.upper().startswith("ARIA-BIND-"):
-            raw_code = text_content.upper().replace("/BIND ", "").strip()
-            # Normalize: "ARIA-BIND-ARIA-XXXX" → "aria-xxxx"
-            client_id_upper = raw_code.replace("ARIA-BIND-", "").replace("ARIA-", "aria-").lower()
-            _bind(feishu_user_id, client_id_upper)
+            raw_code = text_content.upper().replace("/BIND ", "").strip().replace("ARIA-BIND-", "")
+            # Only the code generated and shown on the machine binds it. The
+            # client_id is not accepted any more: it was the bind code, so
+            # whoever learned one could route their messages to another
+            # person's machine.
+            client_id = _client_for_bind_code(raw_code)
+            if not client_id:
+                await _send_feishu_text(
+                    feishu_user_id,
+                    "❌ 绑定码无效。请在你电脑上运行 aria-code 的配置向导，使用它显示的绑定码。")
+                return {"code": 0}
+            _bind(feishu_user_id, client_id)
             await _send_feishu_text(
                 feishu_user_id,
-                f"✅ 绑定成功！你的 Aria 实例已连接。\n"
-                f"Client ID: {client_id_upper}\n"
-                f"现在可以直接发消息与你的 Aria 交互了。"
+                "✅ 绑定成功！你的 Aria 实例已连接。\n现在可以直接发消息与你的 Aria 交互了。"
             )
             return {"code": 0}
 

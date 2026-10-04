@@ -42,6 +42,56 @@ def _load_env() -> None:
 
 _load_env()
 
+# ── This machine's relay credentials ──────────────────────────────────────────
+#
+# The relay records both on first registration (as hashes): the token proves a
+# later connection is this machine, and the bind code is what a Feishu user
+# sends to bind to it. Both stay in ~/.aria/.env. Before 2026-10-04 there were
+# neither: the client_id was the only identity and also the bind code, so
+# anyone who learned it could impersonate the machine or bind their own Feishu
+# account to it.
+
+_BIND_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # nothing to misread: no 0/O, 1/I
+
+
+def new_token() -> str:
+    import secrets
+    return secrets.token_urlsafe(32)
+
+
+def new_bind_code() -> str:
+    import secrets
+    return "".join(secrets.choice(_BIND_ALPHABET) for _ in range(12))
+
+
+def format_bind_code(code: str) -> str:
+    """ABCDEFGHJKLM → ARIA-BIND-ABCD-EFGH-JKLM, the form a person types."""
+    code = "".join(ch for ch in code.upper() if ch.isalnum())
+    return "ARIA-BIND-" + "-".join(code[i:i + 4] for i in range(0, len(code), 4))
+
+
+def ensure_credentials(env_file: Path = Path.home() / ".aria" / ".env") -> tuple[str, str]:
+    """This machine's (token, bind code), created and saved on first use."""
+    token = os.environ.get("ARIA_RELAY_CLIENT_TOKEN", "").strip()
+    code = os.environ.get("ARIA_RELAY_BIND_CODE", "").strip()
+    fresh = {}
+    if len(token) < 32:
+        token = fresh["ARIA_RELAY_CLIENT_TOKEN"] = new_token()
+    if len(code) < 10:
+        code = fresh["ARIA_RELAY_BIND_CODE"] = new_bind_code()
+    if fresh:
+        env_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with env_file.open("a", encoding="utf-8") as handle:
+            for key, value in fresh.items():
+                handle.write(f"{key}={value}\n")
+        env_file.chmod(0o600)
+        os.environ.update(fresh)
+        if "ARIA_RELAY_BIND_CODE" in fresh:
+            logger.info("New relay bind code — send this to the Aria bot in Feishu: /bind %s",
+                        format_bind_code(code))
+    return token, code
+
+
 _RELAY_URL = os.environ.get("ARIA_RELAY_URL", "wss://relay.aria.ai")
 _CLIENT_ID = os.environ.get("ARIA_RELAY_CLIENT_ID", "")
 _RECONNECT_DELAY_MAX = 60   # seconds
@@ -89,6 +139,14 @@ async def _handle_message(raw_msg: dict, ws) -> None:
 
     reply = json.dumps({"type": "response", "id": req_id, "result": result})
     await ws.send(reply)
+
+
+def register_frame(client_id: str, token: str, bind_code: str) -> dict:
+    frame = {"type": "register", "client_id": client_id, "token": token, "bind_code": bind_code}
+    secret = os.environ.get("ARIA_RELAY_SECRET", "").strip()
+    if secret:
+        frame["secret"] = secret   # the deployment-wide gate, when the relay sets one
+    return frame
 
 
 # ── Sending through the relay ─────────────────────────────────────────────────
@@ -151,14 +209,15 @@ async def _connect_and_serve(once: bool = False) -> None:
                 open_timeout=15,
             ) as ws:
                 # Register with server
-                await ws.send(json.dumps({
-                    "type": "register",
-                    "client_id": _CLIENT_ID,
-                }))
+                token, bind_code = ensure_credentials()
+                await ws.send(json.dumps(register_frame(_CLIENT_ID, token, bind_code)))
                 ack_raw = await asyncio.wait_for(ws.recv(), timeout=10)
                 ack = json.loads(ack_raw)
                 if not ack.get("ok"):
                     logger.error("Registration rejected: %s", ack.get("reason", "unknown"))
+                    if "another installation" in str(ack.get("reason", "")):
+                        logger.error("This client_id belongs to a different machine on the relay. "
+                                     "Run the setup wizard to create a new one.")
                     await asyncio.sleep(delay)
                     continue
 

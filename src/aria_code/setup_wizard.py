@@ -376,26 +376,34 @@ def _setup_feishu_relay(env: dict[str, str]) -> None:
     env["ARIA_RELAY_URL"] = relay_url
     env["ARIA_RELAY_MODE"] = "relay"
 
-    # Generate or reuse client_id
+    # Generate or reuse client_id, plus this machine's token and bind code. The
+    # bind code — not the client_id — is what a Feishu user sends to bind:
+    # only someone who can see this screen has it.
+    from aria_code.clients.aria_relay_client import format_bind_code, new_bind_code, new_token
     client_id = env.get("ARIA_RELAY_CLIENT_ID") or f"aria-{uuid.uuid4().hex[:12]}"
     env["ARIA_RELAY_CLIENT_ID"] = client_id
+    if len(env.get("ARIA_RELAY_CLIENT_TOKEN", "")) < 32:
+        env["ARIA_RELAY_CLIENT_TOKEN"] = new_token()
+    if len(env.get("ARIA_RELAY_BIND_CODE", "")) < 10:
+        env["ARIA_RELAY_BIND_CODE"] = new_bind_code()
+    bind_code = format_bind_code(env["ARIA_RELAY_BIND_CODE"])
 
     if _rich:
         console.print(Panel(
             f"[bold]你的绑定码：[/bold]\n\n"
-            f"[bold yellow on black]  ARIA-BIND-{client_id.upper()}  [/bold yellow on black]\n\n"
+            f"[bold yellow on black]  {bind_code}  [/bold yellow on black]\n\n"
             f"[dim]操作步骤：[/dim]\n"
             f"1. 在飞书搜索 [cyan]Aria Bot[/cyan] 并添加好友\n"
-            f"2. 发送：[cyan]/bind ARIA-BIND-{client_id.upper()}[/cyan]\n"
+            f"2. 发送：[cyan]/bind {bind_code}[/cyan]\n"
             f"3. 收到 [green]\"绑定成功\"[/green] 后，飞书消息将转发到你的 Aria\n\n"
             f"[dim]（中继客户端会在 daemon 启动时自动连接）[/dim]",
             title="📱 飞书绑定步骤",
             border_style="yellow",
         ))
     else:
-        print(f"\n你的绑定码: ARIA-BIND-{client_id.upper()}")
+        print(f"\n你的绑定码: {bind_code}  （只发给你自己的飞书账号里的 Aria，不要给别人）")
         print("1. 在飞书搜索 Aria Bot 并添加好友")
-        print(f"2. 发送: /bind ARIA-BIND-{client_id.upper()}")
+        print(f"2. 发送: /bind {bind_code}")
         print("3. 收到绑定成功后继续\n")
 
     if _confirm("是否已完成绑定？（可以稍后运行向导再完成）", default=False):
