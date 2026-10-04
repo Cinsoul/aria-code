@@ -40,6 +40,9 @@ WebSocket 注册流程:
                         仅本地联调可设 RELAY_ALLOW_UNVERIFIED_EVENTS=1 绕过。
   RELAY_SECRET          部署级别的注册口令（可选）。每台电脑另有自己的令牌和绑定码，
                         见下方 client_credentials：没有它们，任何人都能冒充或绑定别人的电脑。
+  RELAY_STORE           状态存储：sqlite（默认，DB_PATH）或 firestore。Cloud Run 上必须用
+                        firestore——容器文件系统每次部署都会清空，SQLite 里的绑定和电脑凭证会丢。
+  RELAY_FIRESTORE_PROJECT / RELAY_FIRESTORE_DATABASE  可选，默认当前项目和 (default) 数据库
   DB_PATH               SQLite 路径（默认 ./relay.db）
   MESSAGE_TIMEOUT       等待用户本机回复的超时秒数（默认 90）
 """
@@ -78,106 +81,44 @@ _MSG_TIMEOUT       = int(os.environ.get("MESSAGE_TIMEOUT", "90"))
 _FEISHU_API        = "https://open.feishu.cn/open-apis"
 
 
-# ── SQLite store ──────────────────────────────────────────────────────────────
+# ── Persistent state (relay_store.py) ─────────────────────────────────────────
+#
+# SQLite by default; RELAY_STORE=firestore on Cloud Run, where the container
+# filesystem — and with it a SQLite file — is discarded on every deploy.
+#
+# Each machine's credentials are recorded on its first registration (trust on
+# first use), only as hashes: the token proves a later connection is the same
+# machine; the bind code is the only thing /bind accepts. The bind code used to
+# be the client_id, so anyone who learned one could bind their own Feishu
+# account to someone else's machine.
 
-def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS bindings (
-            feishu_user_id TEXT PRIMARY KEY,
-            client_id      TEXT NOT NULL,
-            bound_at       REAL NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pending_binds (
-            client_id  TEXT PRIMARY KEY,
-            created_at REAL NOT NULL
-        )
-    """)
-    # Each machine's own credentials, recorded the first time it registers
-    # (trust on first use) and only as hashes:
-    #   token_hash     — later registrations of this client_id must present the
-    #                    same token, so knowing a client_id is not enough to
-    #                    impersonate the machine and take over its messages;
-    #   bind_code_hash — /bind accepts only this code, which is generated and
-    #                    shown on the machine itself. The bind code used to be the
-    #                    client_id, so anyone who learned one could bind their own
-    #                    Feishu account to someone else's machine.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS client_credentials (
-            client_id      TEXT PRIMARY KEY,
-            token_hash     TEXT NOT NULL,
-            bind_code_hash TEXT NOT NULL,
-            created_at     REAL NOT NULL
-        )
-    """)
-    # Chats a client's bound user has spoken to the bot in: the only chats the
-    # client may later send to unprompted (the daily digest).
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS client_chats (
-            client_id TEXT NOT NULL,
-            chat_id   TEXT NOT NULL,
-            last_seen REAL NOT NULL,
-            PRIMARY KEY (client_id, chat_id)
-        )
-    """)
-    # Cards the relay posted for a client: a press on one is routed back to
-    # that client, which holds the approval it belongs to.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS card_origins (
-            message_id TEXT PRIMARY KEY,
-            client_id  TEXT NOT NULL,
-            created_at REAL NOT NULL
-        )
-    """)
-    conn.commit()
-    return conn
+_store_instance = None
 
 
-_db_conn: Optional[sqlite3.Connection] = None
+def _store():
+    global _store_instance
+    if _store_instance is None:
+        from aria_code.relay_store import open_store
+        _store_instance = open_store()
+    return _store_instance
+
+
+def _ephemeral_store() -> bool:
+    """SQLite inside a Cloud Run container is discarded with the container."""
+    return bool(os.environ.get("K_SERVICE")) and _store().kind == "sqlite"
 
 
 def get_db() -> sqlite3.Connection:
-    global _db_conn
-    if _db_conn is None:
-        _db_conn = _db()
-    return _db_conn
+    """The SQLite connection, when that is the store (tests and local use)."""
+    return _store().db
 
 
 def _lookup_client(feishu_user_id: str) -> Optional[str]:
-    row = get_db().execute(
-        "SELECT client_id FROM bindings WHERE feishu_user_id = ?",
-        (feishu_user_id,),
-    ).fetchone()
-    return row["client_id"] if row else None
+    return _store().client_for_user(feishu_user_id)
 
 
 def _bind(feishu_user_id: str, client_id: str) -> None:
-    get_db().execute(
-        "INSERT OR REPLACE INTO bindings VALUES (?, ?, ?)",
-        (feishu_user_id, client_id, time.time()),
-    )
-    get_db().execute(
-        "DELETE FROM pending_binds WHERE client_id = ?", (client_id,)
-    )
-    get_db().commit()
-
-
-def _register_pending(client_id: str) -> None:
-    get_db().execute(
-        "INSERT OR REPLACE INTO pending_binds VALUES (?, ?)",
-        (client_id, time.time()),
-    )
-    get_db().commit()
-
-
-def _is_valid_client_id(client_id: str) -> bool:
-    row = get_db().execute(
-        "SELECT client_id FROM pending_binds WHERE client_id = ?", (client_id,)
-    ).fetchone()
-    return row is not None
+    _store().bind_user(feishu_user_id, client_id)
 
 
 def _digest(value: str) -> str:
@@ -194,19 +135,18 @@ def _admit_client(client_id: str, token: str, bind_code: str) -> str:
         return "this Aria version is too old for the relay; upgrade aria-code"
     if len(_normalise_bind_code(bind_code or "")) < 10:
         return "bind code missing; upgrade aria-code"
-    row = get_db().execute(
-        "SELECT token_hash FROM client_credentials WHERE client_id = ?", (client_id,)).fetchone()
-    if row is None:
-        get_db().execute("INSERT INTO client_credentials VALUES (?, ?, ?, ?)",
-                         (client_id, _digest(token), _digest(_normalise_bind_code(bind_code)), time.time()))
-        get_db().commit()
-        return ""
-    if not hmac.compare_digest(row["token_hash"], _digest(token)):
+    store = _store()
+    code_hash = _digest(_normalise_bind_code(bind_code))
+    known = store.credentials(client_id)
+    if known is None:
+        if store.claim_credentials(client_id, _digest(token), code_hash):
+            return ""
+        known = store.credentials(client_id)   # lost a race for the same id
+    if not known or not hmac.compare_digest(known["token_hash"], _digest(token)):
         return "client_id is registered to another installation"
     # The machine may rotate its bind code; the token proves it is the same one.
-    get_db().execute("UPDATE client_credentials SET bind_code_hash = ? WHERE client_id = ?",
-                     (_digest(_normalise_bind_code(bind_code)), client_id))
-    get_db().commit()
+    if known["bind_code_hash"] != code_hash:
+        store.set_bind_code(client_id, code_hash)
     return ""
 
 
@@ -214,9 +154,7 @@ def _client_for_bind_code(code: str) -> Optional[str]:
     normalised = _normalise_bind_code(code)
     if len(normalised) < 10:
         return None
-    row = get_db().execute("SELECT client_id FROM client_credentials WHERE bind_code_hash = ?",
-                           (_digest(normalised),)).fetchone()
-    return row["client_id"] if row else None
+    return _store().client_for_bind_code(_digest(normalised))
 
 
 # ── WebSocket connection registry ─────────────────────────────────────────────
@@ -253,9 +191,7 @@ def _remember_forward(client_id: str, message_id: str, chat_id: str) -> None:
     if message_id:
         _forwarded[message_id] = (client_id, now + _FORWARD_TTL)
     if chat_id:
-        get_db().execute(
-            "INSERT OR REPLACE INTO client_chats VALUES (?, ?, ?)", (client_id, chat_id, now))
-        get_db().commit()
+        _store().remember_chat(client_id, chat_id)
 
 
 def _may_send(client_id: str, request: dict) -> str:
@@ -272,10 +208,7 @@ def _may_send(client_id: str, request: dict) -> str:
     elif op == "send":
         if request.get("receive_id_type", "chat_id") != "chat_id":
             return "send is only to chats"
-        row = get_db().execute(
-            "SELECT 1 FROM client_chats WHERE client_id = ? AND chat_id = ?", (client_id, target)
-        ).fetchone()
-        if not row:
+        if not _store().has_chat(client_id, target):
             return "this client has no conversation in that chat"
     else:
         return "op must be reply or send"
@@ -309,17 +242,13 @@ async def _send_for_client(client_id: str, request: dict) -> dict:
         return {"code": -1, "msg": "relay could not reach Feishu"}
     sent_id = ((result.get("data") or {}).get("message_id") or "")
     if result.get("code") == 0 and request["msg_type"] == "interactive" and sent_id:
-        get_db().execute("INSERT OR REPLACE INTO card_origins VALUES (?, ?, ?)",
-                         (sent_id, client_id, time.time()))
-        get_db().commit()
+        _store().remember_card(sent_id, client_id)
     return {"code": result.get("code"), "msg": result.get("msg", ""),
             "data": {"message_id": sent_id} if sent_id else {}}
 
 
 def _card_origin(message_id: str) -> Optional[str]:
-    row = get_db().execute("SELECT client_id FROM card_origins WHERE message_id = ?",
-                           (message_id,)).fetchone()
-    return row["client_id"] if row else None
+    return _store().card_origin(message_id) if message_id else None
 
 
 # ── Feishu API helpers ────────────────────────────────────────────────────────
@@ -430,7 +359,10 @@ async def lifespan(app: FastAPI):
         datefmt="%H:%M:%S",
     )
     logger.info("Aria Relay Server started  db=%s", _DB_PATH)
-    get_db()  # init tables
+    logger.info("Relay state store: %s", _store().kind)
+    if _ephemeral_store():
+        logger.warning("Running on Cloud Run with SQLite: bindings and machine credentials are "
+                       "lost on every deploy. Set RELAY_STORE=firestore.")
     yield
     logger.info("Relay Server shutting down")
 
@@ -472,8 +404,6 @@ async def ws_endpoint(websocket: WebSocket):
 
         # Register in-memory + mark as pending bind (if first time)
         _connections[client_id] = websocket
-        if _lookup_client.__module__:  # always true; used as noop to be explicit
-            _register_pending(client_id)
 
         await websocket.send_text(json.dumps({"ok": True, "client_id": client_id}))
         logger.info("Client connected: %s", client_id)
@@ -675,7 +605,10 @@ async def status(request: Request):
     """
     body = {
         "connected_clients": len(_connections),
-        "total_bindings": get_db().execute("SELECT COUNT(*) FROM bindings").fetchone()[0],
+        "total_bindings": _store().binding_count(),
+        "store": _store().kind,
+        **({"store_warning": "sqlite on Cloud Run — bindings are lost on every deploy; "
+                             "set RELAY_STORE=firestore"} if _ephemeral_store() else {}),
         "feishu_app_configured": bool(_FEISHU_APP_ID),
         "event_verification": (
             "encrypt_key" if _FEISHU_ENCRYPT_KEY

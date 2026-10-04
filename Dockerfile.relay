@@ -8,7 +8,8 @@ WORKDIR /relay
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] websockets httpx
+# google-cloud-firestore: RELAY_STORE=firestore keeps bindings across deploys.
+RUN pip install --no-cache-dir fastapi uvicorn[standard] websockets httpx google-cloud-firestore
 
 # The relay server moved to src/aria_code/ in the package restructure; this
 # still copied a root-level aria_relay_server.py that has not existed since,
