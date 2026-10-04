@@ -210,7 +210,9 @@ def detect_system_lang() -> str:
     # Fallback: Python locale module (works on macOS/Windows when env vars absent)
     try:
         import locale as _locale
-        lang_code, _ = _locale.getdefaultlocale()
+        # getlocale(), not getdefaultlocale(): the latter is deprecated and
+        # removed in Python 3.15, where this fallback would stop working.
+        lang_code, _ = _locale.getlocale()
         if lang_code:
             prefix = lang_code.split("_")[0].lower()
             if prefix == "zh":

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aria-code"
 version = "0.76.0"
-description = "Open-source AI agent for logistics and finance work: numbers you can check, client data kept apart, actions a person approves"
+description = "Open-source AI agent for coding, financial analysis and logistics operations: numbers you can check, client data kept apart, actions a person approves"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 # Upper bound is real, not defensive: the core dep pandas_ta pulls numba, and

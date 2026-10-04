@@ -12,7 +12,7 @@ DashboardLayout = Literal["wide", "stacked", "minimal"]
 
 def select_dashboard_layout(width: int, height: Optional[int] = None) -> DashboardLayout:
     """Choose a stable layout for the available terminal width."""
-    # The reference mascot needs room beside the model label and runtime.
+    # Not used by the start-up banner, which has one compact layout at every width.
     if width >= 100:
         return "wide"
     if height is not None and height <= 24:

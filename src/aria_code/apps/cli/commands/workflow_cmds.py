@@ -399,82 +399,75 @@ class WorkflowCommandsMixin:
             print(f"Saved to {aria_md.name}")
 
     async def cmd_review(self, args: str):
-        raw = args.strip()
-        policy = self.terminal.config.get("command_policy", "safe")
+        """Review a change with an isolated reviewer: /review [--staged | --base B | --commit SHA | PATH] [--json]."""
+        from aria_code import review_service as rs
+        from aria_code.apps.cli.review_runner import make_model_call
 
-        if raw and not raw.startswith("--"):
-            p = pathlib.Path(raw).expanduser()
-            if not p.exists():
-                msg = f"File not found: {raw}"
-                self.context.console.print(f"[red]{msg}[/red]") if self.context.has_rich else print(msg)
-                return
-            _print_phase("Reading file")
-            try:
-                content = p.read_text(errors="replace")[:12000]
-            except Exception as e:
-                self.context.console.print(f"[red]Cannot read file: {e}[/red]") if self.context.has_rich else print(f"Cannot read: {e}")
-                return
-            line_count = content.count("\n")
-            if self.context.has_rich:
-                self.context.console.print(f"  [dim]↳ {p.name}  ·  {line_count} lines[/dim]")
-            _print_phase("AI Review")
-            prompt = (
-                f"请对以下 `{p.name}` 的代码进行专业审查，查找 Bug、安全问题和改进点。\n"
-                f"每条发现用严重程度标签开头：**BUG**、**IMPROVEMENT**、**NIT**。\n"
-                f"按文件组织输出，直接给结论，不要重复贴出全部代码。\n\n"
-                f"```\n{content}\n```"
-            )
-            review_source, review_name, review_is_diff = content, p.name, False
-        else:
-            diff_cmd = "git diff --staged" if raw.startswith("--staged") else "git diff HEAD"
-            _print_phase("Reading diff")
-            tr = _tool_run_command({"command": diff_cmd})
-            if not tr.get("success"):
-                msg = tr.get("error", "git diff failed")
-                self.context.console.print(f"[red]{msg}[/red]") if self.context.has_rich else print(msg)
-                return
-            diff_text = (tr.get("data") or {}).get("stdout", "").strip()
-            if not diff_text:
-                self.context.console.print("[dim]No changes to review.[/dim]") if self.context.has_rich else print("No changes to review.")
-                return
-            _adds = diff_text.count("\n+") - diff_text.count("\n+++")
-            _dels = diff_text.count("\n-") - diff_text.count("\n---")
-            _files = diff_text.count("\ndiff --git")
-            if self.context.has_rich:
-                self.context.console.print(f"  [dim]↳ {_files} files  ·  +{_adds} −{_dels} lines[/dim]")
-            diff_text = diff_text[:12000]
-            _print_phase("AI Review")
-            prompt = (
-                "请审查以下 git diff，找出 Bug、潜在回归、安全问题和代码质量问题。\n"
-                "每条发现用严重程度标签开头：**BUG**、**IMPROVEMENT**、**NIT**。\n"
-                "按文件分组，直接给出结论。\n\n"
-                f"```diff\n{diff_text}\n```"
-            )
-            review_source, review_name, review_is_diff = diff_text, "staged.diff", True
-
-        # Run a bounded, deterministic first pass. The conversational model
-        # receives it as evidence and must not pretend it accessed anything
-        # beyond the supplied file or diff.
+        console = self.context.console if self.context.has_rich else None
+        say = (lambda text, style="": console.print(f"[{style}]{text}[/{style}]" if style else text)) if console \
+            else (lambda text, style="": print(text))
+        lang = "zh" if str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh") else "en"
         try:
-            from agents.code_review import CodeReviewAgent
+            tokens = shlex.split(args)
+            as_json = "--json" in tokens
+            target = rs.target_from_args([t for t in tokens if t != "--json"])
+            inp = rs.collect(target, pathlib.Path.cwd())
+        except (ValueError, rs.ReviewError) as exc:
+            say(str(exc), "red")
+            say("Usage: /review [--staged | --base BRANCH | --commit SHA | PATH] [--json]", "dim")
+            return
+        if not inp.diff.strip():
+            say("No changes to review." if lang == "en" else "没有可审查的改动。", "dim")
+            return
+        say(f"  ↳ {target.describe()} · {len(inp.files)} files · +{inp.added} −{inp.removed}", "dim")
+        if inp.truncated:
+            say(f"  ↳ too large to review whole; not included: {', '.join(inp.omitted_files)}", "yellow")
+        _print_phase("Reviewing")
+        try:
+            result = await rs.run_review(inp, make_model_call(self.terminal.config), lang=lang)
+        except rs.ReviewError as exc:
+            say(str(exc), "red")
+            return
+        if as_json:
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        elif console:
+            _print_review(console, result, lang)
+        else:
+            print(rs.render_text(result, lang=lang))
+        # The main conversation remembers the review, so "fix finding 2" works.
+        self.terminal.conversation.append({"role": "user", "content": f"/review {args}".strip()})
+        self.terminal.conversation.append({"role": "assistant", "content": rs.history_note(result)})
 
-            findings = CodeReviewAgent.review_source(
-                review_source,
-                filename=review_name,
-                is_diff=review_is_diff,
-            )
-            static_review = CodeReviewAgent.format_findings(findings)
-            if self.context.has_rich:
-                self.context.console.print("[bold]Deterministic Review[/bold]")
-                self.context.console.print(static_review)
-            else:
-                print("Deterministic Review\n" + static_review)
-            prompt = (
-                "以下是只基于提交文本的确定性检查结果。保留有证据的发现，补充语义、"
-                "回归和可测试性审查；不要声称执行过测试或读取过其他文件。\n\n"
-                f"{static_review}\n\n{prompt}"
-            )
-        except Exception as exc:
-            logger.debug("Deterministic review unavailable: %s", exc)
 
-        await self.terminal.send_message(prompt)
+_PRIORITY_STYLE = {0: "bold red", 1: "red", 2: "yellow", 3: "dim"}
+
+
+def _print_review(console, result, lang: str) -> None:
+    from rich.markup import escape
+
+    from aria_code import review_service as rs
+
+    if not result.structured:
+        console.print(escape(rs.render_text(result, lang=lang)))
+        return
+    t = rs._TEXT["zh" if lang == "zh" else "en"]
+    verdict, style = ((t["unknown"], "dim") if result.correct is None else
+                      (t["correct"], "green") if result.correct else (t["incorrect"], "red"))
+    console.print(f"[bold {style}]{verdict}[/bold {style}] [dim]· {t['confidence']} {result.confidence:.2f}[/dim]")
+    if result.explanation:
+        console.print(escape(result.explanation))
+    if not result.findings:
+        console.print(f"[dim]{t['none']}[/dim]")
+    shown_outside = False
+    for number, f in enumerate(result.findings, 1):
+        if not f.in_change and not shown_outside:
+            console.print(f"[dim]— {t['outside']} —[/dim]")
+            shown_outside = True
+        style = _PRIORITY_STYLE.get(f.priority, "dim")
+        console.print(f"\n[{style}]{number}. {escape('[' + f.label + ']')}[/{style}] [bold]{escape(f.title)}[/bold]  "
+                      f"[dim]{escape(f.location)} · {f.confidence:.2f}[/dim]")
+        for line in f.body.splitlines():
+            if line.strip():
+                console.print(f"   {escape(line)}")
+    if result.omitted_files:
+        console.print(f"\n[yellow]{t['omitted']}: {escape(', '.join(result.omitted_files))}[/yellow]")

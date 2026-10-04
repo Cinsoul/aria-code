@@ -380,7 +380,7 @@ async def ai_review_strategy(
 
     full_text = ""
     try:
-        async with aiohttp.ClientSession() as sess:
+        async with aiohttp.ClientSession(trust_env=True) as sess:
             async with sess.post(
                 f"{ollama_url}/api/chat",
                 json={"model": model, "messages": messages, "stream": True,

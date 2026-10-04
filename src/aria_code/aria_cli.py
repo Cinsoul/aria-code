@@ -425,6 +425,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
+# Library internals are not the user's business: on a fresh install the first
+# /ta printed "WARNING:matplotlib.font_manager:Matplotlib is building the font
+# cache; this may take a moment." into the middle of its output.
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 logging.getLogger("curl_cffi").setLevel(logging.CRITICAL)
 
@@ -4331,8 +4335,8 @@ class ArtheraTerminal:
                             "  [dim]隐私：反馈默认[bold]仅存本地[/bold]，不上传。"
                             "opt-in 后可用于改进金融模型 · /privacy 查看与开关 · /bug 报告问题[/dim]"
                             if str(_ui_lang).lower().startswith("zh") else
-                            "  [dim]Privacy: feedback stays [bold]on this machine[/bold] unless you opt in; "
-                            "opted-in feedback may improve Aria's finance model · /privacy · /bug[/dim]"
+                            "  [dim]Feedback stays [bold]on this machine[/bold] unless you opt in to "
+                            "help improve Aria · /privacy · /bug[/dim]"
                         )
         else:
             if _banner_mode != "off":
@@ -6551,7 +6555,7 @@ async def main():
         # describe one product. It used to say "Quantitative Investment
         # Terminal" here while the package metadata had been repositioned;
         # tests/test_first_run_works.py keeps the two in step.
-        description="Aria Code — Open-source AI agent for logistics and finance work: numbers you can check, client data kept apart, actions a person approves",
+        description="Aria Code — Open-source AI agent for coding, financial analysis and logistics operations: numbers you can check, client data kept apart, actions a person approves",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

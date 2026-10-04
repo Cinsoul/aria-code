@@ -13,14 +13,7 @@ from dataclasses import replace
 from typing import AsyncGenerator
 
 from aria_code.apps.cli.deterministic import run_deterministic_chain
-from aria_code.apps.cli.providers.base import (
-    LLMDone,
-    LLMStatus,
-    LLMThinking,
-    LLMToken,
-    LLMToolCall,
-    LLMToolResult,
-)
+from aria_code.apps.cli.providers.base import event_kind
 from aria_code.runtime import (
     AgentEventCancelled,
     AgentEventComplete,
@@ -280,33 +273,33 @@ class AriaSDKClient:
 
         try:
             async for llm_event in provider.stream(messages, [], cancel_event=cancel_event):
-                if isinstance(llm_event, LLMToken):
+                if event_kind(llm_event) == "LLMToken":
                     token_parts.append(llm_event.text)
                     yield AriaMessage(kind="token", role="assistant", content=llm_event.text)
-                elif isinstance(llm_event, LLMThinking):
+                elif event_kind(llm_event) == "LLMThinking":
                     yield AriaMessage(kind="thinking", role="assistant", content=llm_event.content)
-                elif isinstance(llm_event, LLMToolCall):
+                elif event_kind(llm_event) == "LLMToolCall":
                     yield AriaMessage(
                         kind="tool_use",
                         role="assistant",
                         content=llm_event.tool,
                         data={"tool": llm_event.tool, "params": dict(llm_event.params)},
                     )
-                elif isinstance(llm_event, LLMToolResult):
+                elif event_kind(llm_event) == "LLMToolResult":
                     yield AriaMessage(
                         kind="tool_result",
                         role="tool",
                         content=llm_event.summary,
                         data={"tool": llm_event.tool, "summary": llm_event.summary},
                     )
-                elif isinstance(llm_event, LLMStatus):
+                elif event_kind(llm_event) == "LLMStatus":
                     yield AriaMessage(
                         kind="status",
                         role="system",
                         content=llm_event.message,
                         data={"state": llm_event.state},
                     )
-                elif isinstance(llm_event, LLMDone):
+                elif event_kind(llm_event) == "LLMDone":
                     content = llm_event.response or "".join(token_parts)
                     if llm_event.success:
                         self.messages.extend([

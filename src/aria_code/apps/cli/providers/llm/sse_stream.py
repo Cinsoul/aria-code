@@ -120,7 +120,7 @@ async def stream_chat(
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "thinking_tokens": 0}
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(
                     url, json=payload, headers=headers,
                     timeout=aiohttp.ClientTimeout(total=120),

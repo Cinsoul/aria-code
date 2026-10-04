@@ -427,8 +427,11 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
             return ApprovalDecision.deny("Blocked by PreToolUse hook")
 
     # ── Pre-flight for run_command ────────────────────────────────────────────
+    from aria_code.apps.cli.tools.write_tools import _ui_zh
+    zh = _ui_zh()
     if tool_name == "run_command":
         from aria_code.safety import classify_command_risk
+        from aria_code.safety.permissions import is_verification_command
         cmd = params.get("command", "")
         if isinstance(cmd, list):
             import shlex as _shlex_tmp
@@ -440,30 +443,34 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
             # Always block high-risk regardless of user approval
             if _g("HAS_RICH"):
                 _g("console").print(Panel(
-                    f"[red]✗ 高风险命令已拒绝[/red]\n[dim]{cmd[:120]}[/dim]\n"
-                    f"[dim]高风险操作（rm -rf / docker / sudo 等）需要在终端手动执行。[/dim]",
+                    (f"[red]✗ 高风险命令已拒绝[/red]\n[dim]{cmd[:120]}[/dim]\n"
+                     f"[dim]高风险操作（rm -rf / docker / sudo 等）需要在终端手动执行。[/dim]") if zh else
+                    (f"[red]✗ High-risk command refused[/red]\n[dim]{cmd[:120]}[/dim]\n"
+                     f"[dim]Run high-risk operations (rm -rf, docker, sudo…) yourself in a terminal.[/dim]"),
                     border_style="red", box=rich_box.ROUNDED, padding=(0, 1),
                 ))
             else:
-                print(f"  ✗ 高风险命令已拒绝: {cmd[:80]}")
+                print(f"  ✗ {'高风险命令已拒绝' if zh else 'High-risk command refused'}: {cmd[:80]}")
             return ApprovalDecision.deny("high-risk command")
 
-        if risk == "medium" and config_policy == "safe":
+        # Tests and type checks run under `safe` (see evaluate_command_policy);
+        # offering to "upgrade to balanced" for them misstated the policy.
+        if risk == "medium" and config_policy == "safe" and not is_verification_command(cmd):
             # Show a richer picker that includes a "Allow & upgrade policy" option
             if _g("HAS_RICH"):
                 _g("console").print()
                 _g("console").print(Panel(
-                    f"[yellow]⚠ 此命令需要 balanced 策略（当前: safe）[/yellow]\n"
+                    f"[yellow]⚠ {'此命令需要 balanced 策略（当前: safe）' if zh else 'This command needs the balanced policy (current: safe)'}[/yellow]\n"
                     f"[dim]{cmd[:120]}[/dim]",
                     border_style="yellow", box=rich_box.ROUNDED, padding=(0, 1),
                 ))
             _prefix = _command_approval_prefix(cmd)
             _prefix_label = " ".join(_prefix)[:72] if _prefix else cmd[:72]
             options = [
-                ("Allow once", "仅此次允许（不改变策略）"),
-                ("Allow similar this session", f"本会话允许前缀: {_prefix_label}"),
-                ("Allow & set balanced", "允许并升级策略（本会话有效）"),
-                ("No", "拒绝执行"),
+                ("Allow once", "仅此次允许（不改变策略）" if zh else "this time only; the policy stays safe"),
+                ("Allow similar this session", f"{'本会话允许前缀' if zh else 'this session, for'}: {_prefix_label}"),
+                ("Allow & set balanced", "允许并升级策略（本会话有效）" if zh else "and use balanced for this session"),
+                ("No", "拒绝执行" if zh else "do not run it"),
             ]
             choice = _arrow_select(options, selected=0, title="")
             if choice == 0:
@@ -493,20 +500,22 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
         # Header already printed by on_tool_call — just pass through policy
         pass
 
-    _tool_label = {"write_file": "写文件", "edit_file": "编辑文件", "multi_edit": "批量编辑", "run_command": "运行命令"}.get(tool_name, tool_name)
+    _tool_label = ({"write_file": "写文件", "edit_file": "编辑文件", "multi_edit": "批量编辑", "run_command": "运行命令"}
+                   if zh else {"write_file": "file writes", "edit_file": "file edits", "multi_edit": "multi-edits",
+                               "run_command": "commands"}).get(tool_name, tool_name)
     _command_prefix = _command_approval_prefix(params.get("command", "")) if tool_name == "run_command" else ()
     _scope_label = (
         f"Always allow {' '.join(_command_prefix)[:64]}"
         if _command_prefix else f"Always allow {_tool_label}"
     )
     _scope_help = (
-        "本会话内允许相同命令前缀"
-        if _command_prefix else f"本会话内自动允许所有 {_tool_label}"
+        ("本会话内允许相同命令前缀" if zh else "for the rest of this session")
+        if _command_prefix else (f"本会话内自动允许所有 {_tool_label}" if zh else f"all {_tool_label} this session")
     )
     options = [
         ("Yes",                              ""),
         (_scope_label,                       _scope_help),
-        ("Yes, allow all tools",             "本会话内所有工具自动允许"),
+        ("Yes, allow all tools",             "本会话内所有工具自动允许" if zh else "every tool, this session"),
         ("No",                               ""),
     ]
     choice = _arrow_select(options, selected=0, title="")
@@ -576,7 +585,7 @@ async def execute_aria_tool(base_url: str, tool_name: str, params: dict,
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(url, json=payload, headers=headers,
                                         timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
                     result = await resp.json()

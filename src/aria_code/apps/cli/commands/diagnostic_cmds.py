@@ -238,7 +238,7 @@ class DiagnosticCommandsMixin:
                 print(f"  ? {message}")
         for label, url, path in urls:
             try:
-                async with aiohttp.ClientSession() as session:
+                async with aiohttp.ClientSession(trust_env=True) as session:
                     async with session.get(f"{str(url).rstrip('/')}{path}", timeout=aiohttp.ClientTimeout(total=5)) as resp:
                         resp.raise_for_status()
                         data = await resp.json()

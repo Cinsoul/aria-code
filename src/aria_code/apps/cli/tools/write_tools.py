@@ -387,9 +387,13 @@ def _attach_verification_hint(result_data: dict, path, console=None, has_rich: b
     result_data["suggested_verification"] = (
         f"Verification recommended ({plan.reason}): run `{joined}`"
     )
+    try:
+        shown = joined.replace(str(path), str(pathlib.Path(path).relative_to(pathlib.Path(os.getcwd()).resolve())))
+    except ValueError:
+        shown = joined
     if has_rich and console is not None:
         try:
-            console.print(f"  [cyan]✓ 推荐验证命令: {joined}[/cyan]")
+            console.print(f"  [cyan]✓ {'推荐验证命令' if _ui_zh() else 'Suggested check'}: {shown}[/cyan]")
         except Exception:
             pass
 
@@ -452,8 +456,7 @@ def tool_write_file(params: dict) -> dict:
     try:
         raw_path = pathlib.Path(path).expanduser()
         if not raw_path.is_absolute():
-            from aria_code.artifacts import user_generated_dir
-            raw_path = user_generated_dir() / raw_path
+            raw_path = _relative_write_base() / raw_path
         p = raw_path.resolve()
         if not _is_safe(p):
             return {"success": False, "error": f"Access denied: path '{p}' is outside allowed directories"}
@@ -524,6 +527,16 @@ def tool_write_file(params: dict) -> dict:
 
         desktop = pathlib.Path.home() / "Desktop"
         is_on_desktop = str(p).startswith(str(desktop))
+        # In the project the user is working in, a written file is where they
+        # expect it: name it relative to the project, and do not open Finder.
+        # Revealing every .py write popped a Finder window per file in a coding
+        # session; that, and the "saved to" hint, are for files that land
+        # somewhere else (the generated folder).
+        try:
+            in_project = p.is_relative_to(pathlib.Path.cwd().resolve())
+        except (OSError, ValueError):
+            in_project = False
+        shown = str(p.relative_to(pathlib.Path.cwd().resolve())) if in_project else str(p)
 
         import platform as _platform
         import subprocess as _sub
@@ -536,17 +549,18 @@ def tool_write_file(params: dict) -> dict:
             _reveal_hint = f'xdg-open "{p.parent}"'
 
         if has_rich and console:
-            console.print(f"  [dim]{action} [bold]{p}[/bold] ({lines} lines)[/dim]")
-            if not is_on_desktop and p.suffix == ".py":
+            console.print(f"  [dim]{action} [bold]{shown}[/bold] ({lines} lines)[/dim]")
+            if not in_project and not is_on_desktop and p.suffix == ".py":
+                zh = _ui_zh()
                 console.print(
-                    f"  [dim]提示: 文件保存在 [yellow]{p}[/yellow]\n"
-                    f"  打开所在目录: [cyan]{_reveal_hint}[/cyan][/dim]"
+                    f"  [dim]{'提示: 文件保存在' if zh else 'Saved to'} [yellow]{p}[/yellow]\n"
+                    f"  {'打开所在目录' if zh else 'Show in folder'}: [cyan]{_reveal_hint}[/cyan][/dim]"
                 )
         else:
-            print(f"  {action} {p} ({lines} lines)")
+            print(f"  {action} {shown} ({lines} lines)")
 
         # Auto-reveal .py/.ipynb strategy files in file manager (non-blocking)
-        if p.suffix in (".py", ".ipynb"):
+        if p.suffix in (".py", ".ipynb") and not in_project:
             try:
                 if _sys_name == "Darwin":
                     _sub.Popen(["open", "-R", str(p)],
@@ -579,7 +593,8 @@ def tool_write_file(params: dict) -> dict:
             "diff":           applied.diff,
             "staged":         True,
             "applied":        True,
-            "user_message":   f"文件已保存到: {p}  打开所在目录: {_reveal_hint}",
+            "user_message":   (f"文件已保存到: {p}  打开所在目录: {_reveal_hint}" if _ui_zh()
+                               else f"Saved to {p}  ·  show in folder: {_reveal_hint}"),
         }
         try:
             from aria_code.artifacts import register_existing_artifact
@@ -616,6 +631,35 @@ def tool_write_file(params: dict) -> dict:
         return {"success": True, "data": _wdata}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _ui_zh() -> bool:
+    """Whether the user's configured UI language is Chinese (tools get no config)."""
+    try:
+        from aria_code.apps.cli.bootstrap import default_config, runtime_paths
+        from aria_code.apps.cli.config_store import load_cli_config
+
+        return str(load_cli_config(runtime_paths(), default_config()).get("ui_lang", "en")).lower().startswith("zh")
+    except Exception:
+        return False
+
+
+def _relative_write_base() -> pathlib.Path:
+    """Where a relative write_file path lands: the working directory.
+
+    It used to be ~/Documents/Aria Code/generated always, while read_file,
+    edit_file and run_command all work in the current directory — so "write
+    fx.py and run its tests" wrote the file in one place and ran the tests in
+    another, and edit_file could not find what write_file had just made.
+    Only a session started in the home directory or at the filesystem root
+    keeps the generated folder, so chatting from ~ does not scatter files.
+    """
+    from aria_code.artifacts import user_generated_dir
+
+    cwd = pathlib.Path.cwd().resolve()
+    if cwd in (pathlib.Path.home().resolve(), pathlib.Path(cwd.anchor)):
+        return user_generated_dir()
+    return cwd
 
 
 def tool_edit_file(params: dict) -> dict:

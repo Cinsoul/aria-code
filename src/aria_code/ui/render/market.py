@@ -105,16 +105,33 @@ def _rsi_color(value: Any) -> str:
     return "white"
 
 
-def _rsi_label(value: Any) -> str:
+TA_LABELS = {
+    "zh": {"title": "技术指标", "days": "{days}日数据", "price": "当前价格", "plain_price": "价格",
+           "neutral": "中性", "overbought": "超买", "oversold": "超卖",
+           "macd_up": "金叉", "macd_down": "死叉",
+           "bollinger": "布林带   上:{upper}  中:{mid}  下:{lower}  位置:{pos}"},
+    "en": {"title": "technical indicators", "days": "{days} days", "price": "Price", "plain_price": "Price",
+           "neutral": "neutral", "overbought": "overbought", "oversold": "oversold",
+           "macd_up": "above signal", "macd_down": "below signal",
+           "bollinger": "Bollinger  upper:{upper}  mid:{mid}  lower:{lower}  position:{pos}"},
+}
+
+
+def _ta_text(lang: str) -> dict:
+    return TA_LABELS["zh" if str(lang).lower().startswith("zh") else "en"]
+
+
+def _rsi_label(value: Any, lang: str = "zh") -> str:
+    text = _ta_text(lang)
     try:
         numeric = float(value)
     except (TypeError, ValueError):
-        return "中性"
+        return text["neutral"]
     if numeric > 70:
-        return "超买"
+        return text["overbought"]
     if numeric < 30:
-        return "超卖"
-    return "中性"
+        return text["oversold"]
+    return text["neutral"]
 
 
 def _macd_color(value: Any) -> str:
@@ -125,12 +142,13 @@ def _macd_color(value: Any) -> str:
     return "green" if numeric > 0 else "red"
 
 
-def _macd_label(value: Any) -> str:
+def _macd_label(value: Any, lang: str = "zh") -> str:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
         return ""
-    return "金叉" if numeric > 0 else "死叉"
+    text = _ta_text(lang)
+    return text["macd_up"] if numeric > 0 else text["macd_down"]
 
 
 def _quality_line(service_result: Any) -> str:
@@ -144,13 +162,15 @@ def _quality_line(service_result: Any) -> str:
     )
 
 
-def render_ta_plain(symbol: str, days: int, service_result: Any, formatter: ValueFormatter) -> str:
+def render_ta_plain(symbol: str, days: int, service_result: Any, formatter: ValueFormatter,
+                    lang: str = "zh") -> str:
     data = getattr(service_result, "data", {}) or {}
+    text = _ta_text(lang)
     lines = [
-        f"{symbol} 技术指标",
+        f"{symbol} {text['title']}",
         _quality_line(service_result),
         (
-            f"价格: {formatter(data.get('price'))}  "
+            f"{text['plain_price']}: {formatter(data.get('price'))}  "
             f"RSI: {formatter(data.get('rsi'))}  "
             f"MACD_hist: {formatter(data.get('macd_hist'), digits=4)}"
         ),
@@ -174,29 +194,31 @@ def print_ta_result(
     service_result: Any,
     formatter: ValueFormatter,
     ma_names: Iterable[str] = ("ma5", "ma10", "ma20", "ma60", "ma120"),
+    lang: str = "zh",
 ) -> None:
     """Render a technical-analysis service result to the active terminal."""
 
     data = getattr(service_result, "data", {}) or {}
     if not has_rich:
-        print(render_ta_plain(symbol, days, service_result, formatter))
+        print(render_ta_plain(symbol, days, service_result, formatter, lang=lang))
         return
 
+    text = _ta_text(lang)
     providers = " → ".join(getattr(service_result, "provider_chain", []) or [])
     console.print()
     console.print(
-        f"  [bold]{symbol}[/bold] 技术指标  "
-        f"[dim]{days}日数据  provider:{providers or data.get('provider', '')}[/dim]"
+        f"  [bold]{symbol}[/bold] {text['title']}  "
+        f"[dim]{text['days'].format(days=days)}  provider:{providers or data.get('provider', '')}[/dim]"
     )
     if getattr(service_result, "quality", None):
         console.print(f"  [dim]{_quality_line(service_result)}[/dim]")
     console.print()
-    console.print(f"  当前价格  [bold]{formatter(data.get('price'))}[/bold]")
+    console.print(f"  {text['price']:<8} [bold]{formatter(data.get('price'))}[/bold]")
 
     rsi = data.get("rsi")
     rsi_color = _rsi_color(rsi)
     console.print(
-        f"  RSI(14)  [{rsi_color}]{formatter(rsi)}[/{rsi_color}]  {_rsi_label(rsi)}"
+        f"  RSI(14)  [{rsi_color}]{formatter(rsi)}[/{rsi_color}]  {_rsi_label(rsi, lang)}"
     )
 
     macd_hist = data.get("macd_hist")
@@ -206,16 +228,14 @@ def print_ta_result(
             f"  MACD     {formatter(data.get('macd'), digits=4)}  "
             f"Signal:{formatter(data.get('macd_signal'), digits=4)}  "
             f"[{macd_color}]Hist:{formatter(macd_hist, digits=4)}  "
-            f"{_macd_label(macd_hist)}[/{macd_color}]"
+            f"{_macd_label(macd_hist, lang)}[/{macd_color}]"
         )
 
     bb_pos = data.get("bb_position", 0.5)
     if any(data.get(key) is not None for key in ("bb_upper", "bb_mid", "bb_lower")):
-        console.print(
-            f"  布林带   上:{formatter(data.get('bb_upper'))}  "
-            f"中:{formatter(data.get('bb_mid'))}  下:{formatter(data.get('bb_lower'))}  "
-            f"位置:{formatter(bb_pos)}"
-        )
+        console.print("  " + text["bollinger"].format(
+            upper=formatter(data.get("bb_upper")), mid=formatter(data.get("bb_mid")),
+            lower=formatter(data.get("bb_lower")), pos=formatter(bb_pos)))
 
     console.print()
     for name in ma_names:

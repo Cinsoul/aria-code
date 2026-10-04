@@ -21,29 +21,38 @@ class RobotBannerTests(unittest.TestCase):
         set_robot_state(RobotState.IDLE)
         robot._theme_cache = None
 
-    def test_robot_preserves_reference_proportions_and_transparent_outline(self):
-        rows = robot._art_rows(28)
-        self.assertEqual(len(rows), 13)
-        self.assertTrue(all(sum(len(text) for _, text in row) == 28 for row in rows))
-        self.assertEqual(rows[0][0][0], "")
-        # Black screen, cream shell and amber details come from RGB pixels.
-        from rich.style import Style
-        colours = [Style.parse(style).color.triplet for row in rows for style, _ in row if style]
-        self.assertTrue(any(max(rgb) < 30 for rgb in colours))
-        self.assertTrue(any(min(rgb) > 210 for rgb in colours))
-        self.assertTrue(any(rgb[0] > 200 and 110 < rgb[1] < 205 and rgb[2] < 130 for rgb in colours))
+    def test_robot_is_the_artwork_in_quadrant_pixels(self):
+        """4 rows × 9 columns, like Claude Code's mascot: cap corners, square eye,
+        2:1 dash, ear nubs, base and four feet — no image, no blended colours."""
+        rows = ["".join(text for _, text in get_robot_row(2, row)) for row in range(ROBOT_ROW_COUNT)]
 
-    def test_robot_does_not_recolour_the_supplied_artwork(self):
+        self.assertEqual(rows, [
+            "▗▛▀▀▀▀▀▜▖",
+            "▌▌▗▖ ▂ ▐▐",
+            "▐▙▄▄▄▄▄▟▌",
+            "▝▀▀▀▀▀▀▀▘",
+        ])
+
+    def test_robot_uses_the_artworks_colours(self):
+        styles = [style for row in range(ROBOT_ROW_COUNT) for style, _ in get_robot_row(2, row)]
+
+        self.assertIn("#F3EEE9 on #0B0A09", styles)   # cream shell around the black screen
+        self.assertIn("#F1EDE9 on #0B0A09", styles)   # square eye
+        self.assertIn("#EDBC7F on #0B0A09", styles)   # orange dash
+        self.assertIn("#989088 on #F3EEE9", styles)   # grey ear nub on the shell
+        self.assertIn("#CDAD8F on #B4AEA6", styles)   # tan base over a grey foot
+
+    def test_robot_palette_follows_theme(self):
         robot._theme_cache = "light"
-        light = [get_robot_row(2, row) for row in range(ROBOT_ROW_COUNT)]
+        light = [s for row in range(ROBOT_ROW_COUNT) for s, _ in get_robot_row(2, row)]
         robot._theme_cache = "dark"
-        dark = [get_robot_row(2, row) for row in range(ROBOT_ROW_COUNT)]
-        self.assertEqual(light, dark)
+        dark = [s for row in range(ROBOT_ROW_COUNT) for s, _ in get_robot_row(2, row)]
 
-    def test_compact_robot_keeps_the_original_aspect_ratio(self):
-        rows = robot._art_rows(20)
-        self.assertEqual(len(rows), 9)
-        self.assertTrue(all(sum(len(text) for _, text in row) == 20 for row in rows))
+        self.assertNotEqual(light, dark)
+        # Only the shell is deepened on a light terminal, where the artwork's
+        # cream would vanish; the screen and the orange dash stay as drawn.
+        self.assertIn("#E6DDD0 on #0B0A09", light)
+        self.assertIn("#EDBC7F on #0B0A09", light)
 
     def test_idle_status_dot_does_not_blink_to_dim_dot(self):
         set_robot_state(RobotState.IDLE)
@@ -52,7 +61,7 @@ class RobotBannerTests(unittest.TestCase):
 
         self.assertEqual(text, "•")
 
-    def test_full_banner_uses_pixel_robot_and_runtime_dashboard(self):
+    def test_full_banner_is_the_robot_and_four_lines(self):
         console = Console(file=io.StringIO(), record=True, width=120, force_terminal=False)
 
         render_full_banner(
@@ -70,14 +79,14 @@ class RobotBannerTests(unittest.TestCase):
             lang="en",
         )
 
-        rendered = console.export_text()
-        self.assertIn("~/Desktop/aria-code", rendered)
-        self.assertIn("71 tools", rendered)
-        self.assertIn("Quick start", rendered)
-        self.assertIn("workspace-write", rendered)
-        self.assertNotIn("┌──┐", rendered)
-        self.assertNotIn("╔══════════════╗", rendered)
-        self.assertIn("╭", rendered)
+        lines = console.export_text().rstrip("\n").splitlines()
+        self.assertEqual(lines[0].split()[1:4], ["Aria", "Code", "v4.1.0"])
+        self.assertIn("~/Desktop/aria-code", lines[2])
+        self.assertIn("71 tools", lines[3])
+        self.assertIn("workspace-write", lines[3])
+        self.assertIn("Describe the task naturally", lines[4])   # first-run note, under the robot
+        self.assertEqual(len(lines), 5)
+        self.assertFalse(any(ch in "".join(lines) for ch in "╭╰│"), "no frame")
 
 
 if __name__ == "__main__":

@@ -5,15 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Callable
 
-from aria_code.apps.cli.providers.base import (
-    LLMDone,
-    LLMProvider,
-    LLMStatus,
-    LLMThinking,
-    LLMToken,
-    LLMToolCall,
-    LLMToolResult,
-)
+from aria_code.apps.cli.providers.base import LLMDone, LLMProvider, event_kind
 
 
 async def stream_provider_result(
@@ -37,25 +29,25 @@ async def stream_provider_result(
     final = LLMDone(response="", provider="unknown", success=True)
 
     async for event in provider.stream(messages, list(tools or []), cancel_event=cancel_event):
-        if isinstance(event, LLMToken):
+        if event_kind(event) == "LLMToken":
             response_parts.append(event.text)
             if on_token:
                 on_token(event.text)
-        elif isinstance(event, LLMThinking):
+        elif event_kind(event) == "LLMThinking":
             if on_thinking:
                 on_thinking(event.content)
-        elif isinstance(event, LLMToolCall):
+        elif event_kind(event) == "LLMToolCall":
             call = {"tool": event.tool, "params": dict(event.params)}
             tool_calls.append(call)
             if on_tool_call:
                 on_tool_call(event.tool, dict(event.params))
-        elif isinstance(event, LLMToolResult):
+        elif event_kind(event) == "LLMToolResult":
             if on_tool_result:
                 on_tool_result(event.tool, event.summary)
-        elif isinstance(event, LLMStatus):
+        elif event_kind(event) == "LLMStatus":
             if on_status:
                 on_status(event.state, event.message)
-        elif isinstance(event, LLMDone):
+        elif event_kind(event) == "LLMDone":
             final = event
 
     response = final.response or "".join(response_parts)

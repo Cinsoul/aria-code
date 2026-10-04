@@ -1,13 +1,19 @@
-"""Aria robot mascot — animated terminal character.
+"""Aria robot mascot — the terminal rendition of the robot artwork.
 
-States
-------
-  The mascot stays visually stable at startup. Runtime state is shown by the
-  compact status dot so the banner keeps the same low-noise feel as Claude Code.
+Drawn the way Claude Code draws its mascot: a few flat colours and Unicode
+quadrant blocks (▗▖▘▝▛▜▙▟), each character cell holding 2×2 sub-pixels. That
+keeps the robot small (4 rows × 9 columns, beside four lines of text) and its
+edges exact in any terminal and font, with no image and no blending.
 
-The canonical artwork is ``assets/aria-robot.png``. Its sampled RGB pixels
-are rendered as paired half blocks with transparent space around the original
-silhouette. The mascot does not change colour with the terminal theme.
+The grid is the artwork's own: 18 units wide × 16 tall (ear, body, ear; cap,
+screen, base, feet), each unit one sub-pixel across and half a sub-pixel down
+— which, with terminal cells twice as tall as wide, keeps the units square.
+The eye is two quadrants (a square), the dash a lower-quarter block (2:1),
+the cap corners ▛ ▜, the ears ▌ ▐, the four feet ▀. Colours are sampled from
+the artwork; only the body is deepened on light terminals, where the
+artwork's cream would vanish against a white background.
+
+Runtime state is shown by the compact status dot, not by the mascot.
 """
 
 from __future__ import annotations
@@ -16,9 +22,6 @@ import os
 import sys
 import threading
 import time
-import base64
-import zlib
-from functools import lru_cache
 from enum import Enum
 
 
@@ -80,6 +83,47 @@ _STATUS = {
     RobotState.DONE:      "done",
 }
 
+# ── Theme-aware palette ───────────────────────────────────────────────────────
+# Colours sampled from the robot artwork. Roles name what a cell shows; each
+# resolves to a Rich style ("<fg> on <bg>").
+_COLOURS = {
+    "dark": {
+        "body":   "#F3EEE9",   # cream shell
+        "screen": "#0B0A09",   # black screen
+        "eye":    "#F1EDE9",   # square eye
+        "dash":   "#EDBC7F",   # orange dash
+        "ear":    "#989088",   # grey ear nub
+        "base":   "#CDAD8F",   # tan underside with the orange seam
+        "leg":    "#B4AEA6",   # grey feet
+    },
+    "light": {
+        "body":   "#E6DDD0",   # deeper cream: the artwork's would vanish on white
+        "screen": "#0B0A09",
+        "eye":    "#F6F2EA",
+        "dash":   "#EDBC7F",
+        "ear":    "#8C847B",
+        "base":   "#C9A57F",
+        "leg":    "#A39C93",
+    },
+}
+
+
+def _palette(theme: str) -> dict:
+    c = _COLOURS[theme]
+    return {
+        "body":        c["body"],
+        "body_screen": f"{c['body']} on {c['screen']}",
+        "eye":         f"{c['eye']} on {c['screen']}",
+        "screen":      f"on {c['screen']}",
+        "dash":        f"{c['dash']} on {c['screen']}",
+        "ear_body":    f"{c['ear']} on {c['body']}",
+        "base":        c["base"],
+        "base_leg":    f"{c['base']} on {c['leg']}",
+    }
+
+
+_PALETTES = {theme: _palette(theme) for theme in _COLOURS}
+
 _theme_cache: str | None = None
 
 
@@ -121,38 +165,17 @@ def detect_theme() -> str:
     return _theme_cache
 
 
-ROBOT_COLUMN_COUNT = 28
-ROBOT_ROW_COUNT = 13
+# 9 columns × 4 rows; each cell is (palette-role, glyphs).
+_MASCOT_TEMPLATE = [
+    [("body", "▗"), ("body_screen", "▛▀▀▀▀▀▜"), ("body", "▖")],                       # cap, screen top
+    [("ear_body", "▌"), ("body_screen", "▌"), ("eye", "▗▖"), ("screen", " "),          # ears, eye, dash
+     ("dash", "▂"), ("screen", " "), ("body_screen", "▐"), ("ear_body", "▐")],
+    [("body", "▐"), ("body_screen", "▙▄▄▄▄▄▟"), ("body", "▌")],                       # screen bottom, body
+    [("base", "▝"), ("base_leg", "▀"), ("base", "▀"), ("base_leg", "▀"), ("base", "▀"),  # base and four feet
+     ("base_leg", "▀"), ("base", "▀"), ("base_leg", "▀"), ("base", "▘")],
+]
 
-
-@lru_cache(maxsize=2)
-def _art_rows(columns: int) -> tuple:
-    from .robot_pixels import PIXELS
-
-    height, encoded = PIXELS[columns]
-    pixels = memoryview(zlib.decompress(base64.b85decode(encoded)))
-    rows = []
-    for y in range(0, height, 2):
-        fragments = []
-        for x in range(columns):
-            top = pixels[(y * columns + x) * 4:(y * columns + x) * 4 + 4]
-            bottom = pixels[((y + 1) * columns + x) * 4:((y + 1) * columns + x) * 4 + 4]
-            tc = "#%02x%02x%02x" % tuple(top[:3])
-            bc = "#%02x%02x%02x" % tuple(bottom[:3])
-            if top[3] and bottom[3]:
-                style, glyph = f"{tc} on {bc}", "▀"
-            elif top[3]:
-                style, glyph = tc, "▀"
-            elif bottom[3]:
-                style, glyph = bc, "▄"
-            else:
-                style, glyph = "", " "
-            if fragments and fragments[-1][0] == style:
-                fragments[-1] = (style, fragments[-1][1] + glyph)
-            else:
-                fragments.append((style, glyph))
-        rows.append(tuple(fragments))
-    return tuple(rows)
+ROBOT_ROW_COUNT = len(_MASCOT_TEMPLATE)
 
 
 def _resolve_eyes(state: RobotState, tick: int) -> tuple[str, str]:
@@ -168,15 +191,16 @@ def _resolve_eyes(state: RobotState, tick: int) -> tuple[str, str]:
     return el, er
 
 
-def get_robot_row(tick: int, row: int, columns: int = ROBOT_COLUMN_COUNT) -> list:
-    """Return one row of the original artwork as true-colour half blocks.
+def get_robot_row(tick: int, row: int) -> list:
+    """Return (style, text) fragments for one robot row, themed.
 
-    Rows: cap, shell top, recessed screen, eyes and ears, screen bottom,
-    shell bottom, copper base, four feet. Colours stay faithful to the reference
-    on both light and dark terminals.
+    Rows: cap and screen top; ears, eye and dash; screen bottom and body;
+    base and four feet. Roles follow the active light/dark theme
+    (see detect_theme()).
     """
     del tick
-    return list(_art_rows(columns)[row])
+    pal = _PALETTES[detect_theme()]
+    return [(pal[key] if key else "", text) for key, text in _MASCOT_TEMPLATE[row]]
 
 
 def get_robot_frame(tick: int) -> list:

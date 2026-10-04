@@ -114,7 +114,7 @@ class AnthropicProvider(BaseLLMProvider):
         proxy = (os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
                  or os.getenv("HTTP_PROXY")  or os.getenv("http_proxy"))
         try:
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(
                     _ANTHROPIC_API_URL, json=payload, headers=headers,
                     proxy=proxy,

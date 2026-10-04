@@ -7,12 +7,36 @@ intents that other layers can reuse.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable
 
 
+@lru_cache(maxsize=None)
+def _keyword_pattern(keyword: str) -> re.Pattern:
+    """English keywords match whole words (plurals and -ing/-ed included).
+
+    Plain substring matching made "ci" match deCImal and finanCIal, "eth"
+    match mETHod and togETHer, "rsi" match peRSIst and "word" match passWORD,
+    so a request to write Decimal code was routed as a GitHub task and held
+    up by a demand to install the gh CLI. Chinese keywords keep substring
+    matching: Chinese has no spaces to bound a word.
+    """
+    word = keyword.strip()
+    left = r"(?<![a-z0-9])" if word[:1].isascii() and word[:1].isalnum() else ""
+    right = r"(?:s|es|ing|ed)?(?![a-z0-9])" if word[-1:].isascii() and word[-1:].isalnum() else ""
+    return re.compile(left + re.escape(word) + right)
+
+
 def _contains_any(text: str, keywords: Iterable[str]) -> bool:
-    return any(keyword in text for keyword in keywords)
+    for keyword in keywords:
+        if keyword.strip() and keyword.strip().isascii():
+            if _keyword_pattern(keyword).search(text):
+                return True
+        elif keyword in text:
+            return True
+    return False
 
 
 def _first_token(text: str) -> str:
@@ -103,7 +127,9 @@ def detect_intents(message: str) -> tuple[str, ...]:
         _add_unique(intents, "browser")
     if _contains_any(low, ("pdf", "docx", "word", "excel", "xlsx", "csv", "文件分析", "上传文件")):
         _add_unique(intents, "file_analysis")
-    if _contains_any(low, ("github", "pull request", "pr ", "issue", "ci")):
+    # A bare "issue" is ordinary English ("any issue with this?"); only a
+    # numbered one ("issue #12") points at GitHub.
+    if _contains_any(low, ("github", "pull request", "pr", "ci", "gh")) or re.search(r"\bissues?\s*#\d+", low):
         _add_unique(intents, "github")
     if _contains_any(low, ("mcp", "server", "tools", "skills")):
         _add_unique(intents, "mcp")

@@ -1094,7 +1094,7 @@ async def stream_ollama(ollama_url: str, message: str, history: list,
         _buffered_tokens: list[str] = []
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(url, json=payload,
                                         timeout=aiohttp.ClientTimeout(total=300)) as resp:
                     if resp.status != 200:
@@ -1284,7 +1284,8 @@ async def stream_ollama(ollama_url: str, message: str, history: list,
                     ),
                 })
                 if HAS_RICH:
-                    console.print("\n  [dim]继续输出未完成内容…[/dim]\n")
+                    from aria_code.apps.cli.tools.write_tools import _ui_zh
+                    console.print(f"\n  [dim]{'继续输出未完成内容…' if _ui_zh() else 'Continuing where the answer was cut off…'}[/dim]\n")
                 continue
 
             # Detect "intent without action" — model says it will do something

@@ -89,7 +89,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                  or os.getenv("HTTP_PROXY")  or os.getenv("http_proxy"))
 
         try:
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(
                     url, json=payload, headers=headers,
                     proxy=proxy,

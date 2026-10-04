@@ -61,7 +61,7 @@ class BusinessWorkflowCommandsMixin:
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.get(
                     f"{api_url}/api/realty/assets/{asset_id}",
                     timeout=aiohttp.ClientTimeout(total=5)
@@ -128,7 +128,7 @@ class BusinessWorkflowCommandsMixin:
         rules = {}
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.get(f"{api_url}/api/realty/contracts/{project_id}",
                                     timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     if resp.status == 200:
@@ -153,7 +153,7 @@ class BusinessWorkflowCommandsMixin:
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.get(
                     f"{api_url}/api/realty/risks/scan/{project_id}",
                     timeout=aiohttp.ClientTimeout(total=10)
@@ -174,7 +174,7 @@ class BusinessWorkflowCommandsMixin:
         marketing_data = {}
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.get(
                     f"{api_url}/api/realty/assets/{project_id}",
                     timeout=aiohttp.ClientTimeout(total=5)
@@ -224,7 +224,7 @@ class BusinessWorkflowCommandsMixin:
                       "prepayment_received": 0, "renovation_cost": 0}
         try:
             import aiohttp
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.get(
                     f"{api_url}/api/realty/contracts/{project_id}",
                     timeout=aiohttp.ClientTimeout(total=5)

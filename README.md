@@ -7,7 +7,7 @@
 
 <h1 align="center">Aria Code</h1>
 
-<p align="center">An open-source AI agent for logistics and finance work.<br>
+<p align="center">An open-source AI agent for coding, financial analysis and logistics operations.<br>
 Numbers you can check, client data kept apart, actions a person approves.</p>
 
 <p align="center"><a href="README_CN.md">简体中文</a> · English</p>
@@ -19,20 +19,33 @@ Numbers you can check, client data kept apart, actions a person approves.</p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
-<p align="center"><img src="docs/assets/demo-logistics.gif" alt="Real Aria Code terminal recording: reorder points for one shipper, a refusal to mix two shippers' data, and a carrier scorecard with a saving and two anomalies" width="860"></p>
-<p align="center"><sub>Recorded from a real Aria Code session on the sample 3PL data in <code>evals/fixtures</code>. No model is called, so every number on screen comes from the tools; pauses are shortened. <a href="docs/assets/demo-logistics.png">Still screenshot</a> · <a href="scripts/record_logistics_demo.py">Recorder</a> · <a href="scripts/render_logistics_demo.py">Renderer</a>.</sub></p>
+<p align="center"><img src="docs/assets/demo-coding.gif" alt="Real Aria Code session: Gemini 2.5 Pro writes fx.py and its tests, runs them after each step is approved, then /review checks the change" width="860"></p>
+<p align="center"><sub>A real session on Gemini 2.5 Pro (Vertex AI): Aria writes <code>fx.py</code> and its tests, runs them once each step is approved, then <code>/review</code> checks the change and gives its verdict. Waiting is shortened; nothing else is changed. <a href="docs/assets/demo-coding.png">Still</a> · <a href="scripts/record_demo.py">Recorder</a> · <a href="scripts/render_demo.py">Renderer</a></sub></p>
 
 ## What Aria Code does
 
-A general-purpose assistant aims for an answer that reads well. In logistics and finance the number gets acted on — one purchase order left out of a reorder quantity and the stock is bought twice. Aria Code is built around three things that follow from that.
+**Writes code and builds projects.** Describe the task in plain words. Aria reads the project, writes and edits files, runs commands and tests, and shows every change before it lands — nothing is written or run until you say yes. [`/review`](docs/code-review.md) reviews a change the way a careful colleague would: prioritised findings (P0–P3) with file and line, and a verdict; `aria-code review --base main --fail-on P1` gates a pull request in CI. Use a local Ollama model, Gemini on Google Cloud (Vertex AI, with nothing more than a `gcloud` login), or another supported provider.
 
-**Numbers you can check.** Reorder points, safety stock and carrier rankings come from stated formulas, with the formula and every assumption in the result — as does stablecoin settlement reconciliation, from the [Artheras skills](https://github.com/artheras/skills) Aria Code can install. When the data cannot support an answer — under 14 days of demand history, rows that name no shipper — it says so instead of estimating. The [`operations` eval suite](docs/verifiable-evals.md) checks exactly these traps.
+**Analyses markets and finances.** Quotes, technical indicators, backtests with an HTML report, risk and factor analysis, SEC filings, and US, Hong Kong, A-share and crypto data. Results name their data source, period and any gaps.
+
+<p align="center"><img src="docs/assets/demo-finance.gif" alt="Real Aria Code session: technical indicators for AAPL and a one-year momentum backtest on SPY, with data source, period and completeness stated" width="760"></p>
+
+**Runs logistics operations.** For third-party logistics: reorder points, safety stock, ABC/XYZ classes, dead stock, carrier scorecards and freight anomalies — and in Feishu, a daily digest per shipper with approval cards.
+
+<p align="center"><img src="docs/assets/demo-logistics.gif" alt="Real Aria Code session: a refusal to mix two shippers' data, reorder points for one shipper, and a carrier scorecard with a saving and two anomalies" width="760"></p>
+<p align="center"><sub>Both recorded from real sessions — market data from yfinance; the logistics data is the sample 3PL in <code>evals/fixtures</code>, with no model call.</sub></p>
+
+## How it works
+
+A general-purpose assistant aims for an answer that reads well. In code, markets and warehouses the result gets acted on — a rounding rule in a currency function, one purchase order left out of a reorder quantity. Three rules follow from that.
+
+**Numbers you can check.** Reorder points, safety stock, carrier rankings and backtests come from stated formulas and named data, with the formula and every assumption in the result — as does stablecoin settlement reconciliation, from the [Artheras skills](https://github.com/artheras/skills) Aria Code can install. When the data cannot support an answer — under 14 days of demand history, rows that name no shipper — it says so instead of estimating. The [`operations` eval suite](docs/verifiable-evals.md) checks exactly these traps.
 
 **Client data kept apart.** A third-party logistics provider holds many clients' stock side by side. A chat group bound to one shipper confines every analysis to that shipper, and the logistics tools themselves refuse another shipper's data or an unattributable file — the rule holds below the prompt, whatever the model asks for.
 
-**Actions a person approves.** In Feishu, each shipper's group gets a daily digest of reorders, dead stock and freight anomalies. `/补货` turns the reorder list into a purchase-order draft card; nothing happens until an authorised approver presses approve, and what runs is exactly what was shown. The draft is a file for your own purchasing system — Aria Code places no orders.
+**Actions a person approves.** In the terminal, every file write and command waits for your yes, with the diff in front of you. In Feishu, `/补货` turns the reorder list into a purchase-order draft card; nothing happens until an authorised approver presses approve, and what runs is exactly what was shown. The draft is a file for your own purchasing system — Aria Code places no orders.
 
-Underneath is a terminal coding agent: it inspects project files, applies edits, runs commands and tests, and explains the changes ([recording](docs/assets/demo-coding-workflow.gif)), with a local Ollama model or a supported cloud provider. A fresh install has no live business data; the logistics tools read your exports (CSV or JSON), and the chat features need a Feishu app or the Aria relay.
+A fresh install has no live business data: the logistics tools read your exports (CSV or JSON), market data comes from public sources, and the chat features need a Feishu app or the Aria relay.
 
 ## Quick start
 
@@ -88,7 +101,7 @@ Aria may request approval before editing files or running commands, according to
 | --- | --- |
 | Local Ollama | An installed and running Ollama model; no cloud account for local inference. |
 | Direct cloud provider | That provider's API credentials and network access. |
-| Direct Google Cloud Vertex AI | `aria-code[google]`, Google Cloud Application Default Credentials, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_LOCATION`. |
+| Direct Google Cloud Vertex AI | `GOOGLE_CLOUD_PROJECT` and either a `gcloud auth login` (Aria uses Vertex AI's OpenAI-compatible endpoint with that login's token) or Application Default Credentials with `aria-code[google]`. `GOOGLE_CLOUD_LOCATION` defaults to `global`. |
 | Arthera hosted service | Install `aria-code[google]` and sign in through `/login` in the CLI. Arthera account sign-in does not grant Vertex AI credentials to your own machine. |
 
 Install extras only for features you use; see [pyproject.toml](pyproject.toml) for the current package options. Local inference can work offline, but live market data, remote integrations, sign-in, and cloud models cannot.

@@ -85,8 +85,15 @@ def is_verification_command(command: str) -> bool:
         "python3 -m pytest",
         "python -m pytest",
         "pytest",
+        # The standard library's runner. Missing here, so `safe` blocked the
+        # plainest way to test a Python project and the agent reported "blocked
+        # by a security policy" instead of a test result.
+        "python3 -m unittest",
+        "python -m unittest",
         "npm test",
         "npm run test",
+        "yarn test",
+        "pnpm test",
         "npm run build",
         "npx tsc --noemit",
         "npx tsc --noEmit".lower(),

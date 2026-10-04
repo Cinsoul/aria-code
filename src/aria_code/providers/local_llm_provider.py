@@ -26,12 +26,16 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import re
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model resolution helpers
@@ -103,7 +107,7 @@ async def resolve_model_async(base_url: str, requested: str) -> str:
     tags_url = base_url.rstrip("/") + "/api/tags"
     try:
         if _HAS_AIOHTTP:
-            async with aiohttp.ClientSession() as s:
+            async with aiohttp.ClientSession(trust_env=True) as s:
                 async with s.get(tags_url, timeout=aiohttp.ClientTimeout(total=3)) as r:
                     data = await r.json()
         else:
@@ -345,7 +349,11 @@ class LocalLLMProvider:
         cap      = self.capability
 
         temp  = temperature if temperature is not None else cap.temperature
-        mtoks = max_tokens  if max_tokens  is not None else 4096
+        # Gemini 2.5 counts its thinking against the output cap, so 4096 left a
+        # long answer — a structured review, a whole file — cut off mid-JSON.
+        # Gemini allows 65k; other backends keep 4096 (DeepSeek, for one,
+        # rejects anything above 8192).
+        mtoks = max_tokens if max_tokens is not None else (32768 if "gemini" in self.model.lower() else 4096)
 
         # Inject tool system prompt for text-only models
         if tools and not cap.tool_calls:
@@ -396,7 +404,7 @@ class LocalLLMProvider:
         full_text = ""
 
         try:
-            async with aiohttp.ClientSession() as sess:
+            async with aiohttp.ClientSession(trust_env=True) as sess:
                 async with sess.post(url, json=payload,
                                      timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                     if resp.status != 200:
@@ -447,7 +455,7 @@ class LocalLLMProvider:
                                 yield {"type": "token", "text": token}
 
         except Exception as exc:
-            yield {"type": "error", "message": f"Ollama stream error: {exc}"}
+            yield {"type": "error", "message": f"Ollama stream error: {exc or type(exc).__name__}"}
             return
 
         # Fallback: parse text-based tool calls
@@ -460,14 +468,52 @@ class LocalLLMProvider:
 
     # ── OpenAI-compatible protocol ─────────────────────────────────────────
 
+    RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+    MAX_ATTEMPTS = 5
+
     async def _stream_openai(self, url, messages, tools, temp, max_tokens, cap, cancel_event):
+        """One OpenAI-compatible turn, retried on rate limits and dropped connections.
+
+        A 429 ("Resource exhausted" on Vertex AI) or a dropped connection
+        ended the whole agent turn at once, though both usually clear in
+        seconds. Retries back off exponentially (honouring Retry-After) and
+        happen only before anything reached the caller, so no token or tool
+        call is ever delivered twice.
+        """
+        import random
+
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            delivered = False
+            retry: Optional[Dict[str, Any]] = None
+            attempt_stream = self._stream_openai_once(url, messages, tools, temp, max_tokens, cap, cancel_event)
+            try:
+                async for event in attempt_stream:
+                    if (event.get("type") == "error" and event.get("transient") and not delivered
+                            and attempt < self.MAX_ATTEMPTS):
+                        retry = event
+                        break
+                    if event.get("type") in ("token", "thinking", "tool_call"):
+                        delivered = True
+                    yield event
+            finally:
+                await attempt_stream.aclose()
+            if retry is None or (cancel_event and cancel_event.is_set()):
+                return
+            delay = retry.get("retry_after") or min(30.0, 2.0 ** attempt) * (1 + random.random() * 0.25)
+            logger.info("OpenAI-compatible request failed (%s); retry %d in %.1fs",
+                        retry.get("message", "")[:80], attempt, delay)
+            await asyncio.sleep(delay)
+
+    async def _stream_openai_once(self, url, messages, tools, temp, max_tokens, cap, cancel_event):
         headers: Dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        from aria_code.providers.tool_messages import to_openai_tool_protocol
+
         payload: Dict[str, Any] = {
             "model":       self.model,
-            "messages":    messages,
+            "messages":    to_openai_tool_protocol(messages),
             "stream":      True,
             "temperature": temp,
             "max_tokens":  max_tokens,
@@ -481,12 +527,17 @@ class LocalLLMProvider:
         tool_call_accumulator: Dict[int, Dict] = {}   # index → partial call
 
         try:
-            async with aiohttp.ClientSession(headers=headers) as sess:
+            async with aiohttp.ClientSession(trust_env=True, headers=headers) as sess:
                 async with sess.post(url, json=payload,
                                      timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                     if resp.status != 200:
                         body = await resp.text()
-                        yield {"type": "error", "message": f"HTTP {resp.status}: {body[:200]}"}
+                        try:
+                            retry_after = float(resp.headers.get("Retry-After", "") or 0) or None
+                        except ValueError:
+                            retry_after = None
+                        yield {"type": "error", "message": f"HTTP {resp.status}: {body[:200]}",
+                               "transient": resp.status in self.RETRY_STATUS, "retry_after": retry_after}
                         return
 
                     async for line in resp.content:
@@ -538,7 +589,10 @@ class LocalLLMProvider:
                             break
 
         except Exception as exc:
-            yield {"type": "error", "message": f"OpenAI-compat stream error: {exc}"}
+            transient = isinstance(exc, (aiohttp.ClientConnectionError, aiohttp.ServerDisconnectedError,
+                                         aiohttp.ClientPayloadError, ConnectionResetError))
+            yield {"type": "error", "message": f"OpenAI-compat stream error: {exc or type(exc).__name__}",
+                   "transient": transient}
             return
 
         # Emit accumulated tool calls
