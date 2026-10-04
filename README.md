@@ -19,8 +19,8 @@ Numbers you can check, client data kept apart, actions a person approves.</p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
-<p align="center"><img src="docs/assets/demo-coding-workflow.gif" alt="Real Aria Code terminal recording: failing tests, source inspection, code edit, and passing tests" width="860"></p>
-<p align="center"><sub>Recorded from a real Aria Code terminal session on a temporary test fixture; idle time is shortened. This shows direct CLI commands, not an autonomous model edit. <a href="docs/assets/demo-coding-workflow.png">Still screenshot</a> · <a href="scripts/render_terminal_capture.py">Capture renderer</a>.</sub></p>
+<p align="center"><img src="docs/assets/demo-logistics.gif" alt="Real Aria Code terminal recording: reorder points for one shipper, a refusal to mix two shippers' data, and a carrier scorecard with a saving and two anomalies" width="860"></p>
+<p align="center"><sub>Recorded from a real Aria Code session on the sample 3PL data in <code>evals/fixtures</code>. No model is called, so every number on screen comes from the tools; pauses are shortened. <a href="docs/assets/demo-logistics.png">Still screenshot</a> · <a href="scripts/record_logistics_demo.py">Recorder</a> · <a href="scripts/render_logistics_demo.py">Renderer</a>.</sub></p>
 
 ## What Aria Code does
 
@@ -32,7 +32,7 @@ A general-purpose assistant aims for an answer that reads well. In logistics and
 
 **Actions a person approves.** In Feishu, each shipper's group gets a daily digest of reorders, dead stock and freight anomalies. `/补货` turns the reorder list into a purchase-order draft card; nothing happens until an authorised approver presses approve, and what runs is exactly what was shown. The draft is a file for your own purchasing system — Aria Code places no orders.
 
-Underneath is a terminal coding agent: it inspects project files, applies edits, runs commands and tests, and explains the changes, with a local Ollama model or a supported cloud provider. A fresh install has no live business data; the logistics tools read your exports (CSV or JSON), and the chat features need a Feishu app or the Aria relay.
+Underneath is a terminal coding agent: it inspects project files, applies edits, runs commands and tests, and explains the changes ([recording](docs/assets/demo-coding-workflow.gif)), with a local Ollama model or a supported cloud provider. A fresh install has no live business data; the logistics tools read your exports (CSV or JSON), and the chat features need a Feishu app or the Aria relay.
 
 ## Quick start
 
