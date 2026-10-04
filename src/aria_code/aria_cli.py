@@ -30,6 +30,12 @@ Usage:
 # importing the whole CLI. Re-exported here; aria_cli.__version__ still works.
 from aria_code._version import __version__  # noqa: F401
 
+# Fast path before loading agent, finance, and terminal modules.
+import sys as _early_sys
+if _early_sys.argv[1:] in (["--version"], ["-V"]):
+    print(f"aria-code {__version__}")
+    raise SystemExit(0)
+
 from aria_code.apps.cli.commands.core_cmds import CoreCommandsMixin
 # Stateless helpers now live in apps/cli/helpers.py; re-exported here so
 # aria_cli's own callers keep working unchanged.
@@ -346,13 +352,17 @@ try:
 except ImportError:
     _HAS_LOCAL_FINANCE = False
 
-try:
-    from market_data_client import MarketDataClient as _MDC, get_mdc as _get_mdc
-    _HAS_MDC = True
-except ImportError:
-    _MDC = None
-    _get_mdc = None
-    _HAS_MDC = False
+# Market data imports pandas and NumPy; coding-only sessions do not need it.
+from importlib.util import find_spec as _find_spec
+_HAS_MDC = _find_spec("market_data_client") is not None
+_MDC = None
+
+
+def _get_mdc():
+    if not _HAS_MDC:
+        return None
+    from market_data_client import get_mdc
+    return get_mdc()
 
 # Session-level TA cache: persists across multiple /analyze calls in a session,
 # so a single yfinance rate-limit hit doesn't wipe all indicator data.
@@ -3917,6 +3927,7 @@ class ArtheraTerminal:
 
     def __init__(self, config: dict):
         self.config = config
+        self._session_banner_mode: Optional[str] = None
         self.context = AriaContext(
             console=globals().get('console'),
             config=config,
@@ -4202,9 +4213,27 @@ class ArtheraTerminal:
             if len(wl) > 5:
                 wl_str += f" +{len(wl) - 5}"
 
-        _badge = m.get("badge", "")
-        _runtime = "cloud" if _badge == "Cloud" or "cloud" in current_id.lower() else "local"
-        _banner_mode = self.config.get("banner", "full")  # full | compact | off
+        from apps.cli.providers.chat_routing import model_provider
+        _provider = model_provider(current_id)
+        _cloud_provider = bool(_provider and _provider not in {"ollama", "lmstudio"})
+        _runtime = (
+            "cloud" if self.config.get("backend_chat") or _cloud_provider
+            or m.get("badge") == "Cloud" or "cloud" in current_id.lower()
+            else "local"
+        )
+        _badge = "Cloud" if _runtime == "cloud" else m.get("badge", "")
+        _uses_google = (
+            _provider in {"google", "vertexai", "vertex-ai", "google-genai"}
+            or current_id.lower().startswith("gemini")
+            or self.config.get("local_provider") in {"vertex", "google"}
+        )
+        _health_status = (
+            ("Google Cloud · via Arthera API" if _uses_google else "Arthera API · cloud")
+            if self.config.get("backend_chat") else
+            "Cloud model configured" if _cloud_provider else
+            self._ollama_status_label(rich=True)
+        )
+        _banner_mode = self._session_banner_mode or self.config.get("banner", "full")
         _mascot = "[bold #C08050]▣[/bold #C08050]"
 
         if _banner_mode == "off":
@@ -4219,7 +4248,7 @@ class ArtheraTerminal:
                 from ui.banner import render_compact_banner as _rcb
                 try:
                     from apps.cli.update_check import get_update_notice as _gun
-                    _update_notice = _gun(wait_ms=1200)
+                    _update_notice = _gun(wait_ms=0)
                 except Exception:
                     _update_notice = None
                 _rcb(
@@ -4255,7 +4284,7 @@ class ArtheraTerminal:
                 from ui.startup_dashboard import StartupDashboardViewModel as _StartupDashboardViewModel
                 try:
                     from apps.cli.update_check import get_update_notice as _gun
-                    _update_notice = _gun(wait_ms=1200)
+                    _update_notice = _gun(wait_ms=0)
                 except Exception:
                     _update_notice = None
                 _first_run = not bool(self.config.get("first_run_seen"))
@@ -4264,7 +4293,7 @@ class ArtheraTerminal:
                     runtime_label=_rt_label,
                     cwd=cwd,
                     control_status=self._control_status_label(rich=True),
-                    health_status=self._ollama_status_label(rich=True),
+                    health_status=_health_status,
                     tool_count=tool_count,
                     skill_count=skill_count,
                     lang=_ui_lang,
@@ -5943,31 +5972,36 @@ class ArtheraTerminal:
         return True
 
     async def _startup_health_check(self):
-        """Async Ollama + cloud connectivity probe displayed after the header."""
+        """Probe only the selected local runtime; cloud startup stays offline."""
         if not HAS_RICH:
             return
+        from apps.cli.providers.chat_routing import first_round_route
+        active_route = first_round_route(
+            str(self.config.get("model") or ""), self.config, self.api_url,
+        )
         try:
-            import aiohttp as _aio
             parts = []
-            ollama_url = self.config.get("ollama_url", "http://localhost:11434")
-            try:
-                async with _aio.ClientSession() as s:
-                    async with s.get(
-                        f"{ollama_url}/api/tags",
-                        timeout=_aio.ClientTimeout(total=2),
-                    ) as r:
-                        if r.status == 200:
-                            _tags = await r.json()
-                            _n = len(_tags.get("models", []))
-                            self._ollama_alive = True
-                            parts.append(
-                                f"[dim]Ollama · {_n} models[/dim]"
-                                if _n else "[dim]Ollama[/dim]"
-                            )
-                        else:
-                            parts.append("[dim]Ollama offline[/dim]")
-            except Exception:
-                parts.append("[dim]Ollama offline[/dim]")
+            if active_route == "ollama":
+                import aiohttp as _aio
+                ollama_url = self.config.get("ollama_url", "http://localhost:11434")
+                try:
+                    async with _aio.ClientSession() as s:
+                        async with s.get(
+                            f"{ollama_url}/api/tags",
+                            timeout=_aio.ClientTimeout(total=2),
+                        ) as r:
+                            if r.status == 200:
+                                _tags = await r.json()
+                                _n = len(_tags.get("models", []))
+                                self._ollama_alive = True
+                                parts.append(
+                                    f"[dim]Ollama · {_n} models[/dim]"
+                                    if _n else "[dim]Ollama[/dim]"
+                                )
+                            else:
+                                parts.append("[dim]Ollama offline[/dim]")
+                except Exception:
+                    parts.append("[dim]Ollama offline[/dim]")
 
             # Cloud provider check (only if API key is set)
             if self.config.get("auth_token") or os.getenv("ANTHROPIC_API_KEY"):
@@ -6603,10 +6637,10 @@ Examples:
             config["local_provider"] = "ollama"
     if getattr(args, "local", False):
         config["local_mode"] = True
-    if getattr(args, "no_banner", False):
-        config["banner"] = "off"
-    elif getattr(args, "banner", None):
-        config["banner"] = args.banner
+    # Banner flags apply only to this invocation; the REPL saves config on exit.
+    session_banner_mode = (
+        "off" if getattr(args, "no_banner", False) else getattr(args, "banner", None)
+    )
     if args.thinking:
         config["thinking_mode"] = "thinking"
     if args.url:
@@ -6631,6 +6665,7 @@ Examples:
             console.print(f"[dim]Auto-allowed tools: {', '.join(sorted(_session_always_allow))}[/dim]")
 
     terminal = ArtheraTerminal(config)
+    terminal._session_banner_mode = session_banner_mode
 
     # Resume session
     if args.resume or args.session:
@@ -6677,7 +6712,7 @@ Examples:
         return
 
     # Mode 2: Direct command
-    if args.command:
+    if args.command and not (args.command.lower() == "code" and not args.args):
         cmd = args.command.lower()
         cmd_args = " ".join(args.args)
 

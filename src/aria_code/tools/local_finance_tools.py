@@ -28,13 +28,37 @@ import json
 import logging
 import os
 import traceback
+from importlib import import_module
 from importlib.util import find_spec
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-import pandas as pd
 from aria_code.packages.aria_core.paths import aria_home
+
+
+def _dependency_available(name: str) -> bool:
+    """Treat broken optional package metadata as an unavailable dependency."""
+    try:
+        return find_spec(name) is not None
+    except Exception:
+        return False
+
+
+class _LazyModule:
+    """Load a finance dependency only when its tool is invoked."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.module = None
+
+    def __getattr__(self, attribute: str):
+        if self.module is None:
+            self.module = import_module(self.name)
+        return getattr(self.module, attribute)
+
+
+np = _LazyModule("numpy")
+pd = _LazyModule("pandas")
 
 logger = logging.getLogger(__name__)
 
@@ -60,20 +84,10 @@ except ImportError:
 # Optional dependency guards
 # ---------------------------------------------------------------------------
 
-try:
-    import yfinance as yf
-    _HAS_YF = True
-except ImportError:
-    _HAS_YF = False
-
-try:
-    import akshare as ak
-    _HAS_AK = True
-# Not just ImportError: akshare reads bundled data files and calendars on
-# import, and a partial install (or a frozen binary without its data) raises
-# FileNotFoundError or worse. Optional means optional — never crash the CLI.
-except Exception:  # noqa: BLE001
-    _HAS_AK = False
+_HAS_YF = _dependency_available("yfinance")
+_HAS_AK = _dependency_available("akshare")
+yf = _LazyModule("yfinance")
+ak = _LazyModule("akshare")
 
 
 def _ak_retry(fn, *args, _tries: int = 3, _delay: float = 0.8, **kwargs):
@@ -109,25 +123,16 @@ def _ak_retry(fn, *args, _tries: int = 3, _delay: float = 0.8, **kwargs):
                 _os.environ[_v] = _val
     raise last_exc
 
-try:
-    import ccxt
-    _HAS_CCXT = True
-except ImportError:
-    _HAS_CCXT = False
+_HAS_CCXT = _dependency_available("ccxt")
+ccxt = _LazyModule("ccxt")
 
-_HAS_TA = find_spec("pandas_ta") is not None
+_HAS_TA = _dependency_available("pandas_ta")
 
-try:
-    import vectorbt as vbt
-    _HAS_VBT = True
-except ImportError:
-    _HAS_VBT = False
+_HAS_VBT = _dependency_available("vectorbt")
+vbt = _LazyModule("vectorbt")
 
-try:
-    from scipy import stats as sp_stats
-    _HAS_SCIPY = True
-except ImportError:
-    _HAS_SCIPY = False
+_HAS_SCIPY = _dependency_available("scipy")
+sp_stats = _LazyModule("scipy.stats")
 
 
 # ---------------------------------------------------------------------------
@@ -1711,7 +1716,7 @@ def _cloud_backtest(params: dict) -> dict:
 # Helper: format dataframe tail for display
 # ---------------------------------------------------------------------------
 
-def _df_tail(df: pd.DataFrame, n: int = 5) -> List[Dict]:
+def _df_tail(df: Any, n: int = 5) -> List[Dict]:
     cols = [c for c in ["date", "Close", "Open", "High", "Low", "Volume"]
             if c in df.columns]
     sub  = df[cols].tail(n)
