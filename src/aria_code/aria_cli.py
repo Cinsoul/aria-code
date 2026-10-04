@@ -6555,7 +6555,7 @@ async def main():
         # describe one product. It used to say "Quantitative Investment
         # Terminal" here while the package metadata had been repositioned;
         # tests/test_first_run_works.py keeps the two in step.
-        description="Aria Code — AI coding and research workspace with optional finance and connected-domain tools",
+        description="Aria Code — Open-source AI agent for logistics and finance work: numbers you can check, client data kept apart, actions a person approves",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
