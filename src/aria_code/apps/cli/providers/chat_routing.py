@@ -96,6 +96,18 @@ def first_round_route(model: str, config: dict, api_url: Optional[str]) -> str:
     return "ollama" if provider == "ollama" else "configured"
 
 
+def model_receives_local_tools(model: str, config: dict, api_url: Optional[str]) -> bool:
+    """False when the turn goes to the Arthera backend (AriaSSEProvider).
+
+    That route sends the prompt and history but no local tool schemas, so the
+    model there cannot fetch market data through Aria's tools. Treating it as
+    tool-capable skipped the local market pre-fetch as well, and a question
+    like "分析苹果股票" reached the backend with no data at all — the
+    evidence gate then refused the answer.
+    """
+    return first_round_route(model, config, api_url) != "cloud"
+
+
 def is_placeholder_response(
     response: str,
     token_count: int,

@@ -4758,6 +4758,12 @@ class ArtheraTerminal:
                 _model_has_tools = bool(_mc.tool_calls and _mc.context_window >= 8192)
             except Exception:
                 pass
+        if _model_has_tools:
+            try:
+                from apps.cli.providers.chat_routing import model_receives_local_tools
+                _model_has_tools = model_receives_local_tools(_curr_model_id, self.config, self.api_url)
+            except Exception:
+                pass
 
         # ── Broker guide intent: broad discovery should not start an add wizard ──
         if _is_broker_guide_intent(message):
@@ -4972,6 +4978,8 @@ class ArtheraTerminal:
             message,
             wants_analysis_commentary=_det_wants_analysis,
             decomposition_plan=_decomp_plan,
+            snapshot=deterministic.get("response", "") if _det_wants_analysis else "",
+            lang=self.config.get("ui_lang", "en") or "en",
         )
 
         # Referenced paths stay as pointers. The model must use audited file
