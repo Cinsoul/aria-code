@@ -7,7 +7,7 @@
 
 <h1 align="center">Aria Code</h1>
 
-<p align="center">面向物流与金融工作的开源 AI 助手。<br>
+<p align="center">写代码、做金融分析、管物流运营的开源 AI 助手。<br>
 数字算给你看，客户数据分开管，要花钱的动作由人来批。</p>
 
 <p align="center">简体中文 · <a href="README.md">English</a></p>
@@ -19,20 +19,33 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-64748b?style=flat-square" alt="Apache License 2.0"></a>
 </p>
 
-<p align="center"><img src="docs/assets/demo-logistics.gif" alt="Aria Code 真实终端录制：单个货主的补货点、拒绝混合两个货主的数据、承运商评分及一项可节省金额和两条异常" width="860"></p>
-<p align="center"><sub>录制自 Aria Code 的真实会话，数据为 <code>evals/fixtures</code> 中的示例 3PL 数据。全程不调用模型，屏幕上的数字都来自工具本身，仅缩短了停顿。<a href="docs/assets/demo-logistics.png">静态截图</a> · <a href="scripts/record_logistics_demo.py">录制脚本</a> · <a href="scripts/render_logistics_demo.py">渲染脚本</a>。</sub></p>
+<p align="center"><img src="docs/assets/demo-coding.gif" alt="Aria Code 真实会话：Gemini 2.5 Pro 编写 fx.py 和测试，每一步经批准后运行测试，随后 /review 在新代码里发现一个 P1 精度问题" width="860"></p>
+<p align="center"><sub>真实会话，模型为 Gemini 2.5 Pro（Vertex AI）：Aria 编写 <code>fx.py</code> 和测试，每一步经你批准后运行测试，随后 <code>/review</code> 在它刚写的代码里找出一个真实的精度问题。仅缩短了等待时间，其余未做改动。<a href="docs/assets/demo-coding.png">静态截图</a> · <a href="scripts/record_demo.py">录制脚本</a> · <a href="scripts/render_demo.py">渲染脚本</a></sub></p>
 
 ## Aria Code 能做什么
 
-通用 AI 追求的是答得像样；物流和金融的数字是要拿去执行的——补货时漏算一张在途采购单，就会多订一批货。Aria Code 围绕由此而来的三件事设计：
+**写代码、做项目。** 用大白话描述任务。Aria 读懂项目、编写和修改文件、运行命令和测试，每一处改动落地前都先给你看——你点头之前什么都不会写入、不会执行。[`/review`](docs/code-review.md) 像一位细心的同事那样审查改动：按 P0–P3 排序的问题，标明文件和行号，并给出结论；`aria-code review --base main --fail-on P1` 可以在 CI 里把关合并请求。可用本地 Ollama 模型、Google Cloud 上的 Gemini（Vertex AI，只需 `gcloud` 登录）或其他受支持的服务商。
 
-**数字算给你看。** 补货点、安全库存和承运商排名都由公开公式计算，结果里写明公式和每一条假设；可安装的 [Artheras skills](https://github.com/artheras/skills) 里的稳定币结算对账也是如此。数据撑不起结论时——需求历史不足 14 天、数据行没有标明货主——它会直接说明，而不是估一个数。[`operations` 评测套件](docs/verifiable-evals.md)专门检验这些陷阱。
+**做金融和财务分析。** 行情、技术指标、带 HTML 报告的回测、风险与因子分析、SEC 公告，以及美股、港股、A 股和加密货币数据。结果写明数据来源、区间和缺口。
+
+<p align="center"><img src="docs/assets/demo-finance.gif" alt="Aria Code 真实会话：AAPL 技术指标和 SPY 一年期动量回测，写明数据来源、区间和完整度" width="760"></p>
+
+**管物流运营。** 面向第三方物流：补货点、安全库存、ABC/XYZ 分类、呆滞库存、承运商评分和运费异常；在飞书里，每个货主每天一份简报，附带审批卡片。
+
+<p align="center"><img src="docs/assets/demo-logistics.gif" alt="Aria Code 真实会话：拒绝混合两个货主的数据、单个货主的补货点、承运商评分及一项可节省金额和两条异常" width="760"></p>
+<p align="center"><sub>两段都录自真实会话——行情来自 yfinance；物流数据是 <code>evals/fixtures</code> 中的示例 3PL 数据，不调用模型。</sub></p>
+
+## 它怎么工作
+
+通用 AI 追求的是答得像样；代码、行情和仓库里的结果是要拿去执行的——货币函数里的一条舍入规则，补货时漏算的一张在途采购单。由此有三条规则：
+
+**数字算给你看。** 补货点、安全库存、承运商排名和回测都来自公开公式和注明来源的数据，结果里写明公式和每一条假设；可安装的 [Artheras skills](https://github.com/artheras/skills) 里的稳定币结算对账也是如此。数据撑不起结论时——需求历史不足 14 天、数据行没有标明货主——它会直接说明，而不是估一个数。[`operations` 评测套件](docs/verifiable-evals.md)专门检验这些陷阱。
 
 **客户数据分开管。** 第三方物流（3PL）同时保管很多货主的库存。一个群绑定一个货主后，所有分析都只针对这个货主；物流工具本身会拒绝别家货主的数据和无法归属的文件——这条规则在提示词之下执行，不依赖模型自觉。
 
-**要花钱的动作由人来批。** 在飞书里，每个货主群每天收到补货、呆滞库存和运费异常提醒。`/补货` 会把补货清单变成一张采购单草稿审批卡片；审批人点「批准」之前什么都不会发生，执行的正是卡片上展示的内容。草稿是交给你们自己采购系统的文件——Aria Code 不会自动下单。
+**要花钱的动作由人来批。** 在终端里，每次写文件、每条命令都等你点头，改动的差异就摆在眼前。在飞书里，`/补货` 会把补货清单变成一张采购单草稿审批卡片；审批人点「批准」之前什么都不会发生，执行的正是卡片上展示的内容。草稿是交给你们自己采购系统的文件——Aria Code 不会自动下单。
 
-底层是一个终端编程助手：检查项目文件、修改代码、运行命令和测试并解释改动（[录屏](docs/assets/demo-coding-workflow.gif)），可使用本地 Ollama 模型或受支持的云端模型。新安装不带任何实时业务数据；物流工具读取你们导出的 CSV 或 JSON，聊天功能需要飞书应用或 Aria 中继。
+新安装不带任何实时业务数据：物流工具读取你们导出的 CSV 或 JSON，行情来自公开数据源，聊天功能需要飞书应用或 Aria 中继。
 
 ## 快速开始
 
@@ -75,7 +88,7 @@ Aria 会根据所配置的权限模式，在编辑文件或运行命令前请求
 | --- | --- |
 | 本地 Ollama | 已安装并运行的 Ollama 模型；本地推理无需云端账户。 |
 | 直接连接云端供应商 | 对应供应商的 API 凭证和网络连接。 |
-| 直接连接 Google Cloud Vertex AI | `aria-code[google]`、Google Cloud 应用默认凭证、`GOOGLE_CLOUD_PROJECT` 和 `GOOGLE_CLOUD_LOCATION`。 |
+| 直接连接 Google Cloud Vertex AI | `GOOGLE_CLOUD_PROJECT`，外加 `gcloud auth login` 登录（Aria 用该登录的令牌访问 Vertex AI 的 OpenAI 兼容端点），或安装 `aria-code[google]` 并配置应用默认凭证。`GOOGLE_CLOUD_LOCATION` 默认为 `global`。 |
 | Arthera 托管服务 | 安装 `aria-code[google]`，然后在 CLI 中使用 `/login` 登录。Arthera 账户登录不会自动给本机授予 Vertex AI 凭证。 |
 
 只安装所需功能的可选依赖；当前安装选项以 [pyproject.toml](pyproject.toml) 为准。本地推理可以离线运行，但实时行情、远程集成、登录和云端模型不能离线使用。
