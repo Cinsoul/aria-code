@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.72.0] — 2026-10-04
+
+- Merge pull request #84 from Cinsoul/fix/relay-persistent-store
+
 ## [0.71.0] — 2026-10-04
 
 - Merge pull request #83 from Cinsoul/docs/positioning
