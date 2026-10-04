@@ -141,13 +141,30 @@ class TestFileTools(unittest.TestCase):
         self.assertTrue(read["success"])
         self.assertIn("x = 42", read["data"]["content"])
 
-    def test_relative_write_goes_to_user_generated_dir(self):
-        old_root = os.environ.get("ARIA_USER_OUTPUT_ROOT")
-        os.environ["ARIA_USER_OUTPUT_ROOT"] = self.tmpdir
+    def test_relative_write_goes_to_the_working_directory(self):
+        """read_file, edit_file and run_command work in the cwd; write_file must too."""
+        project = pathlib.Path(self.tmpdir) / "project"
+        project.mkdir()
+        old_cwd = os.getcwd()
+        os.chdir(project)
         try:
             content = "import os\n\nx = 7\nprint('result:', x)\n"
             result = _tool_write_file({"path": "relative_strategy.py", "content": content})
         finally:
+            os.chdir(old_cwd)
+        self.assertTrue(result["success"], result.get("error"))
+        self.assertEqual(pathlib.Path(result["data"]["path"]), (project / "relative_strategy.py").resolve())
+
+    def test_relative_write_from_home_goes_to_user_generated_dir(self):
+        old_root = os.environ.get("ARIA_USER_OUTPUT_ROOT")
+        os.environ["ARIA_USER_OUTPUT_ROOT"] = self.tmpdir
+        old_cwd = os.getcwd()
+        os.chdir(pathlib.Path.home())
+        try:
+            content = "import os\n\nx = 7\nprint('result:', x)\n"
+            result = _tool_write_file({"path": "relative_strategy.py", "content": content})
+        finally:
+            os.chdir(old_cwd)
             if old_root is None:
                 os.environ.pop("ARIA_USER_OUTPUT_ROOT", None)
             else:

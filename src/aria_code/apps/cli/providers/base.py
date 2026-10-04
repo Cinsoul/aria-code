@@ -559,6 +559,10 @@ class ConfiguredProvider:
                 )
                 return
             source = self.backend
+            # The registry providers send role and content only; native tool
+            # history would reach them as "tool" messages with no call id.
+            from aria_code.providers.tool_messages import flatten_tool_turns
+
             registry_messages = [
                 Message(
                     role=str(message.get("role", "user")),
@@ -566,7 +570,7 @@ class ConfiguredProvider:
                     name=message.get("name"),
                     tool_call_id=message.get("tool_call_id"),
                 )
-                for message in prepared
+                for message in flatten_tool_turns(prepared)
             ]
             # providers.llm accepts bare function schemas, while the CLI owns
             # OpenAI envelopes. Normalize once at this adapter boundary.

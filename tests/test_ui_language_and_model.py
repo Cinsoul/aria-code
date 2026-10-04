@@ -64,3 +64,13 @@ def test_code_uses_the_configured_model(monkeypatch, tmp_path):
     except Exception:
         pass   # whatever happens after the model call is not this test's concern
     assert seen == ["google/gemini-2.5-pro"]
+
+
+def test_the_standard_test_runner_is_allowed_under_the_default_policy():
+    """`safe` allowed pytest but blocked `python3 -m unittest`, so a coding task
+    wrote its tests and then reported that it was not allowed to run them."""
+    from aria_code.safety.permissions import evaluate_command_policy
+
+    for command in ("python3 -m unittest -v", "python -m unittest discover", "pnpm test", "yarn test"):
+        assert evaluate_command_policy(command, "safe").allowed, command
+    assert not evaluate_command_policy("python3 -m unittest -v && rm -rf ~", "safe").allowed
