@@ -24,7 +24,7 @@ from aria_code import review_service as rs
 
 def make_model_call(config: dict, model: str | None = None) -> rs.ModelCall:
     """One isolated completion through the provider Aria is configured for — no tools."""
-    from aria_code.apps.cli.providers.base import ConfiguredProvider, LLMDone, LLMToken
+    from aria_code.apps.cli.providers.base import ConfiguredProvider, event_kind
 
     chosen = model or config.get("review_model") or config.get("model") or ""
     if not chosen:
@@ -34,9 +34,9 @@ def make_model_call(config: dict, model: str | None = None) -> rs.ModelCall:
         provider = ConfiguredProvider(config, chosen)
         text = ""
         async for event in provider.stream(messages, tools=[]):
-            if isinstance(event, LLMToken):
+            if event_kind(event) == "LLMToken":
                 text += event.text
-            elif isinstance(event, LLMDone):
+            elif event_kind(event) == "LLMDone":
                 if not event.success:
                     raise rs.ReviewError(f"{chosen}: {event.error or 'the model call failed'}")
                 return event.response or text

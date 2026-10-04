@@ -67,6 +67,21 @@ class LLMDone:
 LLMEvent = LLMToken | LLMThinking | LLMToolCall | LLMToolResult | LLMStatus | LLMDone
 
 
+def event_kind(event: object) -> str:
+    """The event's type by name — use this, not isinstance, to dispatch events.
+
+    These modules are importable under two roots: ``aria_code.apps.cli…`` and
+    the bare ``apps.cli…`` that tests patch. Each root defines its own copy of
+    every event class, and runtime_bridge builds providers from the bare root
+    while the consumers checked against the packaged one. isinstance then
+    failed for every event: a provider streamed "ready", the consumer saw
+    nothing, and the turn ended as empty_response. That hit every chat turn
+    through ConfiguredProvider's own events — OpenAI-compatible endpoints,
+    LM Studio, the registry providers, and Gemini without ADC.
+    """
+    return type(event).__name__
+
+
 def _resolve_ollama_stream():
     """Prefer the aria_cli rebound stream_ollama when available."""
     import sys

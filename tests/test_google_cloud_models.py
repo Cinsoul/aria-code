@@ -133,3 +133,4 @@ class TestProxy:
             monkeypatch.delenv(name, raising=False)
         bootstrap.ensure_loopback_bypasses_proxy()
         assert "NO_PROXY" not in os.environ
+

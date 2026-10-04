@@ -62,3 +62,26 @@ def test_financial_market_intents_select_the_right_data_services():
     assert "us_market_data" in build_intent_route("美股纳斯达克行情").services
     assert "forex_data" in build_intent_route("美元兑人民币汇率").services
     assert "commodity_data" in build_intent_route("黄金期货价格").services
+
+
+class TestWholeWordKeywords:
+    """Substring matching routed "write Decimal code" as a GitHub task ("ci" in deCImal)
+    and demanded the gh CLI before a coding request could run."""
+
+    def test_words_inside_other_words_do_not_count(self):
+        from aria_code.apps.cli.intent_router import build_intent_route
+
+        assert "github" not in build_intent_route("convert with Decimal, a financial helper").intents
+        assert "crypto" not in build_intent_route("which method works together with this").intents
+        assert "market_analysis" not in build_intent_route("persist the cache").intents
+        assert "file_analysis" not in build_intent_route("reset my password").intents
+        assert "github" not in build_intent_route("any issue with my portfolio?").intents
+
+    def test_real_mentions_still_route(self):
+        from aria_code.apps.cli.intent_router import build_intent_route
+
+        assert "github" in build_intent_route("review PR 12 and the CI failure").intents
+        assert "github" in build_intent_route("look at issue #45").intents
+        assert "backtest" in build_intent_route("backtesting momentum on SPY").intents
+        assert "chart" in build_intent_route("show charts for AAPL").intents
+        assert "market_analysis" in build_intent_route("分析 AAPL 的 RSI 和 MACD").intents
