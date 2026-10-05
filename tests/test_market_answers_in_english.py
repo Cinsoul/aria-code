@@ -208,3 +208,9 @@ def test_the_snapshot_header_states_the_session_on_the_exchange_clock(offline_ma
     monkeypatch.setattr(market_handlers, "market_session", lambda _symbol: None)
     header = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"].splitlines()[1]
     assert "Market" not in header and "· ·" not in header and header.endswith("Not investment advice*")
+
+
+def test_takeaway_and_levels_render_as_two_lines(offline_market):
+    text = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"]
+    assert re.search(r"\*\*Takeaway\*\*: .+  \n\*\*Levels\*\*: Watch ", text)
+    assert "**Watch**" not in text

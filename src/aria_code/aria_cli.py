@@ -4252,9 +4252,14 @@ class ArtheraTerminal:
             or current_id.lower().startswith("gemini")
             or self.config.get("local_provider") in {"vertex", "google"}
         )
+        _missing = ""
+        if _uses_google and not self.config.get("backend_chat"):
+            from apps.cli.providers.base import google_readiness
+            _missing = google_readiness(self.config)
         _health_status = (
             ("Google Cloud · via Arthera API" if _uses_google else "Arthera API · cloud")
             if self.config.get("backend_chat") else
+            f"⚠ {_missing} · /model" if _missing else
             "Cloud model configured" if _cloud_provider else
             self._ollama_status_label(rich=True)
         )
@@ -5334,8 +5339,9 @@ class ArtheraTerminal:
                     _tone = "red" if error_presentation.level == "error" else "yellow"
                     for idx, ln in enumerate(error_presentation.lines):
                         if HAS_RICH:
+                            from aria_code.ui.render.output import print_hanging
                             style = f"bold {_tone}" if idx == 0 and len(error_presentation.lines) > 1 else _tone
-                            console.print(f"  [{style}]{ln}[/{style}]")
+                            print_hanging(console, "  ", ln, style)
                         else:
                             print(f"  {ln}")
                 console.print() if HAS_RICH else print()
@@ -5480,8 +5486,9 @@ class ArtheraTerminal:
                 _tone = "red" if presentation.level == "error" else "yellow"
                 for idx, line in enumerate(presentation.lines):
                     if HAS_RICH:
+                        from aria_code.ui.render.output import print_hanging
                         style = f"bold {_tone}" if idx == 0 else _tone
-                        console.print(f"  [{style}]{line}[/{style}]")
+                        print_hanging(console, "  ", line, style)
                     else:
                         print(f"  {line}")
                 return

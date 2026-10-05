@@ -2323,8 +2323,11 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
         lines.append(f"## `{symbol}`")
     lines.append("*" + " · ".join(p for p in (data_src, _now_str, session_note, _L["disclaimer"]) if p) + "*")
     lines.append("")
-    lines.append(f"**{'Takeaway' if _en else '结论'}**{_sep}{_summary_line}")
-    lines.append(f"**{'Watch' if _en else '观察位'}**{_sep}{_watch_line}")
+    # Two trailing spaces: a Markdown line break. Without it the renderer
+    # joined these lines into one paragraph ("…MACD negative. Watch: Watch
+    # USD 334.30…"). "Levels", not "Watch": the line itself starts "Watch …".
+    lines.append(f"**{'Takeaway' if _en else '结论'}**{_sep}{_summary_line}  ")
+    lines.append(f"**{'Levels' if _en else '观察位'}**{_sep}{_watch_line}")
     lines.append("")
 
     # ── Price table ──
@@ -2392,7 +2395,7 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
             if _en else
             f" · 量化分 {_signal_score:+d} · 置信度 {_signal_confidence:.0%}"
         )
-        lines.append(f"{_L['signal_lbl']}{_sep}`{signal}` — {signal_str}{_score_detail}")
+        lines.append(f"{_L['signal_lbl']}{_sep}`{signal}` — {signal_str}{_score_detail}  ")
         _reason_parts = []
         if _positive_reasons:
             _reason_parts.append(("support: " if _en else "支撑：") + _join_reasons(_positive_reasons[:3]))
