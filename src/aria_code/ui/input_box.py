@@ -24,7 +24,8 @@ try:
     from prompt_toolkit.buffer import Buffer
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.layout.dimension import Dimension
-    from prompt_toolkit.layout import Float, FloatContainer, HSplit, Layout, VSplit, Window
+    from prompt_toolkit.filters import is_done
+    from prompt_toolkit.layout import ConditionalContainer, Float, FloatContainer, HSplit, Layout, VSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.layout.menus import CompletionsMenu
     from prompt_toolkit.layout.processors import Processor, Transformation
@@ -51,6 +52,7 @@ except ImportError:
     Application = Buffer = KeyBindings = Dimension = None  # type: ignore
     Float = FloatContainer = HSplit = Layout = VSplit = Window = None  # type: ignore
     FormattedTextControl = CompletionsMenu = TextArea = None  # type: ignore
+    ConditionalContainer = is_done = None  # type: ignore
 
 
 # ── Theme detection ────────────────────────────────────────────────────────────
@@ -202,6 +204,7 @@ PlaceholderProcessor = PromptAndPlaceholderProcessor
 
 
 INPUT_MAX_HEIGHT = 6
+MENU_ROWS = 8           # completion rows shown at once, as Codex shows
 
 
 # ── Style ──────────────────────────────────────────────────────────────────────
@@ -399,17 +402,31 @@ def _build_panel_input_application(
                 text_area,
                 Window(width=1, content=FormattedTextControl(_input_pad, focusable=False)),
             ]),
-            Window(height=1,
-                   content=FormattedTextControl(lambda: _input_rule(cfg), focusable=False)),
-            # Status bar: transparent bg, dim model · cwd
-            Window(height=1,
-                   content=FormattedTextControl(lambda: _status_bar(cfg), focusable=False)),
+            # Below the input: shown while typing, dropped once the prompt is
+            # submitted. The panel is not erased when done, so the rule and the
+            # status line used to stay behind in the scrollback after every
+            # question — "• model · cwd · rw · ctx" once per turn.
+            ConditionalContainer(
+                HSplit([
+                    Window(height=1,
+                           content=FormattedTextControl(lambda: _input_rule(cfg), focusable=False)),
+                    # Status bar: transparent bg, dim model · cwd
+                    Window(height=1,
+                           content=FormattedTextControl(lambda: _status_bar(cfg), focusable=False)),
+                    # Room for the completion menu. An inline application is as
+                    # tall as its layout, so the menu was clipped to the two
+                    # rows under the input — "/" showed /account and /accuracy.
+                    Window(height=lambda: Dimension.exact(
+                        MENU_ROWS if text_area.buffer.complete_state is not None else 0)),
+                ]),
+                filter=~is_done,
+            ),
         ]),
         floats=[
             Float(
                 xcursor=True,
                 ycursor=True,
-                content=CompletionsMenu(max_height=12, scroll_offset=2),
+                content=CompletionsMenu(max_height=MENU_ROWS, scroll_offset=2),
             )
         ],
     )
