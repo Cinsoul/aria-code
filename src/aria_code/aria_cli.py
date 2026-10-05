@@ -2623,7 +2623,10 @@ def _format_tool_params(tool_name: str, params: dict) -> str:
         # Basename only — informative without leaking full workspace paths.
         return _short(pathlib.Path(str(params.get("path", ""))).name or "file tool", 40)
     if tool_name == "run_command":
-        return "shell tool"
+        # The command itself, secrets masked: "shell tool" said nothing, while
+        # the approval menu under it named the command anyway.
+        from apps.cli.runtime_consumer import _redact_activity_text
+        return _short(_redact_activity_text(params.get("command", ""), limit=200) or "shell", 72)
     if tool_name == "list_files":
         return _short(params.get("pattern") or params.get("path") or "file tool", 40)
     if tool_name == "search_code":
@@ -2782,7 +2785,7 @@ def _print_tool_done(tool_name: str, elapsed_ms: int, success: bool = True, summ
         return
     action = _TOOL_ACTION_LABELS.get(tool_name, tool_name.replace("_", " "))
     icon   = "[green]✓[/green]" if success else "[red]✗[/red]"
-    t_txt  = f"({elapsed_ms}ms)" if elapsed_ms > 0 else ""
+    t_txt  = ("" if elapsed_ms <= 0 else f"{elapsed_ms}ms" if elapsed_ms < 1000 else f"{elapsed_ms / 1000:.1f}s")
     if summary:
         # 单行预算:summary 按显示宽度(CJK 记 2 格)截断,保证图标+动作+摘要+时长
         # 排在同一行——否则 Rich 整行回卷,时长 chip 顶格孤立在下一行,树形缩进被破坏。

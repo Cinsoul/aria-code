@@ -77,6 +77,41 @@ def _cprint(msg: str, *, console, has_rich: bool) -> None:
         print(plain)
 
 
+OUTPUT_PREVIEW_LINES = 5
+
+
+def print_command_outcome(console, returncode: int, stdout: str, stderr: str, full_output_path: str = "") -> None:
+    """One step line and the last few lines of what the command printed.
+
+    This printed "Command completed (exit 0)", up to six stdout lines and
+    "full output saved" — and nothing at all for `python3 -m unittest -v`,
+    whose report goes to stderr, so the model pasted the test results into
+    its answer instead. Lines are plain text: program output such as
+    "[/dim]" is not Rich markup. As Codex does, the tail is kept — that is
+    where "OK" or the failure is — and the rest is counted.
+    """
+    from rich.text import Text
+
+    lines = stdout.rstrip().splitlines() + (stderr.rstrip().splitlines() if stderr.strip() else [])
+    ok = returncode == 0
+    head = Text("  ⎿  ", style="dim")
+    head.append(f"exit {returncode}", style="green" if ok else "red")
+    if lines:
+        head.append(f" · {len(lines)} line{'s' if len(lines) != 1 else ''}", style="dim")
+    console.print(head)
+    notes = []
+    if len(lines) > OUTPUT_PREVIEW_LINES:
+        notes.append(f"… +{len(lines) - OUTPUT_PREVIEW_LINES} lines")
+    if full_output_path:
+        from aria_code.ui.render.output import display_path
+
+        notes.append(f"full output saved: {display_path(full_output_path)}")
+    if notes:
+        console.print(Text("     " + " · ".join(notes), style="dim"))
+    for line in lines[-OUTPUT_PREVIEW_LINES:]:
+        console.print(Text("     " + line[:160], style="dim" if ok else "red"), overflow="ellipsis", no_wrap=True)
+
+
 def tool_run_command(
     params: dict,
     *,
@@ -374,20 +409,8 @@ def tool_run_command(
         # ── End auto-fix ─────────────────────────────────────────────────────
 
         if has_rich and console is not None:
-            if result.returncode == 0:
-                console.print(f"  [green]Command completed[/green] [dim](exit {result.returncode})[/dim]")
-            else:
-                console.print(f"  [dim]Command exited {result.returncode}[/dim]")
-            out_preview = output.strip().splitlines()[:6]
-            for ol in out_preview:
-                console.print(f"    [dim]{ol[:120]}[/dim]")
-            if len(output.strip().splitlines()) > 6:
-                console.print("    [dim]...truncated[/dim]")
-            if output_artifact.get("full_output_path"):
-                console.print("    [dim]full output saved[/dim]")
-            if stderr.strip() and result.returncode != 0:
-                for el in stderr.strip().splitlines()[:3]:
-                    console.print(f"    [red]{el[:120]}[/red]")
+            print_command_outcome(console, result.returncode, output, stderr,
+                                  output_artifact.get("full_output_path", ""))
         else:
             print(f"  Command exit: {result.returncode}")
         data = {

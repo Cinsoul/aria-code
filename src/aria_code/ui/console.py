@@ -139,10 +139,14 @@ if HAS_RICH:
         from ui.render.output import adapt_markdown_for_width
 
         markup = adapt_markdown_for_width(markup, getattr(console, "width", 80))
+        # Rich's "bw" theme paints its own white background, so every code
+        # block was a white slab in a dark terminal. The ANSI themes keep the
+        # terminal's background and colour with its palette.
+        code_theme = "ansi_light" if ARIA_RICH_THEME_NAME == "light" else "ansi_dark"
         return Markdown(
             markup,
-            code_theme="bw",
-            inline_code_theme="bw",
+            code_theme=code_theme,
+            inline_code_theme=code_theme,
         )
 else:
     class _FallbackConsole:

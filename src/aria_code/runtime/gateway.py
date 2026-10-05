@@ -126,7 +126,9 @@ async def run_turn(
                 on_tool_call(ev.tool, dict(ev.params))
         elif isinstance(ev, AgentEventToolResult):
             if on_tool_result is not None:
-                on_tool_result(ev.tool, dict(ev.result))
+                from aria_code.apps.cli.runtime_consumer import with_measured_elapsed
+
+                on_tool_result(ev.tool, with_measured_elapsed(dict(ev.result), getattr(ev, "elapsed", None)))
         elif isinstance(ev, AgentEventStatus):
             if on_status is not None:
                 phase = getattr(ev, "phase", "") or getattr(ev, "state", "") or ""

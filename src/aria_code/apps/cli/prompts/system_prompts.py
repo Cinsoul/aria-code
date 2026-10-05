@@ -46,6 +46,8 @@ def build_response_style_rule(lang: str) -> str:
             "- For analysis: Conclusion -> Evidence -> Risk/Limitations -> Next.\n"
             "- Keep output compact: avoid repeated disclaimers, generic education, and duplicated sections.\n"
             "- Keep the interactive answer near one terminal screen (about 24 lines) unless the user explicitly requests detail.\n"
+            "- After using tools, do not paste back what the user already saw: name the files you wrote or changed and "
+            "quote only the lines that matter, and summarise command output (\"4 tests passed\") instead of reprinting it.\n"
             "- Never invent data. If a field is unavailable, omit it or note 'N/A' and continue with available data.\n\n"
         )
     return (
@@ -59,6 +61,7 @@ def build_response_style_rule(lang: str) -> str:
         "- 分析类回答按：结论 -> 依据 -> 风险/限制 -> 下一步。\n"
         "- 输出要紧凑：避免重复免责声明、泛泛教学和重复章节。\n"
         "- 交互回答尽量控制在一屏（约24行）；用户明确要求详细内容时除外。\n"
+        "- 用过工具后不要重复用户已看到的内容：写入或修改的文件只说文件名并只引用关键几行，命令输出用一句话概括（如“4 个测试全部通过”），不要整段重贴。\n"
         "- 绝不编造数据。字段不可用时说明数据源未返回，并继续使用已有数据。\n\n"
     )
 
