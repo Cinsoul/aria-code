@@ -1231,6 +1231,23 @@ def _is_blocked_market_symbol_candidate(symbol: str) -> bool:
     )
 
 
+# Numeric codes listed with an exchange suffix. The bare-ticker scan read
+# "0700.HK" as the letters HK and "7203.T" as T — AT&T — so the quote shown
+# was some other company's, though Aria's own hints say to type 0700.HK.
+_NUMERIC_LISTING = _re_sym.compile(r'(?<![\w.])(\d{4,5})\.(HK|T|TW)(?![A-Za-z0-9])', _re_sym.I)
+
+
+def _numeric_listings(message: str) -> list[tuple[int, int, str]]:
+    """(start, end, symbol) of each numeric listing, in Yahoo's form (0700.HK)."""
+    found = []
+    for match in _NUMERIC_LISTING.finditer(message):
+        code, suffix = match.group(1), match.group(2).upper()
+        if suffix == "HK":
+            code = f"{int(code):04d}"
+        found.append((match.start(), match.end(), f"{code}.{suffix}"))
+    return found
+
+
 def _is_english_function_word(message: str, match) -> bool:
     """"I" the pronoun and "A" the article, read as one-letter tickers.
 
@@ -1267,6 +1284,9 @@ def _extract_market_symbol(message: str) -> str:
     for cn, tick in sorted(_COMPANY_TO_TICKER.items(), key=lambda x: -len(x[0])):
         if cn in message:
             return tick
+    listings = _numeric_listings(message)
+    if listings:
+        return listings[0][2]
     # A股裸6位代码（600519 / sh600519 / 688256.SH）
     m = _re_sym.search(r'(?<!\d)(?:[sS][hHzZ])?([036]\d{5}|68\d{4})(?:\.(?:SH|SZ|SS))?(?!\d)', message)
     if m:
@@ -1305,20 +1325,33 @@ def _extract_market_symbols(message: str, limit: int = 6) -> list[str]:
         start = message.find(name)
         add_hit(start, ticker)
 
+    # Spans of coded listings: the letters in "0700.HK" or "600519.SS" are its
+    # exchange, not a second ticker.
+    coded_spans: list[tuple[int, int]] = []
     for match in _re_sym.finditer(r'(?<!\d)(?:[sS][hHzZ])?([036]\d{5}|68\d{4})(?:\.(?:SH|SZ|SS))?(?!\d)', message):
         add_hit(match.start(), match.group(1))
+        coded_spans.append((match.start(), match.end()))
 
     for match in _re_sym.finditer(r'(?<![A-Za-z0-9])(\^[A-Z0-9]{2,10}|[A-Z]{2,8}=F|[A-Z]{6}=X|DX-Y\.NYB)(?![A-Za-z0-9])', message, _re_sym.I):
         add_hit(match.start(), match.group(1).upper())
 
+    for start, end, symbol in _numeric_listings(message):
+        add_hit(start, symbol)
+        coded_spans.append((start, end))
+
+    def inside_a_listing(match) -> bool:
+        return any(start <= match.start() < end for start, end in coded_spans)
+
     for match in _re_sym.finditer(r'\b([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)\b', message):
         symbol = match.group(1)
-        if not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match):
+        if (not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match)
+                and not inside_a_listing(match)):
             add_hit(match.start(), symbol)
 
     for match in _re_sym.finditer(r'(?<![A-Za-z])([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)(?![A-Za-z])', message):
         symbol = match.group(1)
-        if not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match):
+        if (not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match)
+                and not inside_a_listing(match)):
             add_hit(match.start(), symbol)
 
     ordered: list[str] = []
