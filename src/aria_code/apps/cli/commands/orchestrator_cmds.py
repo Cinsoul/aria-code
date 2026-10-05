@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 
 import json
 import asyncio
@@ -78,7 +80,7 @@ class OrchestratorCommandsMixin:
         if self.context.has_rich:
             provider = ConfiguredProvider(self.context.config, "gemini-2.5-flash")
         
-        with self.context.console.status("[dim]Orchestrator 正在编排智能体网络...[/dim]"): 
+        with self.context.console.status(f"[dim]{ui_text(self, 'Orchestrator 正在编排智能体网络', 'Orchestrator is planning the agent network')}...[/dim]"): 
             result = await dynamic_agent_orchestration(request, provider)
         agents_to_run = result.get("agents", [])
         

@@ -7,6 +7,8 @@ by _rebind_mixin_globals() called at module load time.
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from ._ui import print_error
 from typing import Optional, Tuple
 
@@ -385,7 +387,7 @@ class MarketCommandsMixin:
             city2 = parts[2] if len(parts) > 2 else ("上海" if city1 != "上海" else "北京")
             import functools as _functools
             if self.context.has_rich:
-                with self.context.console.status(f"[dim]获取 {city1}/{city2} 房价指数...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, f'获取 {city1}/{city2} 房价指数', f'Fetching {city1}/{city2} house price indices')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(
                         None, _functools.partial(get_house_price_index, city1, city2)
                     )
@@ -394,7 +396,7 @@ class MarketCommandsMixin:
             _render_house_price(r)
             # Also show investment data
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取房地产投资数据...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取房地产投资数据', 'Fetching real-estate investment data')}...[/dim]", spinner="dots"):
                     ri = await loop.run_in_executor(None, get_re_investment)
             else:
                 ri = get_re_investment()
@@ -410,7 +412,7 @@ class MarketCommandsMixin:
             code = parts[1] if len(parts) > 1 else None
             if code:
                 if self.context.has_rich:
-                    with self.context.console.status(f"[dim]分析 {code} REIT...[/dim]", spinner="dots"):
+                    with self.context.console.status(f"[dim]{ui_text(self, f'分析 {code} REIT', f'Analyzing REIT {code}')}...[/dim]", spinner="dots"):
                         r = await loop.run_in_executor(None, get_reit_analysis, code)
                 else:
                     r = get_reit_analysis(code)
@@ -429,7 +431,7 @@ class MarketCommandsMixin:
                     self.context.console.print(f"[red]{r.get('error','分析失败')}[/red]") if self.context.has_rich else None
             else:
                 if self.context.has_rich:
-                    with self.context.console.status("[dim]获取 REIT 列表...[/dim]", spinner="dots"):
+                    with self.context.console.status(f"[dim]{ui_text(self, '获取 REIT 列表', 'Fetching the REIT list')}...[/dim]", spinner="dots"):
                         r = await loop.run_in_executor(None, get_reits_list)
                 else:
                     r = get_reits_list()
@@ -438,7 +440,7 @@ class MarketCommandsMixin:
         elif sub == "compare":
             cities = parts[1:] if len(parts) > 1 else None
             if self.context.has_rich:
-                with self.context.console.status("[dim]对比多城市房价...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '对比多城市房价', 'Comparing city house prices')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, get_multi_city_comparison, cities)
             else:
                 r = get_multi_city_comparison(cities)
@@ -483,7 +485,7 @@ class MarketCommandsMixin:
 
         elif sub == "us":
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取美国住房数据...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取美国住房数据', 'Fetching US housing data')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, get_us_housing_data)
             else:
                 r = get_us_housing_data()

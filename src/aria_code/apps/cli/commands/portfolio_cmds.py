@@ -7,6 +7,8 @@ by _rebind_mixin_globals() called at module load time.
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from ._ui import Panel, print_error
 
 
@@ -597,7 +599,7 @@ class PortfolioCommandsMixin:
         if export_pdf_flag:
             try:
                 if self.context.has_rich:
-                    with self.context.console.status("[dim]导出 PDF…[/dim]", spinner="dots"):
+                    with self.context.console.status(f"[dim]{ui_text(self, '导出 PDF', 'Exporting PDF')}…[/dim]", spinner="dots"):
                         _pdf_path = await export_report_pdf(out_f)
                 else:
                     _pdf_path = await export_report_pdf(out_f)

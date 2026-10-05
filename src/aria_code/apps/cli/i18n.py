@@ -238,6 +238,17 @@ def get_ui_lang(config: Optional[dict] = None) -> str:
     return detect_system_lang()
 
 
+def ui_text(owner, zh_text: str, en_text: str) -> str:
+    """The text for the configured UI language; English unless ui_lang is zh.
+
+    ``owner`` is a command object (its ``terminal.config``), a terminal (its
+    ``config``) or a config dict.
+    """
+    config = owner if isinstance(owner, dict) else (
+        getattr(owner, "config", None) or getattr(getattr(owner, "terminal", None), "config", None) or {})
+    return zh_text if str(config.get("ui_lang", "en")).lower().startswith("zh") else en_text
+
+
 def t(key: str, lang: Optional[str] = None, config: Optional[dict] = None) -> str:
     """Translate a UI key to the given language (or auto-detect).
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from ._ui import print_error
 
 
@@ -86,7 +88,7 @@ class DataCommandsMixin:
                     self.context.console.print("[dim]用法: /data sql \"SELECT ...\"|/dim]")
                 return
             if self.context.has_rich:
-                with self.context.console.status("[dim]执行 SQL...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '执行 SQL', 'Running SQL')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, sql_query, {"query": query})
             else:
                 r = sql_query({"query": query})
@@ -104,7 +106,7 @@ class DataCommandsMixin:
                 export_data = {"示例数据": [{"symbol": s, "note": "需 yfinance"} for s in watchlist]}
             p = {"data": export_data, "filename": fname}
             if self.context.has_rich:
-                with self.context.console.status("[dim]生成 Excel...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '生成 Excel', 'Building Excel')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, export_to_excel, p)
             else:
                 r = export_to_excel(p)
@@ -125,7 +127,7 @@ class DataCommandsMixin:
                     self.context.console.print("[dim]用法: /data load <csv文件路径>[/dim]")
                 return
             if self.context.has_rich:
-                with self.context.console.status("[dim]加载 CSV...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '加载 CSV', 'Loading CSV')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, load_csv_data, {"path": csv_path})
             else:
                 r = load_csv_data({"path": csv_path})
@@ -221,7 +223,7 @@ class DataCommandsMixin:
 
         elif sub == "check":
             if self.context.has_rich:
-                with self.context.console.status("[dim]检查价格预警...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '检查价格预警', 'Checking price alerts')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, check_alerts)
             else:
                 r = check_alerts()
@@ -262,7 +264,8 @@ class DataCommandsMixin:
             return
 
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]计算 {', '.join(symbols)} 相关性矩阵...[/dim]", spinner="dots"):
+            _names = ', '.join(symbols)
+            with self.context.console.status(f"[dim]{ui_text(self, f'计算 {_names} 相关性矩阵', f'Computing the {_names} correlation matrix')}...[/dim]", spinner="dots"):
                 r = await loop.run_in_executor(None, calc_correlation_matrix,
                                                {"symbols": symbols, "period": period})
         else:
@@ -312,7 +315,8 @@ class DataCommandsMixin:
             p_params["weights"] = weights
 
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]回测 {', '.join(symbols)} ({period})...[/dim]", spinner="dots"):
+            _names = ', '.join(symbols)
+            with self.context.console.status(f"[dim]{ui_text(self, f'回测 {_names} ({period})', f'Backtesting {_names} ({period})')}...[/dim]", spinner="dots"):
                 r = await loop.run_in_executor(None, portfolio_backtest, p_params)
         else:
             r = portfolio_backtest(p_params)
@@ -332,7 +336,7 @@ class DataCommandsMixin:
         import asyncio as _asyncio
         loop = _asyncio.get_event_loop()
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]获取 {symbol} 同行数据...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'获取 {symbol} 同行数据', f'Fetching {symbol} peer data')}...[/dim]", spinner="dots"):
                 from local_finance_tools import _peer_comparison
                 r = await loop.run_in_executor(None, _peer_comparison,
                                                {"symbol": symbol, "peers": peers})
