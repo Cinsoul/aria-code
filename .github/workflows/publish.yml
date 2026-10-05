@@ -143,7 +143,15 @@ jobs:
           while :; do
             MISSING=()
             for pkg in "${PACKAGES[@]}"; do
-              npm view "$pkg" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1 || MISSING+=("$pkg")
+              name="${pkg%@*}"
+              version="${pkg##*@}"
+              # Ask the registry for that exact version, past every cache.
+              # `npm view` reads through the runner's npm cache and the
+              # registry CDN (about five minutes each), so a package published
+              # mid-wait could stay invisible for several more polls.
+              curl -sf -o /dev/null -H "Cache-Control: no-cache" \
+                "https://registry.npmjs.org/${name/\//%2F}/${version}?nocache=${RANDOM}$(date +%s)" \
+                || MISSING+=("$pkg")
             done
             if [ "${#MISSING[@]}" -eq 0 ]; then
               echo "All ${#PACKAGES[@]} platform packages are published at $VERSION"
