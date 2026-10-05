@@ -1700,7 +1700,9 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
 
     if not quote.get("success") or price is None or price == 0:
         err = quote.get("error") or _no_price
-        if "NoneType" in str(err):
+        # "NoneType…" and a bare KeyError repr ("'currentTradingPeriod'", what
+        # yfinance raises for a symbol it has no chart for) say nothing to a user.
+        if "NoneType" in str(err) or re.fullmatch(r"'\w+'", str(err).strip()):
             err = _no_price
         is_rate_limit = "rate" in str(err).lower() or "429" in str(err) or "too many" in str(err).lower()
         if is_rate_limit:
