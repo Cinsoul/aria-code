@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.83.0] — 2026-10-05
+
+- Merge pull request #100 from Cinsoul/feat/command-registry
+
 ## [0.82.0] — 2026-10-05
 
 - Merge pull request #99 from Cinsoul/fix/first-run-and-output-format
