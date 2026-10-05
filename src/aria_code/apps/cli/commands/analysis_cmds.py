@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aria_code.apps.cli.commands.market import parse_analysis_args
+from aria_code.apps.cli.commands.market_context import context_has_price
 
 
 import logging
@@ -121,7 +122,11 @@ class AnalysisCommandsMixin:
             label = "Focus on" if response_lang == "en" else "重点分析"
             ctx += f"\n\n### {heading}\n- {label}: {parsed.focus}"
 
-        await self.terminal.send_message(build_analyze_prompt(symbol, ctx, is_cn, response_lang=response_lang))
+        # The prompt carries the fetched data, so the evidence gate must not
+        # refuse the answer for want of a tool call: "analyze Apple stock"
+        # lands here, and on the backend route there are no tools to call.
+        await self.terminal.send_message(build_analyze_prompt(symbol, ctx, is_cn, response_lang=response_lang),
+                                         evidence_grounded=context_has_price(ctx))
         try:
             _resp = next((m["content"] for m in reversed(self.terminal.conversation)
                           if m.get("role") == "assistant" and m.get("content")), "")

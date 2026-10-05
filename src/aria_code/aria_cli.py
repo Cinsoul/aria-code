@@ -1783,9 +1783,10 @@ def _try_handle_realty_query(message: str) -> dict:
     )
 
 
-def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> dict:
+def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
+                                         evidence_required: bool = False) -> dict:
     """Thin wrapper — real implementation in apps.cli.handlers.market_handlers."""
-    return _src_market_snapshot_analysis(message, history)
+    return _src_market_snapshot_analysis(message, history, evidence_required=evidence_required)
 
 
 def _try_handle_market_overview(message: str) -> dict:
@@ -1895,6 +1896,7 @@ def _build_market_snapshot_repeat_notice(
     *,
     now: float | None = None,
     ttl_seconds: int = 60,
+    lang: str = "zh",
 ) -> str:
     current = _market_snapshot_cache_entry(result, now=now)
     if not current or not previous:
@@ -1910,6 +1912,24 @@ def _build_market_snapshot_repeat_notice(
     currency = current.get("currency") or "USD"
     change = current.get("change_pct")
     change_text = "—" if change is None else f"{float(change):+.2f}%"
+    if lang == "en":
+        return "\n".join([
+            f"## {name}  `{symbol}`",
+            "",
+            f"**Unchanged**: you asked within the last {ttl_seconds} seconds and the price, signal "
+            "and key levels match the previous answer, so the full tables are left out.",
+            "",
+            f"- Last price: **{currency} {float(current['price']):,.2f}**  `{change_text}`",
+            f"- Signal: `{current.get('signal') or '—'}`",
+            f"- Support: {current.get('support') or '—'}",
+            f"- Resistance: {current.get('resistance') or '—'}",
+            f"- As of: {current.get('as_of') or '—'}",
+            "",
+            "**Next steps**",
+            f"- Full snapshot: `/quote {symbol}`",
+            f"- Deep analysis: `/team {symbol}`",
+            f"- Chart: `/ta {symbol}`",
+        ])
     return "\n".join([
         f"## {name}  `{symbol}`",
         "",
@@ -4568,7 +4588,8 @@ class ArtheraTerminal:
         except Exception as exc:
             logger.debug("Unable to transition durable run to %s: %s", status.value, exc)
 
-    async def send_message(self, message: str, system_override: Optional[str] = None):
+    async def send_message(self, message: str, system_override: Optional[str] = None,
+                           evidence_grounded: bool = False):
         """Send message to Aria AI with agentic tool loop, smart fallback, markdown."""
         if getattr(self, "_streaming", False):
             is_zh = str(self.config.get("ui_lang", "en")).lower().startswith("zh")
@@ -4836,19 +4857,35 @@ class ArtheraTerminal:
         deterministic = _run_deterministic_chain(
             message, model_has_tools=_model_has_tools, history=self.conversation[:-1])
         if deterministic.get("success") or _is_stock_chart_analysis_request(message):
+            # The handlers answer in the language of the question; so does the
+            # frame around their answer.
+            _det_en = _detect_lang(message) == "en"
             final_text = deterministic.get("response", "")
             if not final_text:
-                final_text = f"市场分析未完成：{deterministic.get('error', '未知错误')}"
+                final_text = (
+                    f"Market analysis did not finish: {deterministic.get('error', 'unknown error')}"
+                    if _det_en else
+                    f"市场分析未完成：{deterministic.get('error', '未知错误')}"
+                )
             _tools = deterministic.get("tools_used", [])
-            _tool_label = {
+            _tool_label = ({
+                "market_snapshot": "Market snapshot",
+                "stock_chart":     "Chart analysis",
+                "broker_query":    "Account data",
+                "realty_query":    "Real-estate data",
+                "strategy_advice":  "Strategy framework",
+            } if _det_en else {
                 "market_snapshot": "市场快照",
                 "stock_chart":     "图表分析",
                 "broker_query":    "账户数据",
                 "realty_query":    "房地产数据",
                 "strategy_advice":  "策略框架",
-            }.get(_tools[0], _tools[0]) if _tools else "本地分析"
+            }).get(_tools[0], _tools[0]) if _tools else ("Local analysis" if _det_en else "本地分析")
             _rate_limited = deterministic.get("rate_limited", False)
-            _rl_note = "  [yellow]⚠ 数据源限流[/yellow]" if _rate_limited else ""
+            _rl_note = (
+                f"  [yellow]⚠ {'Data source rate-limited' if _det_en else '数据源限流'}[/yellow]"
+                if _rate_limited else ""
+            )
             if _tools and _tools[0] == "stock_chart":
                 _chart_symbol = deterministic.get("symbol") or _extract_market_symbol(message)
                 self._pending_market_artifact = {
@@ -4865,6 +4902,7 @@ class ArtheraTerminal:
                         deterministic,
                         self._last_market_snapshot_cache,
                         now=_snapshot_now,
+                        lang="en" if _det_en else "zh",
                     )
                     if _repeat_notice:
                         final_text = _repeat_notice
@@ -4883,23 +4921,26 @@ class ArtheraTerminal:
                 and any(k in message for k in ("分析", "analyze", "analysis", "对比", "比较", "compare"))
                 and bool(_tools) and _tools[0] == "market_snapshot"
             )
+            _disclaimer = "" if _tools and _tools[0] == "strategy_advice" else (
+                " · Not investment advice" if _det_en else " · 本内容不构成投资建议")
             if HAS_RICH:
                 # ⏺/✓ workflow indicator — mirrors LLM tool call display style
                 _t_icon = _tools[0] if _tools else "local"
                 console.print(f"\n  [#C08050]⏺[/#C08050]  [bold]{_t_icon}[/bold]")
-                _done_label = (
-                    "未变化" if deterministic.get("compressed_repeat")
-                    else ("已生成" if _tools and _tools[0] == "strategy_advice" else "数据已获取")
-                )
+                if deterministic.get("compressed_repeat"):
+                    _done_label = "unchanged" if _det_en else "未变化"
+                elif _tools and _tools[0] == "strategy_advice":
+                    _done_label = "ready" if _det_en else "已生成"
+                else:
+                    _done_label = "fetched" if _det_en else "数据已获取"
                 console.print(f"  [green]✓[/green]  [dim]{_tool_label} {_done_label}[/dim]")
                 console.print()
                 console.print(make_markdown(_strip_latex(final_text)))
-                _disclaimer = "" if _tools and _tools[0] == "strategy_advice" else " · 本内容不构成投资建议"
                 console.print(f"\n[dim]{_tool_label}{_disclaimer}[/dim]{_rl_note}\n")
             else:
                 print("\nAria\n")
                 print(final_text)
-                print(f"\n市场快照 · 本内容不构成投资建议\n")
+                print(f"\n{_tool_label}{_disclaimer}\n")
             self.conversation.append({"role": "assistant", "content": final_text})
             self._last_response = final_text
             if not _det_wants_analysis:
@@ -5148,7 +5189,8 @@ class ArtheraTerminal:
                     requires_evidence=_requires_financial_evidence,
                     grounding_tools=grounding_tool_names(LOCAL_TOOL_SCHEMAS),
                     evidence_already_grounded=bool(
-                        _det_wants_analysis and deterministic.get("success")
+                        evidence_grounded
+                        or (_det_wants_analysis and deterministic.get("success"))
                     ),
                     execution_context=lambda: {
                         "_run_id": self._active_run_id,
