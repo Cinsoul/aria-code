@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from aria_code.apps.cli.commands.market import parse_analysis_args
 from aria_code.apps.cli.commands.market_context import context_has_price
 
@@ -98,7 +100,7 @@ class AnalysisCommandsMixin:
         response_lang = parsed.lang or ("zh" if is_cn else "en")
 
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]正在获取 {symbol} 数据...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'正在获取 {symbol} 数据', f'Fetching {symbol} data')}...[/dim]", spinner="dots"):
                 ctx = await self._build_analyze_context(symbol, is_cn)
         else:
             print(f"Fetching data for {symbol}...")
@@ -166,7 +168,7 @@ class AnalysisCommandsMixin:
 
         if region in ("us", "all"):
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取美国宏观数据 (FRED)...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取美国宏观数据 (FRED)', 'Fetching US macro data (FRED)')}...[/dim]", spinner="dots"):
                     r = await loop.run_in_executor(None, lambda: get_us_macro(indicator if region == "us" else "all"))
             else:
                 r = get_us_macro(indicator if region == "us" else "all")
@@ -174,7 +176,7 @@ class AnalysisCommandsMixin:
 
         if region in ("cn", "all"):
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取中国宏观数据 (akshare)...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取中国宏观数据 (akshare)', 'Fetching China macro data (akshare)')}...[/dim]", spinner="dots"):
                     r_cn = await loop.run_in_executor(None, lambda: get_cn_macro(indicator if region == "cn" else "all"))
             else:
                 r_cn = get_cn_macro(indicator if region == "cn" else "all")
@@ -182,7 +184,7 @@ class AnalysisCommandsMixin:
 
         if region in ("rates", "all"):
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取央行利率...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取央行利率', 'Fetching central bank rates')}...[/dim]", spinner="dots"):
                     r_rates = await loop.run_in_executor(None, get_central_bank_rates)
             else:
                 r_rates = get_central_bank_rates()
@@ -190,7 +192,7 @@ class AnalysisCommandsMixin:
 
         if region == "calendar":
             if self.context.has_rich:
-                with self.context.console.status("[dim]获取经济日历...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '获取经济日历', 'Fetching the economic calendar')}...[/dim]", spinner="dots"):
                     r_cal = await loop.run_in_executor(None, lambda: get_economic_calendar(7))
             else:
                 r_cal = get_economic_calendar(7)
@@ -216,7 +218,7 @@ class AnalysisCommandsMixin:
         import asyncio as _asyncio
         loop = _asyncio.get_event_loop()
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]获取 {symbol} 期权链...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'获取 {symbol} 期权链', f'Fetching the {symbol} option chain')}...[/dim]", spinner="dots"):
                 from local_finance_tools import _get_options_chain
                 r = await loop.run_in_executor(None, _get_options_chain,
                                                {"symbol": symbol, "type": opt_type, "expiry": expiry, "limit": 20})
@@ -281,7 +283,7 @@ class AnalysisCommandsMixin:
         import asyncio as _asyncio
         loop = _asyncio.get_event_loop()
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]计算 {symbol} 财务质量评分...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'计算 {symbol} 财务质量评分', f'Scoring {symbol} financial quality')}...[/dim]", spinner="dots"):
                 from local_finance_tools import _piotroski_fscore, _altman_zscore
                 f_r = await loop.run_in_executor(None, _piotroski_fscore, {"symbol": symbol})
                 z_r = await loop.run_in_executor(None, _altman_zscore, {"symbol": symbol})
@@ -303,7 +305,7 @@ class AnalysisCommandsMixin:
         import asyncio as _asyncio
         loop = _asyncio.get_event_loop()
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]计算 {symbol} 一目均衡表...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'计算 {symbol} 一目均衡表', f'Computing {symbol} Ichimoku')}...[/dim]", spinner="dots"):
                 from local_finance_tools import _calculate_ichimoku
                 r = await loop.run_in_executor(None, _calculate_ichimoku, {"symbol": symbol})
         else:
@@ -322,7 +324,7 @@ class AnalysisCommandsMixin:
         import asyncio as _asyncio
         loop = _asyncio.get_event_loop()
         if self.context.has_rich:
-            with self.context.console.status("[dim]获取恐惧贪婪指数...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, '获取恐惧贪婪指数', 'Fetching the Fear & Greed index')}...[/dim]", spinner="dots"):
                 from local_finance_tools import _get_fear_greed_index
                 r = await loop.run_in_executor(None, _get_fear_greed_index, {})
         else:
@@ -356,7 +358,7 @@ class AnalysisCommandsMixin:
         loop = _asyncio.get_event_loop()
         if compare_mode:
             if self.context.has_rich:
-                with self.context.console.status("[dim]并行查询 binance / okx / bybit...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, '并行查询 binance / okx / bybit', 'Querying binance / okx / bybit in parallel')}...[/dim]", spinner="dots"):
                     from local_finance_tools import _get_funding_rates_compare
                     r = await loop.run_in_executor(None, _get_funding_rates_compare, {"symbols": syms})
             else:
@@ -365,7 +367,7 @@ class AnalysisCommandsMixin:
             _render_funding_compare(r)
         else:
             if self.context.has_rich:
-                with self.context.console.status(f"[dim]获取 {exchange} 资金费率...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, f'获取 {exchange} 资金费率', f'Fetching {exchange} funding rates')}...[/dim]", spinner="dots"):
                     from local_finance_tools import _get_funding_rates
                     r = await loop.run_in_executor(None, _get_funding_rates, {"exchange": exchange, "symbols": syms})
             else:

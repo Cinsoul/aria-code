@@ -6,6 +6,8 @@ imported lazily inside each method body to avoid circular imports at load time.
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from ._ui import Panel, print_error, rich_box
 from aria_code.packages.aria_core.paths import aria_home
 
@@ -389,7 +391,7 @@ class BrokerCommandsMixin:
         label = broker_id
         try:
             if self.context.has_rich:
-                with self.context.console.status(f"[dim]正在连接 {broker_id}...[/dim]", spinner="dots"):
+                with self.context.console.status(f"[dim]{ui_text(self, f'正在连接 {broker_id}', f'Connecting to {broker_id}')}...[/dim]", spinner="dots"):
                     import asyncio as _aio
                     loop = _aio.get_event_loop()
                     broker = await loop.run_in_executor(None, reg.connect, broker_id)
@@ -859,7 +861,7 @@ class BrokerCommandsMixin:
             if not broker:
                 return
             import asyncio as _aio
-            with self.context.console.status("[dim]获取持仓...[/dim]", spinner="dots") if self.context.has_rich else _null_ctx():
+            with self.context.console.status(f"[dim]{ui_text(self, '获取持仓', 'Fetching positions')}...[/dim]", spinner="dots") if self.context.has_rich else _null_ctx():
                 pos = await _aio.get_event_loop().run_in_executor(None, broker.positions)
             _print_broker_positions(pos, broker.label, broker.config.get("currency","CNY"))
         except Exception as e:
@@ -889,7 +891,7 @@ class BrokerCommandsMixin:
             if not broker:
                 return
             import asyncio as _aio
-            with self.context.console.status("[dim]获取订单...[/dim]", spinner="dots") if self.context.has_rich else _null_ctx():
+            with self.context.console.status(f"[dim]{ui_text(self, '获取订单', 'Fetching orders')}...[/dim]", spinner="dots") if self.context.has_rich else _null_ctx():
                 orders = await _aio.get_event_loop().run_in_executor(
                     None, lambda: broker.orders(status=status, limit=30)
                 )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from aria_code.apps.cli.i18n import ui_text
+
 from ._business_render import p, print_realty_result, print_risk_scan
 
 
@@ -275,7 +277,7 @@ class BusinessWorkflowCommandsMixin:
 
     async def _run_realty_agent(self, agent_name: str, project_id: str, input_data: dict):
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]运行 {agent_name} Agent...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'运行 {agent_name} Agent', f'Running the {agent_name} agent')}...[/dim]", spinner="dots"):
                 result = await self._call_realty_agent(agent_name, project_id, input_data)
         else:
             print(f"Running {agent_name}...")
@@ -286,7 +288,8 @@ class BusinessWorkflowCommandsMixin:
     async def _run_realty_team(self, agents: list, project_id: str, input_data: dict):
         import asyncio
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]并行扫描 {', '.join(agents)}...[/dim]", spinner="dots"):
+            _names = ', '.join(agents)
+            with self.context.console.status(f"[dim]{ui_text(self, f'并行扫描 {_names}', f'Scanning {_names} in parallel')}...[/dim]", spinner="dots"):
                 tasks = [self._call_realty_agent(n, project_id, input_data) for n in agents]
                 results = await asyncio.gather(*tasks, return_exceptions=False)
         else:

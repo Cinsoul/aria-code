@@ -13,6 +13,7 @@ NameError，而这正是 requires-python = "<3.14,>=3.10" 声明支持的全部�
 全绿。已发布的 4.3.0 同样中招：pip install 后运行 aria-code 直接崩溃。
 """
 
+from aria_code.apps.cli.i18n import ui_text
 from ._ui import print_error
 
 import pathlib
@@ -2240,7 +2241,7 @@ class CoreCommandsMixin:
             return
         mdc = _get_mdc()
         if self.context.has_rich:
-            with self.context.console.status("[dim]获取全球指数...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, '获取全球指数', 'Fetching global indices')}...[/dim]", spinner="dots"):
                 r = mdc.indices()
         else:
             print("  获取全球指数...")
@@ -2287,7 +2288,7 @@ class CoreCommandsMixin:
 
         mdc = _get_mdc()
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]获取{market.upper()}热门股...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'获取{market.upper()}热门股', f'Fetching top {market.upper()} movers')}...[/dim]", spinner="dots"):
                 r = mdc.hot_stocks(market=market, top_n=top_n)
         else:
             r = mdc.hot_stocks(market=market, top_n=top_n)
@@ -2489,7 +2490,7 @@ class CoreCommandsMixin:
         sub    = parts[1].lower() if len(parts) > 1 else "filings"
 
         if self.context.has_rich:
-            with self.context.console.status(f"[dim]查询 EDGAR {symbol}...[/dim]", spinner="dots"):
+            with self.context.console.status(f"[dim]{ui_text(self, f'查询 EDGAR {symbol}', f'Querying EDGAR for {symbol}')}...[/dim]", spinner="dots"):
                 result = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: _fetch_edgar_data(symbol, sub)
                 )
