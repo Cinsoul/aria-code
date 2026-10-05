@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.81.0] — 2026-10-05
+
+- Merge pull request #96 from Cinsoul/fix/market-session-label
+
 ## [0.80.0] — 2026-10-05
 
 - Merge pull request #95 from Cinsoul/fix/market-snapshot-language
