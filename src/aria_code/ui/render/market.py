@@ -109,11 +109,15 @@ TA_LABELS = {
     "zh": {"title": "技术指标", "days": "{days}日数据", "price": "当前价格", "plain_price": "价格",
            "neutral": "中性", "overbought": "超买", "oversold": "超卖",
            "macd_up": "金叉", "macd_down": "死叉",
-           "bollinger": "布林带   上:{upper}  中:{mid}  下:{lower}  位置:{pos}"},
+           "bollinger": "布林带   上 {upper} · 中 {mid} · 下 {lower} · 位置 {pos}",
+           "signal": "信号线", "hist": "柱", "source": "来源", "check": "数据",
+           "stale": "可能过期", "missing": "缺少"},
     "en": {"title": "technical indicators", "days": "{days} days", "price": "Price", "plain_price": "Price",
            "neutral": "neutral", "overbought": "overbought", "oversold": "oversold",
            "macd_up": "above signal", "macd_down": "below signal",
-           "bollinger": "Bollinger  upper:{upper}  mid:{mid}  lower:{lower}  position:{pos}"},
+           "bollinger": "Bollinger  upper {upper} · mid {mid} · lower {lower} · position {pos}",
+           "signal": "signal", "hist": "hist", "source": "source", "check": "data",
+           "stale": "may be stale", "missing": "missing"},
 }
 
 
@@ -176,7 +180,7 @@ def render_ta_plain(symbol: str, days: int, service_result: Any, formatter: Valu
         ),
     ]
     ma_parts = [
-        f"{name.upper()}: {data[name]}"
+        f"{name.upper()}: {formatter(data[name])}"
         for name in ("ma5", "ma10", "ma20", "ma60")
         if data.get(name)
     ]
@@ -204,14 +208,20 @@ def print_ta_result(
         return
 
     text = _ta_text(lang)
-    providers = " → ".join(getattr(service_result, "provider_chain", []) or [])
+    providers = " → ".join(getattr(service_result, "provider_chain", []) or []) or data.get("provider", "")
     console.print()
     console.print(
         f"  [bold]{symbol}[/bold] {text['title']}  "
-        f"[dim]{text['days'].format(days=days)}  provider:{providers or data.get('provider', '')}[/dim]"
+        f"[dim]{text['days'].format(days=days)}"
+        + (f" · {text['source']} {providers}" if providers else "") + "[/dim]"
     )
-    if getattr(service_result, "quality", None):
-        console.print(f"  [dim]{_quality_line(service_result)}[/dim]")
+    # Only what needs attention: "data:ok stale:no missing:none" on every
+    # answer was diagnostic output, not information.
+    missing = getattr(service_result, "missing_fields", []) or []
+    if getattr(service_result, "stale", False) or missing:
+        notes = ([text["stale"]] if getattr(service_result, "stale", False) else []) + (
+            [f"{text['missing']} {', '.join(missing)}"] if missing else [])
+        console.print(f"  [yellow]⚠ {text['check']}: {' · '.join(notes)}[/yellow]")
     console.print()
     console.print(f"  {text['price']:<8} [bold]{formatter(data.get('price'))}[/bold]")
 
@@ -225,9 +235,9 @@ def print_ta_result(
     if any(data.get(key) is not None for key in ("macd", "macd_signal", "macd_hist")):
         macd_color = _macd_color(macd_hist)
         console.print(
-            f"  MACD     {formatter(data.get('macd'), digits=4)}  "
-            f"Signal:{formatter(data.get('macd_signal'), digits=4)}  "
-            f"[{macd_color}]Hist:{formatter(macd_hist, digits=4)}  "
+            f"  MACD     {formatter(data.get('macd'), digits=4)} [dim]·[/dim] "
+            f"{text['signal']} {formatter(data.get('macd_signal'), digits=4)} [dim]·[/dim] "
+            f"[{macd_color}]{text['hist']} {formatter(macd_hist, digits=4)}  "
             f"{_macd_label(macd_hist, lang)}[/{macd_color}]"
         )
 
@@ -237,9 +247,7 @@ def print_ta_result(
             upper=formatter(data.get("bb_upper")), mid=formatter(data.get("bb_mid")),
             lower=formatter(data.get("bb_lower")), pos=formatter(bb_pos)))
 
-    console.print()
-    for name in ma_names:
-        if data.get(name):
-            console.print(f"  {name.upper():<7} {data[name]}", end="  ")
-    console.print()
+    averages = [f"{name.upper()} {formatter(data[name])}" for name in ma_names if data.get(name)]
+    if averages:
+        console.print("  " + " [dim]·[/dim] ".join(averages))
     console.print()

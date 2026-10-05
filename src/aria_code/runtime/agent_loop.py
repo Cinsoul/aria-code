@@ -585,6 +585,45 @@ class AgentErrorPresentation:
                     f"运行: /apikey set {provider} <key>" if is_zh else f"Run: /apikey set {provider} <key>",
                 ],
             )
+        # Gemini on Vertex AI, the default model, borrowing the gcloud login.
+        # These reached the user raw: "Error: vertex_needs_project: set …".
+        if lowered.startswith("vertex_needs_project"):
+            return cls(
+                error=normalized,
+                level="warning",
+                lines=[
+                    "Gemini 通过 Google Cloud 调用，但尚未设置项目。" if is_zh else
+                    "Gemini runs on Google Cloud, and no project is set.",
+                    "设置项目：/config set gcp_project=<项目 ID>（或 gcloud config set project <ID>），"
+                    "或用 /model 换一个模型。" if is_zh else
+                    "Set one with /config set gcp_project=<id> (or gcloud config set project <id>), "
+                    "or pick another model with /model.",
+                ],
+            )
+        if lowered.startswith("vertex_not_logged_in"):
+            return cls(
+                error=normalized,
+                level="warning",
+                lines=[
+                    "Gemini 通过 Google Cloud 调用，但 gcloud 尚未登录。" if is_zh else
+                    "Gemini runs on Google Cloud, and gcloud is not signed in.",
+                    "运行 gcloud auth login，或用 /model 换一个模型。" if is_zh else
+                    "Run gcloud auth login, or pick another model with /model.",
+                ],
+            )
+        if lowered.startswith("vertex_gcloud_failed"):
+            detail = normalized.split(":", 1)[1].strip() if ":" in normalized else ""
+            return cls(
+                error=normalized,
+                level="warning",
+                lines=[
+                    (f"gcloud 未能签发访问令牌（{detail}）。" if is_zh else
+                     f"gcloud could not issue an access token ({detail}).") if detail else
+                    ("gcloud 未能签发访问令牌。" if is_zh else "gcloud could not issue an access token."),
+                    "运行 gcloud auth login 后重试，或运行 /doctor。" if is_zh else
+                    "Run gcloud auth login and retry, or run /doctor.",
+                ],
+            )
         if "http 402" in lowered or "insufficient balance" in lowered:
             return cls(
                 error=normalized,

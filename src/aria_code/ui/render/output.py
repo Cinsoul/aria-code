@@ -294,6 +294,23 @@ def error_hint(error: str, context: str = "") -> str:
 
 # ── Error panel & tree formatting ──────────────────────────────────────────────
 
+def print_hanging(console, prefix: str, text: str, style: str = "") -> None:
+    """One message after a fixed prefix, wrapped lines aligned under its first word.
+
+    The text is plain, never markup: an error such as "/init [--force]" lost
+    its brackets to Rich, and a long one wrapped back to column 0 under the
+    "└" instead of beside it.
+    """
+    from rich.table import Table
+    from rich.text import Text
+
+    grid = Table.grid(padding=0)
+    grid.add_column(no_wrap=True)
+    grid.add_column(overflow="fold")
+    grid.add_row(Text(prefix, style=style), Text(text, style=style))
+    console.print(grid)
+
+
 def print_error(
     msg: str,
     context: str = "",
@@ -307,10 +324,10 @@ def print_error(
     if not use_panel:
         # Claude Code style: clean └ tree connector for inline error guidance
         if has_rich:
-            console.print(f"  [red]└ {msg}[/red]")
+            print_hanging(console, "  └ ", msg, "red")
             if hint:
                 for hline in hint.splitlines():
-                    console.print(f"    [dim]{hline}[/dim]")
+                    print_hanging(console, "    ", hline, "dim")
         else:
             print(f"  └ {msg}")
             if hint:

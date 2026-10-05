@@ -355,6 +355,59 @@ def _gcloud_login_only(config: dict) -> bool:
     return not _adc_available() and not _google_api_key(config) and bool(shutil.which("gcloud"))
 
 
+def _gcloud_folder() -> str:
+    import os
+
+    if os.name == "nt":
+        return os.getenv("CLOUDSDK_CONFIG") or os.path.join(os.getenv("APPDATA", ""), "gcloud")
+    return os.getenv("CLOUDSDK_CONFIG") or os.path.join(os.path.expanduser("~"), ".config", "gcloud")
+
+
+def _gcloud_default_project(folder: str) -> str:
+    """The active gcloud configuration's core/project, read from its file."""
+    import configparser
+    import os
+
+    try:
+        with open(os.path.join(folder, "active_config"), encoding="utf-8") as handle:
+            active = handle.read().strip() or "default"
+    except OSError:
+        active = "default"
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(os.path.join(folder, "configurations", f"config_{active}"), encoding="utf-8")
+        return parser.get("core", "project", fallback="").strip()
+    except configparser.Error:
+        return ""
+
+
+def google_readiness(config: dict) -> str:
+    """"" when a Gemini request can be attempted, else what is missing.
+
+    The banner said "Cloud model configured" for the default model on a
+    machine with no Google credentials at all, and the first question then
+    failed. This reads only the environment and gcloud's files — no
+    subprocess — so it is cheap enough for startup.
+    """
+    import os
+    import shutil
+
+    if _google_api_key(config) or _adc_available():
+        return ""
+    if not shutil.which("gcloud"):
+        return "no Google credentials"
+    # Same order as vertex_openai_endpoint, so the banner names the problem
+    # the first request will report.
+    folder = _gcloud_folder()
+    project = (os.getenv("GOOGLE_CLOUD_PROJECT") or str(config.get("gcp_project") or "")
+               or _gcloud_default_project(folder))
+    if not project or project == "(unset)":
+        return "no Google Cloud project"
+    if not any(os.path.isfile(os.path.join(folder, name)) for name in ("credentials.db", "access_tokens.db")):
+        return "gcloud not signed in"
+    return ""
+
+
 def vertex_openai_endpoint(config: dict) -> dict:
     """Vertex AI's OpenAI-compatible endpoint and a token from the gcloud login.
 
