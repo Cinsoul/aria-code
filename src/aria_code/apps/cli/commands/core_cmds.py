@@ -117,7 +117,11 @@ class CoreCommandsMixin:
         # Contextual help: /help <command>
         from aria_code.apps.cli.skills_catalog import SKILLS
         target = args.strip().lower()
-        if target:
+        if target and target != "all":
+            from aria_code.apps.cli.commands.catalog import HELP_TOPIC_MAP
+            if target in HELP_TOPIC_MAP:
+                self._print_help_topic(HELP_TOPIC_MAP[target])
+                return
             cmd_key = target if target.startswith("/") else f"/{target}"
             if cmd_key in self.commands:
                 _, desc = self.commands[cmd_key]
@@ -149,7 +153,11 @@ class CoreCommandsMixin:
             self.context.console.print(f"[dim]No help for: {target}. Try /help[/dim]" if self.context.has_rich else f"No help for: {target}")
             return
 
-        # Full help listing
+        if not target:
+            self._print_help_overview()
+            return
+
+        # /help all: every command, grouped
         if self.context.has_rich:
             self.context.console.print()
 
@@ -248,6 +256,105 @@ class CoreCommandsMixin:
             print("\nSkills:")
             for s in SKILLS:
                 print(f"  {s['command']:20s} {s['description']}")
+    def _print_help_overview(self) -> None:
+        """One screen: what to type, the core commands, a way into each capability.
+
+        /help printed about 90 lines — every group, every skill — so the
+        commands that matter scrolled out of view. The rest is a topic away.
+        """
+        from aria_code.apps.cli.commands.catalog import (
+            CORE_SLASH_COMMANDS, ENTRY_SLASH_COMMANDS, HELP_TOPICS, short_description,
+        )
+        zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+        T = (lambda a, b: a) if zh else (lambda a, b: b)
+        core = [(n, short_description(self.commands[n][1])) for n in CORE_SLASH_COMMANDS if n in self.commands]
+        entry = [(n, short_description(self.commands[n][1])) for n in ENTRY_SLASH_COMMANDS if n in self.commands]
+        examples = (
+            T("给 utils.py 补上测试并运行", "Add tests for utils.py and run them"),
+            T("NVDA 这周走势怎么样？", "How's NVDA this week?"),
+            T("看看 skus.csv 哪些 SKU 该补货", "Which SKUs in skus.csv need reordering?"),
+        )
+        topics = " · ".join(t.key for t in HELP_TOPICS)
+        if not self.context.has_rich:
+            print("\n" + T("直接描述要做的事，Aria 会选择工具：", "Describe what you want; Aria picks the tools:"))
+            for example in examples:
+                print(f"  {example}")
+            print("\n" + T("常用命令", "Commands"))
+            for name, desc in core + entry:
+                print(f"  {name:13s} {desc}")
+            print("\n" + T(f"更多：/help {topics} · all · <命令>", f"More: /help {topics} · all · <command>"))
+            return
+
+        from rich.text import Text
+
+        console = self.context.console
+        console.print()
+        console.print(f"[bold]{T('直接描述要做的事', 'Describe what you want')}[/bold]  "
+                      f"[dim]{T('Aria 会选择工具', 'Aria picks the tools')}[/dim]")
+        for example in examples:
+            console.print(f"  [#C08050]{example}[/#C08050]")
+        console.print()
+
+        name_width = max(len(name) for name, _ in core + entry)
+        # indent 2, name, gap 2, description, gap 3, name, gap 2, description
+        desc_width = max(12, (console.width - 2 - 2 * name_width - 2 - 3 - 2) // 2)
+
+        def cell(text: str) -> str:
+            return text if len(text) <= desc_width else text[:desc_width - 1] + "…"
+
+        two_columns = console.width >= 96
+        if not two_columns:
+            desc_width = max(12, console.width - 2 - name_width - 2)
+
+        def grid(rows):
+            if two_columns:
+                half = (len(rows) + 1) // 2
+                pairs = zip(rows[:half], rows[half:] + [("", "")])
+            else:
+                pairs = ((row, ("", "")) for row in rows)
+            lines = Text()
+            for left, right in pairs:
+                lines.append("  " + left[0].ljust(name_width + 2), style="bold #C08050")
+                lines.append(cell(left[1]).ljust(desc_width + 3) if right[0] else cell(left[1]), style="dim")
+                if right[0]:
+                    lines.append(right[0].ljust(name_width + 2), style="bold #C08050")
+                    lines.append(cell(right[1]), style="dim")
+                lines.append("\n")
+            lines.rstrip()
+            return lines
+
+        console.print(f"[bold]{T('命令', 'Commands')}[/bold]")
+        console.print(grid(core))
+        console.print()
+        console.print(f"[bold]{T('开始一项任务', 'Start a task')}[/bold]  "
+                      f"[dim]{T('代码 · 金融分析 · 物流', 'code · financial analysis · logistics')}[/dim]")
+        console.print(grid(entry))
+        console.print()
+        console.print(f"[dim]{T('更多', 'More')}: /help {topics} · all · <{T('命令', 'command')}>[/dim]")
+        console.print(f"[dim]@ {T('附加上下文', 'attaches context')} · ! {T('运行 shell 命令', 'runs a shell command')}"
+                      f" · Esc {T('中断', 'interrupts')}[/dim]")
+        console.print()
+
+    def _print_help_topic(self, topic) -> None:
+        from aria_code.apps.cli.commands.catalog import short_description
+
+        zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+        rows = [(n, self.commands[n][1]) for n in topic.commands if n in self.commands]
+        title = topic.title_zh if zh else topic.title_en
+        if not self.context.has_rich:
+            print(f"\n{title}")
+            for name, desc in rows:
+                print(f"  {name:16s} {desc}")
+            return
+        from rich.markup import escape
+
+        console = self.context.console
+        console.print()
+        console.print(f"[bold]{title}[/bold]")
+        for name, desc in rows:
+            console.print(f"  [bold #C08050]{name:16s}[/bold #C08050][dim]{escape(desc)}[/dim]", highlight=False)
+        console.print()
+
     async def cmd_artifacts(self, args: str):
         from aria_code.ui.render.output import display_path as _display_path
         from aria_code.apps.cli.helpers import _copy_text_to_clipboard, _open_path_or_url, _reveal_path_in_finder

@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Iterator, List, Tuple
 
 from aria_code.ui.console import HAS_PT
+from aria_code.apps.cli.commands.catalog import (
+    COMMAND_ALIASES,
+    CORE_SLASH_COMMANDS,
+    ENTRY_SLASH_COMMANDS,
+    popup_rank,
+    short_description,
+)
 from aria_code.packages.aria_services.references import REFERENCE_KINDS, reference_search_roots
 
 _REFERENCE_KIND_NAMES = frozenset(item.name for item in REFERENCE_KINDS)
@@ -233,8 +240,19 @@ if HAS_PT:
             pattern = ltext  # includes leading "/"
 
             # --- Build candidate list with scores ---
-            candidates: list[tuple[int, str, list[int], str, str]] = []
-            # (score, name, matched_indices, desc, category)
+            candidates: list[tuple[int, int, str, list[int], str, str]] = []
+            # (score, tier, name, matched_indices, desc, category)
+
+            # A bare "/" opens on the core commands and the entry points, in
+            # their set order — not on all 181 commands and skills. Every other
+            # command is one or two letters away.
+            if pattern == "/":
+                for name in (*CORE_SLASH_COMMANDS, *ENTRY_SLASH_COMMANDS):
+                    if name in self.commands:
+                        candidates.append((0, popup_rank(name), name, [], self.commands[name][1],
+                                           self._cmd_cat.get(name, "")))
+                yield from self._emit(candidates, pattern)
+                return
 
             all_cmds = list(self.commands.items())
             for name, (_, desc) in all_cmds:
@@ -247,8 +265,11 @@ if HAS_PT:
                         continue
                     indices = indices2
                 score = _score(cmd_part, pattern, indices)
+                # An alias shows only when it is what was typed.
+                if name in COMMAND_ALIASES and score > 1:
+                    continue
                 cat   = self._cmd_cat.get(name, "")
-                candidates.append((score, name, indices, desc, cat))
+                candidates.append((score, popup_rank(name), name, indices, desc, cat))
 
             for s in self.skills:
                 cmd  = s["command"]
@@ -258,20 +279,23 @@ if HAS_PT:
                     continue
                 score = _score(cmd, pattern, indices)
                 cat   = self._cmd_cat.get(cmd, "")
-                candidates.append((score, cmd, indices, desc, cat))
+                candidates.append((score, popup_rank(cmd), cmd, indices, desc, cat))
 
-            # Sort: primary = score, secondary = name
-            candidates.sort(key=lambda x: (x[0], x[1]))
+            # Best match first; among equals, core commands, then entry points.
+            candidates.sort(key=lambda x: (x[0], x[1], x[2]))
+            # Letters scattered through a name ("/re" in "/providers") are noise
+            # once there is a popup's worth of closer matches.
+            if sum(1 for c in candidates if c[0] < 30) >= 8:
+                candidates = [c for c in candidates if c[0] < 30]
+            yield from self._emit(candidates, pattern)
 
-            # Emit Completions
-            for score, name, indices, desc, cat in candidates:
+        def _emit(self, candidates, pattern: str) -> Iterator[Completion]:
+            for score, _tier, name, indices, desc, cat in candidates:
                 # Build highlighted display (amber on matched chars)
                 display_parts = _highlighted(name, indices if pattern != "/" else [])
 
-                # Category badge as short suffix in display
-                badge = _CAT_BADGE.get(cat, "")
-                if badge:
-                    display_parts += [("class:fz-cat", f"  {badge}")]
+                # No badge after the name: "/help  sys" next to "Session · …"
+                # said the category twice.
 
                 # Truncate description to ~45 chars for meta column
                 cat_label = {
@@ -283,7 +307,8 @@ if HAS_PT:
                     "设置": "运行设置" if self.lang == "zh" else "Runtime",
                     "系统": "会话" if self.lang == "zh" else "Session",
                 }.get(cat, "")
-                meta_body = desc[:38] + ("…" if len(desc) > 38 else "")
+                desc = short_description(desc)
+                meta_body = desc[:44] + ("…" if len(desc) > 44 else "")
                 meta_str = f"{cat_label} · {meta_body}" if cat_label else meta_body
 
                 # start_position: replace the entire typed prefix
