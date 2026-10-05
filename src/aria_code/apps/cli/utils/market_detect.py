@@ -1231,6 +1231,33 @@ def _is_blocked_market_symbol_candidate(symbol: str) -> bool:
     )
 
 
+def _is_english_function_word(message: str, match) -> bool:
+    """"I" the pronoun and "A" the article, read as one-letter tickers.
+
+    "Should I sell my Tesla shares?" came back as a comparison of ``I`` and
+    TSLA, and "I think AAPL is cheap" as a quote for ``I``. "A" is skipped only
+    before a lowercase word ("A good time to buy MSFT?"), so "A股" is still
+    the A-share market; F, T, C and the other one-letter tickers are untouched.
+    """
+    symbol = match.group(1)
+    if symbol == "I":
+        return True
+    return symbol == "A" and _re_sym.match(r"A [a-z]", message[match.start(1):match.start(1) + 3]) is not None
+
+
+def _first_bare_ticker(pattern: str, message: str) -> str:
+    """The first capitalised word the pattern finds, unless it is a blocked term.
+
+    English function words are passed over; a blocked term still ends the
+    search, as it always has, so "Run the API tests for CI" stays no ticker.
+    """
+    for match in _re_sym.finditer(pattern, message):
+        if _is_english_function_word(message, match):
+            continue
+        return "" if _is_blocked_market_symbol_candidate(match.group(1)) else match.group(1)
+    return ""
+
+
 def _extract_market_symbol(message: str) -> str:
     """Extract a likely market symbol from Chinese company names or tickers."""
     resolved = _resolve_market_symbol(message)
@@ -1248,15 +1275,12 @@ def _extract_market_symbol(message: str) -> str:
     m = _re_sym.search(r'(?<![A-Za-z0-9])(\^[A-Z0-9]{2,10}|[A-Z]{2,8}=F|[A-Z]{6}=X|DX-Y\.NYB)(?![A-Za-z0-9])', message, _re_sym.I)
     if m:
         return m.group(1).upper()
-    m = _re_sym.search(r'\b([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)\b', message)
-    if m and not _is_blocked_market_symbol_candidate(m.group(1)):
-        return m.group(1)
+    symbol = _first_bare_ticker(r'\b([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)\b', message)
+    if symbol:
+        return symbol
     # Chinese text immediately after a ticker ("AAPL的市场") prevents \b from
     # matching because Unicode word-boundary rules treat 的 as a word char.
-    m = _re_sym.search(r'(?<![A-Za-z])([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)(?![A-Za-z])', message)
-    if m and not _is_blocked_market_symbol_candidate(m.group(1)):
-        return m.group(1)
-    return ""
+    return _first_bare_ticker(r'(?<![A-Za-z])([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)(?![A-Za-z])', message)
 
 def _extract_market_symbols(message: str, limit: int = 6) -> list[str]:
     """Extract all likely market symbols, preserving mention order."""
@@ -1289,12 +1313,12 @@ def _extract_market_symbols(message: str, limit: int = 6) -> list[str]:
 
     for match in _re_sym.finditer(r'\b([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)\b', message):
         symbol = match.group(1)
-        if not _is_blocked_market_symbol_candidate(symbol):
+        if not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match):
             add_hit(match.start(), symbol)
 
     for match in _re_sym.finditer(r'(?<![A-Za-z])([A-Z]{1,5}(?:\.(?:HK|SH|SZ))?)(?![A-Za-z])', message):
         symbol = match.group(1)
-        if not _is_blocked_market_symbol_candidate(symbol):
+        if not _is_blocked_market_symbol_candidate(symbol) and not _is_english_function_word(message, match):
             add_hit(match.start(), symbol)
 
     ordered: list[str] = []
@@ -1507,12 +1531,19 @@ def _detect_market_overview(message: str):
     return None
 
 
-def _is_market_snapshot_request(message: str, history: list = None) -> bool:
+def _is_market_snapshot_request(message: str, history: list = None, *,
+                                evidence_required: bool = False) -> bool:
     """Return True for simple quote / market snapshot analysis requests.
 
     跟进问题（"现在的股票和趋势呢"）：当前消息无标的时回溯会话历史继承。
     但如果消息中包含未能识别的公司名，则不视为跟进问题（不继承历史标的）。
     房价/楼市类问题直接拒绝，防止继承上一个股票代码。
+
+    ``evidence_required`` is the evidence gate's verdict on this message. When
+    the gate will refuse an answer without data and the message names an
+    instrument, it is a snapshot request whatever its wording: the word lists
+    below were written for Chinese, so "How's NVDA this week?" matched none of
+    them, nothing fetched data on a route without tools, and the gate refused.
     """
     # Real-estate questions must never be routed to the stock snapshot path
     if _is_realty_query(message):
@@ -1528,6 +1559,8 @@ def _is_market_snapshot_request(message: str, history: list = None) -> bool:
     _is_coding = any(k in message.lower() for k in _coding_kw)
     if _is_coding or _is_stock_chart_analysis_request(message) or _is_visual_market_artifact_request(message):
         return False
+    if evidence_required and _extract_market_symbol(message):
+        return True
     low = message.lower()
     # Unambiguously market-specific wording.  These carry enough intent on their
     # own to inherit a symbol from an earlier turn ("行情呢" / "现价多少").

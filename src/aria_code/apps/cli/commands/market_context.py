@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any, Callable, Optional
 
@@ -12,6 +13,12 @@ from aria_code.apps.cli.prompts.system_prompts import build_response_style_rule
 
 TA_SESSION_CACHE: dict[str, dict[str, Any]] = {}
 TA_SESSION_CACHE_TTL = 600
+
+
+def context_has_price(context: str) -> bool:
+    """Whether an /analyze context carries a fetched price — the header line
+    build_analyze_context writes as "- Price: 333.69" ("- 价格: 333.69")."""
+    return re.search(r"^- (?:Price|价格): \d", context or "", re.MULTILINE) is not None
 
 
 def _cached_ta(symbol: str) -> dict[str, Any]:

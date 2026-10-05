@@ -7,6 +7,7 @@ _HAS_MDC and _get_mdc are resolved via lazy import to avoid circular deps.
 from __future__ import annotations
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -131,6 +132,14 @@ def _snapshot_signal(price, change_pct, rsi, macd_hist, ma20, ma60) -> tuple[str
         signal, label = "NEUTRAL", "震荡观察"
     confidence = min(0.82, 0.46 + abs(score) * 0.07)
     return signal, score, confidence, label
+
+
+# _snapshot_signal's labels, for a reply in English.
+_SIGNAL_LABELS_EN = {
+    "强势多头": "strongly bullish", "偏多": "bullish", "短线偏强": "short-term firm",
+    "震荡观察": "range-bound", "短线偏弱": "short-term soft", "偏空": "bearish",
+    "强势空头": "strongly bearish", "指标不足": "insufficient data",
+}
 
 
 def _support_resistance_for_row(currency: str, price, ma20, ma60, bb_lower, bb_upper) -> tuple[str, str]:
@@ -374,7 +383,7 @@ def _append_timeframe_levels(
         raw_name = str(row.get("name") or "—")
         name = _timeframe_display_name(raw_name, english=english)
         source = _timeframe_source_label(str(row.get("source") or ""), english=english)
-        horizon = str(row.get("horizon") or "—")
+        horizon = _horizon_label(str(row.get("horizon") or "—"), english=english)
         support = row.get("support") or []
         resistance = row.get("resistance") or []
         action = _level_action_line(name, support, resistance, currency, english=english)
@@ -395,6 +404,18 @@ def _append_timeframe_levels(
             lines.append(f"  - 支撑：{_format_levels(currency, support)}")
             lines.append(f"  - 压力：{_format_levels(currency, resistance)}")
             lines.append(f"  - 用法：{action}")
+
+
+_HORIZON_UNITS_EN = {"日": "days", "周": "weeks", "月": "months"}
+
+
+def _horizon_label(horizon: str, *, english: bool) -> str:
+    if not english:
+        return horizon
+    if horizon == "快照":
+        return "snapshot"
+    match = re.fullmatch(r"\s*(\d+\s*-\s*\d+)\s*([日周月])\s*", horizon)
+    return f"{match.group(1)} {_HORIZON_UNITS_EN[match.group(2)]}" if match else horizon
 
 
 def _build_timeframe_levels(
@@ -1058,6 +1079,8 @@ def _try_handle_multi_market_snapshot(message: str, symbols: list[str]) -> dict:
         macd_text = f"{row['macd_hist']:.4f}" if row.get("macd_hist") is not None else "—"
         sig = row.get("signal") or "—"
         sig_label = row.get("signal_label") or ""
+        if _en:
+            sig_label = _SIGNAL_LABELS_EN.get(sig_label, sig_label)
         sig_text = f"{sig} / {sig_label}" if sig_label and sig != "—" else sig
         table.append(
             f"| {row['symbol']} | {row.get('name') or row['symbol']} | {price} | "
@@ -1104,6 +1127,8 @@ def _try_handle_multi_market_snapshot(message: str, symbols: list[str]) -> dict:
         vol = _fmt_int(row.get("volume")) if row.get("volume") else ""
         sig = row.get("signal") or "—"
         sig_label = row.get("signal_label") or "指标不足"
+        if _en:
+            sig_label = _SIGNAL_LABELS_EN.get(sig_label, sig_label)
         score = int(row.get("signal_score") or 0)
         conf = float(row.get("signal_confidence") or 0)
         table.append("")
@@ -1417,14 +1442,18 @@ def _try_handle_market_overview(message: str) -> dict:
             "tools_used": ["market_overview"]}
 
 
-def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> dict:
+def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
+                                         evidence_required: bool = False) -> dict:
     """Deterministic path for simple market analysis.
 
     Local small models tend to mangle injected quote fields into fragments like
     "N/A/N/A/-1.24%".  For snapshot requests, format the data directly.
+    ``evidence_required``: see ``_is_market_snapshot_request``.
     """
-    if not _is_market_snapshot_request(message, history):
+    if not _is_market_snapshot_request(message, history, evidence_required=evidence_required):
         return {"success": False, "error": "not_market_snapshot"}
+    # The reply is in the language of the question, failures included.
+    _en = _detect_lang(message) == "en"
 
     _etf_symbols = _resolve_etf_snapshot_symbols(message)
     if len(_etf_symbols) >= 2:
@@ -1447,6 +1476,15 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         return {
             "success": True,
             "response": (
+                "## ❓ Unrecognised stock\n\n"
+                "The company or brand in your message did not resolve to a known ticker.\n\n"
+                "Try again with the ticker, for example:\n"
+                "- China A-shares: `/quote 600519` (Kweichow Moutai)\n"
+                "- Hong Kong: `/quote 0700.HK` (Tencent)\n"
+                "- US: `/quote AAPL`\n"
+                "- Europe: `/quote MC.PA` (LVMH)\n\n"
+                "*Tip: `/ta <ticker>` gives the full technical analysis.*"
+            ) if _en else (
                 "## ❓ 无法识别的股票\n\n"
                 "未能将消息中提到的公司/品牌解析为已知股票代码。\n\n"
                 "请提供具体代码后重试，例如：\n"
@@ -1474,6 +1512,10 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         return {
             "success": True,
             "response": (
+                f"## {symbol} market snapshot\n\n"
+                "The local market data client is not loaded, so there is no live quote.\n\n"
+                f"Run `/quote {symbol}` to retry."
+            ) if _en else (
                 f"## {symbol} 市场快照\n\n"
                 "当前本地行情客户端未加载，无法获取实时行情。\n\n"
                 f"可运行 `/quote {symbol}` 重试。"
@@ -1485,18 +1527,22 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
     import time as _time_snap
 
     def _clean_network_error(raw: str) -> str:
-        """Convert raw exception strings to readable Chinese messages."""
+        """Convert raw exception strings to readable messages."""
         if "Connection aborted" in raw or "RemoteDisconnected" in raw:
-            return "网络连接被中断（服务器关闭连接），请稍后重试"
+            return ("the server closed the connection; try again shortly" if _en
+                    else "网络连接被中断（服务器关闭连接），请稍后重试")
         if "Connection refused" in raw:
-            return "连接被拒绝，数据服务暂时不可用"
+            return ("connection refused; the data service is unavailable for now" if _en
+                    else "连接被拒绝，数据服务暂时不可用")
         if "timeout" in raw.lower() or "timed out" in raw.lower():
-            return "连接超时，请稍后重试"
+            return "the connection timed out; try again shortly" if _en else "连接超时，请稍后重试"
         if "NoneType" in raw or raw.strip() in ("None", ""):
-            return "数据源未返回有效价格"
+            return _no_price
         return raw
 
-    quote = {"success": False, "error": "未初始化"}
+    _no_price = "the data source returned no valid price" if _en else "当前数据源未返回有效价格"
+
+    quote = {"success": False, "error": "not initialised" if _en else "未初始化"}
     _snapshot_quality = {}
     import contextlib as _ctxlib_snapshot
     import io as _io_snapshot
@@ -1653,20 +1699,26 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         price = _num(quote.get("price"))
 
     if not quote.get("success") or price is None or price == 0:
-        err = quote.get("error") or "当前数据源未返回有效价格"
+        err = quote.get("error") or _no_price
         if "NoneType" in str(err):
-            err = "当前数据源未返回有效价格"
+            err = _no_price
         is_rate_limit = "rate" in str(err).lower() or "429" in str(err) or "too many" in str(err).lower()
         if is_rate_limit:
             if _fh_tried:
                 # Finnhub was tried but also failed — both sources exhausted
-                _hint = "\n\n[提示] yfinance 和 Finnhub 均触发频率限制，请稍等 30 秒后重试。"
+                _hint = ("\n\n[Note] yfinance and Finnhub are both rate-limited; wait 30 seconds and retry."
+                         if _en else "\n\n[提示] yfinance 和 Finnhub 均触发频率限制，请稍等 30 秒后重试。")
             elif _fh_key:
                 # Key configured but Finnhub wasn't tried (shouldn't happen, but defensive)
-                _hint = "\n\n[提示] 数据源请求频率受限，请稍等 30 秒后重试。"
+                _hint = ("\n\n[Note] The data source is rate-limited; wait 30 seconds and retry."
+                         if _en else "\n\n[提示] 数据源请求频率受限，请稍等 30 秒后重试。")
             else:
                 # No Finnhub key — suggest configuring one
                 _hint = (
+                    "\n\n[Note] The data source is rate-limited: wait 30 seconds and retry, "
+                    "or add a Finnhub key as a fallback source: `/apikey set finnhub <key>` "
+                    "(sign up: https://finnhub.io/register)"
+                ) if _en else (
                     "\n\n[提示] 数据源请求频率受限：请稍等 30 秒后重试，"
                     "或配置 Finnhub key 使用备用数据源：`/apikey set finnhub <key>`"
                     "（注册：https://finnhub.io/register）"
@@ -1676,6 +1728,10 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         return {
             "success": True,
             "response": (
+                f"## {symbol} market snapshot\n\n"
+                f"No valid quote right now: {err}{_hint}\n\n"
+                f"Run `/quote {symbol}` to retry; RSI, MACD and support/resistance are withheld until data is back."
+            ) if _en else (
                 f"## {symbol} 市场快照\n\n"
                 f"当前无法获取有效行情：{err}{_hint}\n\n"
                 f"可运行 `/quote {symbol}` 重试；在数据恢复前不输出 RSI、MACD 或支撑/阻力位。"
@@ -2085,19 +2141,6 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
     _price_pos  = int((price - low) / _range_size * 100) if _range_size and _range_size > 0 else None
     _swing_pct  = round(_range_size / price * 100, 2) if _range_size and price else None
     _chg_abs    = abs(chg) if chg is not None else None
-    _pa_lines   = []
-    if _price_pos is not None:
-        _pos_label = "日内高位" if _price_pos >= 70 else ("日内低位" if _price_pos <= 30 else "日内中段")
-        _pa_lines.append(f"价格位置：{_pos_label}（日内第 {_price_pos} 百分位）")
-    if _swing_pct:
-        _pa_lines.append(f"日内振幅：{_swing_pct:.1f}%{'（波动偏大）' if _swing_pct > 3 else ''}")
-    if chg is not None and _chg_abs is not None:
-        if _chg_abs < 0.01:
-            _pa_lines.append("今日动能：持平")
-        else:
-            _mo = "上涨" if chg > 0 else "下跌"
-            _strength = "（大幅）" if _chg_abs > 2 else ("（温和）" if _chg_abs < 0.5 else "")
-            _pa_lines.append(f"今日动能：{_mo} {_chg_abs:.2f}%{_strength}")
 
     # ── Build output ──────────────────────────────────────────────────────
     weekday = datetime.now().weekday()
@@ -2163,7 +2206,7 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         "pos_low":      "Lower range" if _en else "日内低位",
         "pos_mid":      "Mid range" if _en else "日内中段",
         "pos_pct":      "day percentile" if _en else "百分位",
-        "swing_high":   "(high volatility)" if _en else "（波动偏大）",
+        "swing_high":   " (high volatility)" if _en else "（波动偏大）",
         "flat":         "Flat" if _en else "持平",
         "rising":       "Up" if _en else "上涨",
         "falling":      "Down" if _en else "下跌",
@@ -2174,6 +2217,7 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         "day_swing":    "Day swing" if _en else "日内振幅",
     }
 
+    _sep = ": " if _en else "："
     session_note = _L["after_hours"] if weekday >= 5 else _L["market_open"]
 
     def _money(v: float | int | None) -> str:
@@ -2272,8 +2316,8 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         lines.append(f"## `{symbol}`")
     lines.append(f"*{data_src} · {_now_str} · {session_note} · {_L['disclaimer']}*")
     lines.append("")
-    lines.append(f"**{'Takeaway' if _en else '结论'}**：{_summary_line}")
-    lines.append(f"**{'Watch' if _en else '观察位'}**：{_watch_line}")
+    lines.append(f"**{'Takeaway' if _en else '结论'}**{_sep}{_summary_line}")
+    lines.append(f"**{'Watch' if _en else '观察位'}**{_sep}{_watch_line}")
     lines.append("")
 
     # ── Price table ──
@@ -2295,7 +2339,8 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
     lines.append("|---------|------|------|")
     if rsi is not None:
         _rsi_meaning = _L["overbought"] if rsi >= 70 else (_L["oversold"] if rsi <= 30 else _L["neutral"])
-        lines.append(f"| RSI(14) | {rsi_view} | {_rsi_meaning} |")
+        # rsi_view carries a Chinese gloss; the Meaning column says it in English.
+        lines.append(f"| RSI(14) | {f'{rsi:.1f}' if _en else rsi_view} | {_rsi_meaning} |")
     else:
         lines.append("| RSI(14) | — | — |")
     if mhist is not None:
@@ -2318,17 +2363,19 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
     _pa_lines_l10n = []
     if _price_pos is not None:
         _pos_label = _L["pos_high"] if _price_pos >= 70 else (_L["pos_low"] if _price_pos <= 30 else _L["pos_mid"])
-        _pa_lines_l10n.append(f"{_L['day_pos']}：{_pos_label}（{_en and 'day' or '日内第'} {_price_pos} {_L['pos_pct']}）")
+        _pa_lines_l10n.append(
+            f"{_L['day_pos']}: {_pos_label} ({_price_pos}th percentile of the day's range)" if _en else
+            f"{_L['day_pos']}：{_pos_label}（日内第 {_price_pos} {_L['pos_pct']}）")
     if _swing_pct:
         _swing_note = _L["swing_high"] if _swing_pct > 3 else ""
-        _pa_lines_l10n.append(f"{_L['day_swing']}：{_swing_pct:.1f}%{_swing_note}")
+        _pa_lines_l10n.append(f"{_L['day_swing']}{_sep}{_swing_pct:.1f}%{_swing_note}")
     if chg is not None and _chg_abs is not None:
         if _chg_abs < 0.01:
-            _pa_lines_l10n.append(f"{_L['day_momentum']}：{_L['flat']}")
+            _pa_lines_l10n.append(f"{_L['day_momentum']}{_sep}{_L['flat']}")
         else:
             _mo = _L["rising"] if chg > 0 else _L["falling"]
             _strength = _L["strong"] if _chg_abs > 2 else (_L["mild"] if _chg_abs < 0.5 else "")
-            _pa_lines_l10n.append(f"{_L['day_momentum']}：{_mo} {_chg_abs:.2f}%{_strength}")
+            _pa_lines_l10n.append(f"{_L['day_momentum']}{_sep}{_mo} {_chg_abs:.2f}%{_strength}")
 
     # ── Signal ──
     lines.append("")
@@ -2338,7 +2385,7 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
             if _en else
             f" · 量化分 {_signal_score:+d} · 置信度 {_signal_confidence:.0%}"
         )
-        lines.append(f"{_L['signal_lbl']}：`{signal}` — {signal_str}{_score_detail}")
+        lines.append(f"{_L['signal_lbl']}{_sep}`{signal}` — {signal_str}{_score_detail}")
         _reason_parts = []
         if _positive_reasons:
             _reason_parts.append(("support: " if _en else "支撑：") + _join_reasons(_positive_reasons[:3]))
@@ -2347,13 +2394,13 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None) -> 
         if _neutral_reasons:
             _reason_parts.append(("neutral: " if _en else "中性：") + _join_reasons(_neutral_reasons[:2]))
         if _reason_parts:
-            lines.append(f"**{'Signal drivers' if _en else '信号拆解'}**：" + ("; ".join(_reason_parts) if _en else "；".join(_reason_parts)))
+            lines.append(f"**{'Signal drivers' if _en else '信号拆解'}**{_sep}" + ("; ".join(_reason_parts) if _en else "；".join(_reason_parts)))
     else:
         lines.append(_L["pa_hdr"])
         for _pal in _pa_lines_l10n:
             lines.append(f"- {_pal}")
         lines.append("")
-        lines.append(f"{_L['signal_lbl']}：`{signal}` — {_L['sig_no_ta']}")
+        lines.append(f"{_L['signal_lbl']}{_sep}`{signal}` — {_L['sig_no_ta']}")
 
     # ── Config hint (show only when TA missing) ──
     if not _enough_data:

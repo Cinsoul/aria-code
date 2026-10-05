@@ -26,6 +26,7 @@ from aria_code.apps.cli.utils.market_detect import (
     _is_realty_query,
     _is_stock_chart_analysis_request,
 )
+from aria_code.packages.aria_services.research_protocol import requires_financial_evidence
 
 
 BrokerRegistryFactory = Callable[[], Any]
@@ -178,8 +179,13 @@ def run_deterministic_chain(
     if not deterministic.get("success") and not config.model_has_tools:
         deterministic = _try_handle_market_overview(message)
 
+    # The evidence gate refuses a market answer given without data, and a
+    # model with no tools cannot fetch any — so whatever the gate will demand
+    # data for is fetched here, in any wording ("How's NVDA this week?" as
+    # well as "分析苹果股票").
     if not deterministic.get("success") and not config.model_has_tools:
-        deterministic = _try_handle_market_snapshot_analysis(message, history=history)
+        deterministic = _try_handle_market_snapshot_analysis(
+            message, history=history, evidence_required=requires_financial_evidence(message))
 
     return deterministic
 
