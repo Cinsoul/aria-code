@@ -165,6 +165,7 @@ from aria_code.apps.cli.plan_mode import PlanModeState
 from aria_code.workspace import VerificationPlanner, WorkspaceFiles, WorkspaceSecurity
 from aria_code.apps.cli.commands.catalog import VISIBLE_SLASH_COMMANDS
 from aria_code.apps.cli.commands.market_context import build_analyze_context, build_analyze_prompt
+from aria_code.apps.cli.market_hours import market_session
 from aria_code.apps.cli.commands.market import (
     parse_analysis_args,
     parse_symbols,
@@ -2587,15 +2588,11 @@ def _build_user_context(config: dict) -> Optional[dict]:
     now = datetime.now()
     ctx["current_datetime"] = now.strftime("%Y-%m-%d %H:%M")
     ctx["day_of_week"] = now.strftime("%A")
-    # US market session heuristic (Mon-Fri, approximate ET hours)
-    weekday = now.weekday()  # 0=Mon, 6=Sun
-    hour_min = now.hour * 60 + now.minute
-    if weekday < 5 and 570 <= hour_min <= 960:  # 9:30am-4:00pm
-        ctx["market_status"] = "open"
-    elif weekday < 5 and (240 <= hour_min < 570 or 960 <= hour_min < 1200):
-        ctx["market_status"] = "pre/after-hours"
-    else:
-        ctx["market_status"] = "closed"
+    # The US session on New York's clock — this compared local hours with
+    # 09:30-16:00, so a user in Beijing had the market "open" overnight.
+    _us_session = market_session("SPY")
+    if _us_session:
+        ctx["market_status"] = {"pre": "pre-market", "post": "after-hours"}.get(_us_session, _us_session)
     # Active model name
     model_id = config.get("model", "qwen2.5:7b")
     mkey = resolve_model_key(model_id)

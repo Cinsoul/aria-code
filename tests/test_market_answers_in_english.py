@@ -199,3 +199,12 @@ def test_analyze_tells_the_gate_whether_its_prompt_carries_data(monkeypatch):
     asyncio.run(Cli("## AAPL Market Data\n- Price: unavailable (configure a data service key via /apikey)")
                 .cmd_analyze("AAPL"))
     assert sent == [True, False]
+
+
+def test_the_snapshot_header_states_the_session_on_the_exchange_clock(offline_market, monkeypatch):
+    monkeypatch.setattr(market_handlers, "market_session", lambda _symbol: "closed")
+    header = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"].splitlines()[1]
+    assert "· Market closed ·" in header
+    monkeypatch.setattr(market_handlers, "market_session", lambda _symbol: None)
+    header = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"].splitlines()[1]
+    assert "Market" not in header and "· ·" not in header and header.endswith("Not investment advice*")

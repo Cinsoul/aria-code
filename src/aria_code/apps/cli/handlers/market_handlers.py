@@ -23,6 +23,7 @@ from aria_code.apps.cli.utils.market_detect import (
     _detect_market_overview,
     _PRIVATE_COMPANY_PROFILES,
 )
+from aria_code.apps.cli.market_hours import market_session
 from aria_code.apps.cli.market_metadata import enrich_market_quote, market_display_label
 from aria_code.packages.aria_core.paths import aria_home
 
@@ -2143,7 +2144,6 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
     _chg_abs    = abs(chg) if chg is not None else None
 
     # ── Build output ──────────────────────────────────────────────────────
-    weekday = datetime.now().weekday()
     ti_provider = ti.get("provider", "")
     quote_chain = quote.get("provider_chain") or [provider]
     data_src = " -> ".join(str(p) for p in quote_chain if p)
@@ -2160,8 +2160,11 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
     signal_str = _SIGNAL_LABELS.get(_lang, _SIGNAL_LABELS["zh"])[_sig_key]
     _L = {
         "disclaimer":   "Not investment advice" if _en else "不构成投资建议",
-        "after_hours":  "After-hours" if _en else "休市/盘后",
-        "market_open":  "Market open" if _en else "盘中",
+        "session_open":   "Market open" if _en else "盘中",
+        "session_pre":    "Pre-market" if _en else "盘前",
+        "session_post":   "After-hours" if _en else "盘后",
+        "session_closed": "Market closed" if _en else "休市",
+        "session_24/7":   "24/7 market" if _en else "全天交易",
         "price_hdr":    "Metric" if _en else "指标",
         "value_hdr":    "Value" if _en else "数值",
         "latest":       "Last price" if _en else "最新价",
@@ -2218,7 +2221,9 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
     }
 
     _sep = ": " if _en else "："
-    session_note = _L["after_hours"] if weekday >= 5 else _L["market_open"]
+    # On the exchange's clock, not this machine's; nothing when it is unknown.
+    _session = market_session(symbol)
+    session_note = _L.get(f"session_{_session}", "") if _session else ""
 
     def _money(v: float | int | None) -> str:
         try:
@@ -2314,7 +2319,7 @@ def _try_handle_market_snapshot_analysis(message: str, history: list = None, *,
         lines.append(f"## {_header_name}  `{symbol}`")
     else:
         lines.append(f"## `{symbol}`")
-    lines.append(f"*{data_src} · {_now_str} · {session_note} · {_L['disclaimer']}*")
+    lines.append("*" + " · ".join(p for p in (data_src, _now_str, session_note, _L["disclaimer"]) if p) + "*")
     lines.append("")
     lines.append(f"**{'Takeaway' if _en else '结论'}**{_sep}{_summary_line}")
     lines.append(f"**{'Watch' if _en else '观察位'}**{_sep}{_watch_line}")
