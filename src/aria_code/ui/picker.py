@@ -19,7 +19,8 @@ if _HAS_TERMIOS:
 
 def arrow_select(options: list, selected: int = 0, title: str = "",
                  max_visible: int = 10,
-                 controls_hint: str = "↑↓  Enter  Esc/q Cancel") -> int:
+                 controls_hint: str = "↑↓  Enter  Esc/q Cancel",
+                 collapse_to: str | None = None) -> int:
     """Interactive arrow-key selector with scrolling.
 
     Args:
@@ -27,6 +28,10 @@ def arrow_select(options: list, selected: int = 0, title: str = "",
         selected:    initially highlighted index
         title:       optional header line
         max_visible: max rows shown at once; scrolls when list is larger
+        collapse_to: when given, the menu is erased once answered and one
+                     line is left in its place — "✓ Yes  fx.py" — instead of
+                     the whole menu, as Codex leaves an answered approval.
+                     The text names what was being approved.
     Returns:
         index of chosen option, or -1 if cancelled
     """
@@ -130,21 +135,13 @@ def arrow_select(options: list, selected: int = 0, title: str = "",
 
     _render.drawn = False
     _render.last_phys_height = visible + 1
+    header_text = f"  {title}  {controls_hint}" if title else f"  {controls_hint}"
+    # blank line + rule, then the title/hint line(s) + blank line
+    header_height = 2 + _physical_lines(header_text) + 1
+    result = -1
 
-    try:
-        _esc_watcher.pause()
-        tty.setcbreak(fd)
-        sys.stdout.flush()
-
-        # Top boundary
-        _raw(f"\n  \033[2m{_rule}\033[0m\n")
-        if title:
-            _raw(f"  \033[1m{title}\033[0m  \033[2m{controls_hint}\033[0m\n\n")
-        else:
-            _raw(f"  \033[2m{controls_hint}\033[0m\n\n")
-
-        _render()
-
+    def _choose() -> int:
+        nonlocal selected
         while True:
             ch = os.read(fd, 1)
             if ch == b'\x1b':
@@ -175,12 +172,40 @@ def arrow_select(options: list, selected: int = 0, title: str = "",
                 selected = n - 1; _render()
             elif ch in (b'\x03', b'\x04'):
                 return -1
+
+    try:
+        _esc_watcher.pause()
+        tty.setcbreak(fd)
+        sys.stdout.flush()
+
+        # Top boundary
+        _raw(f"\n  \033[2m{_rule}\033[0m\n")
+        if title:
+            _raw(f"  \033[1m{title}\033[0m  \033[2m{controls_hint}\033[0m\n\n")
+        else:
+            _raw(f"  \033[2m{controls_hint}\033[0m\n\n")
+
+        _render()
+        result = _choose()
+        return result
     except (EOFError, KeyboardInterrupt, OSError):
         return -1
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         _esc_watcher.resume()
-        _raw(f"  \033[2m{_rule}\033[0m\n\n")
+        if collapse_to is not None and _render.drawn:
+            label = ""
+            if 0 <= result < n:
+                opt = options[result]
+                label = opt[0] if isinstance(opt, tuple) else opt
+            declined = result < 0 or label.strip().lower() in ("no", "否", "取消", "cancel")
+            mark = "\033[31m✗\033[0m" if declined else "\033[32m✓\033[0m"
+            shown = label or "Cancelled"
+            subject = f"  \033[2m{collapse_to}\033[0m" if collapse_to else ""
+            # Up over the header and the menu, clear to the end, one line instead.
+            _raw(f"\033[{header_height + _render.last_phys_height}A\r\033[J  {mark} {shown}{subject}\n")
+        else:
+            _raw(f"  \033[2m{_rule}\033[0m\n\n")
 
 
 async def run_picker_in_thread(options: list, current_idx: int,

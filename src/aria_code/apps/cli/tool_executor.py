@@ -57,7 +57,7 @@ def _command_approval_prefix(command: str) -> tuple[str, ...]:
     return ()
 
 
-def _arrow_select(options, selected: int = 0, title: str = "") -> int:
+def _arrow_select(options, selected: int = 0, title: str = "", **_kwargs) -> int:
     return len(options) - 1
 
 
@@ -472,7 +472,10 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
                 ("Allow & set balanced", "允许并升级策略（本会话有效）" if zh else "and use balanced for this session"),
                 ("No", "拒绝执行" if zh else "do not run it"),
             ]
-            choice = _arrow_select(options, selected=0, title="")
+            # Imported here: aria_cli rebinds this function to its own globals.
+            from aria_code.apps.cli.runtime_consumer import approval_subject as _subject
+            choice = _arrow_select(options, selected=0, title="",
+                                   collapse_to=_subject(tool_name, params))
             if choice == 0:
                 return ApprovalDecision.allow(policy="balanced", user_approved=True)
             if choice == 1:
@@ -518,7 +521,10 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
         ("Yes, allow all tools",             "本会话内所有工具自动允许" if zh else "every tool, this session"),
         ("No",                               ""),
     ]
-    choice = _arrow_select(options, selected=0, title="")
+    # Imported here: aria_cli rebinds this function to its own globals.
+    from aria_code.apps.cli.runtime_consumer import approval_subject as _subject
+    choice = _arrow_select(options, selected=0, title="",
+                           collapse_to=_subject(tool_name, params))
 
     if choice == 0:
         if tool_name == "run_command":

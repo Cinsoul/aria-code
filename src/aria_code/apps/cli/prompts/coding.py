@@ -26,6 +26,12 @@ CODING_SYSTEM_PROMPT = (
     "For multi-file projects: emit one <tool_call> per file in the SAME response (up to 5 write_file calls). "
     "Then run/verify in the NEXT response. Never mix write_file and run_command in the same response.\n\n"
 
+    "## FINAL SUMMARY\n"
+    "The user has already seen every step: each file written, with a preview, and each command's "
+    "output. End with 1-4 sentences: which files changed, what was verified and the result "
+    "(\"3 tests passed\"), and anything left open. Do NOT paste file contents, diffs or command "
+    "output back; quote a line or two only when it matters.\n\n"
+
     "## ABSOLUTELY FORBIDDEN\n"
     "1. NEVER pass slash-commands (/config, /model, /note, /apikey, etc.) to run_command — "
     "   they are NOT shell commands. To change policy tell the user to type the slash command directly.\n"

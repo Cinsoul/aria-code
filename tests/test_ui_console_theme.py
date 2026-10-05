@@ -30,10 +30,15 @@ def test_light_markdown_theme_uses_high_contrast_text():
 
 
 def test_make_markdown_uses_neutral_code_theme():
+    """Code keeps the terminal's background. "bw" was meant to be neutral, but
+    it paints #ffffff behind every block: white slabs in a dark terminal."""
+    from rich.syntax import Syntax
+
     md = make_markdown("`AAPL` and ```python\nprint('ok')\n```")
 
-    assert getattr(md, "code_theme", "") == "bw"
-    assert getattr(md, "inline_code_theme", "") == "bw"
+    assert md.code_theme in ("ansi_dark", "ansi_light")
+    assert md.inline_code_theme == md.code_theme
+    assert not Syntax.get_theme(md.code_theme).get_background_style()
 
 
 def test_rich_theme_defaults_apple_terminal_to_light_without_color_metadata():

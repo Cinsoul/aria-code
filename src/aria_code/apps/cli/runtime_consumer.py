@@ -33,13 +33,42 @@ _REPETITION_NOTICE = (
 
 
 def _redact_activity_text(value: Any, limit: int = 90) -> str:
+    """One line, secrets masked — for anything echoed to the screen or a log.
+
+    Shell commands are now shown on their step line, so this also covers
+    "Authorization: Bearer …", credentials in URLs and the usual key shapes.
+    """
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     text = re.sub(
-        r"(?i)(api[_-]?key|token|password|secret)(\s*[=:]\s*|\s+)[^\s]+",
+        r"(?i)(api[_-]?key|token|password|passwd|secret)(\s*[=:]\s*|\s+)[^\s]+",
         r"\1\2***",
         text,
     )
+    text = re.sub(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 ***", text)
+    text = re.sub(r"://[^/\s:@]+:[^@\s]+@", "://***@", text)
+    text = re.sub(r"\b(sk|pk|rk)-[A-Za-z0-9_-]{8,}|\bgh[pousr]_[A-Za-z0-9]{12,}|\bAIza[0-9A-Za-z_-]{20,}"
+                  r"|\bxox[abposr]-[A-Za-z0-9-]{10,}", "***", text)
     return text[:limit]
+
+
+# How long the runtime measured a tool call to take, carried with its result.
+MEASURED_ELAPSED_KEY = "_elapsed_s"
+
+
+def with_measured_elapsed(result: Any, elapsed: Any) -> Any:
+    if isinstance(result, dict) and isinstance(elapsed, (int, float)):
+        return {**result, MEASURED_ELAPSED_KEY: float(elapsed)}
+    return result
+
+
+def approval_subject(tool_name: str, params: dict[str, Any]) -> str:
+    """What an answered approval leaves behind: the file, or the command with secrets masked."""
+    if tool_name == "run_command":
+        return _redact_activity_text(params.get("command", ""), limit=80)
+    for key in ("path", "file_path"):
+        if params.get(key):
+            return Path(str(params[key])).name
+    return tool_name.replace("_", " ")
 
 
 def _tool_activity_hint(tool: str, params: dict[str, Any]) -> str:
@@ -506,6 +535,11 @@ class TerminalRuntimeEventConsumer:
         if not starts:
             self.tool_start_times.pop(tool, None)
         elapsed_ms = int((time.time() - started_at) * 1000)
+        # The runtime times each call itself. Measuring from the announcement
+        # counted the person reading an approval, and results of a batch
+        # arrive together — "✓ writing file test_fx.py 13.9s" for a 9ms write.
+        if isinstance(summary, dict) and isinstance(summary.get(MEASURED_ELAPSED_KEY), (int, float)):
+            elapsed_ms = int(summary[MEASURED_ELAPSED_KEY] * 1000)
         params_queue = self.tool_params.get(tool) or []
         params = params_queue.pop(0) if params_queue else {}
         if not params_queue:
@@ -519,6 +553,10 @@ class TerminalRuntimeEventConsumer:
             detail = ""
             if not ok and isinstance(summary, dict):
                 detail = str(summary.get("error") or "")[:90]
+            elif ok:
+                # Name what was done: two bare "✓ writing file" lines in a row
+                # did not say which file each was.
+                detail = _tool_activity_hint(tool, params)
             self.print_tool_done(tool, elapsed_ms, success=ok, summary=detail)
 
         ts = time.strftime("%H:%M:%S")
@@ -588,7 +626,7 @@ class TerminalRuntimeEventConsumer:
         elif isinstance(event, AgentEventToolCall):
             self.on_tool_call(event.tool, event.params)
         elif isinstance(event, AgentEventToolResult):
-            self.on_tool_result(event.tool, event.result)
+            self.on_tool_result(event.tool, with_measured_elapsed(event.result, getattr(event, "elapsed", None)))
         elif isinstance(event, AgentEventStatus):
             self.on_status(event.state, event.message)
 
@@ -638,7 +676,9 @@ class TerminalApprovalEventConsumer:
         if not approval.approved:
             from aria_code.ui.render.output import print_tool_blocked
 
-            print_tool_blocked(tool_name, "用户取消", console=self.console, has_rich=self.has_rich)
+            zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+            print_tool_blocked(tool_name, "用户取消" if zh else "declined", console=self.console,
+                               has_rich=self.has_rich)
         return approval
 
     def apply(self, tool_params: dict, approval: ApprovalDecision) -> dict:
@@ -649,7 +689,9 @@ class TerminalApprovalEventConsumer:
             try:
                 self.save_config(self.terminal.config)
                 if self.has_rich:
-                    self.console.print("  [dim]策略已升级为 balanced 并保存[/dim]")
+                    zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+                    self.console.print("  [dim]策略已升级为 balanced 并保存[/dim]" if zh else
+                                       "  [dim]Policy set to balanced and saved[/dim]")
             except Exception:
                 pass
         return tool_params
