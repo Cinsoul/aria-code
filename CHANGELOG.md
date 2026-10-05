@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.80.0] — 2026-10-05
+
+- Merge pull request #95 from Cinsoul/fix/market-snapshot-language
+
 ## [0.79.0] — 2026-10-05
 
 - Merge pull request #94 from Cinsoul/fix/release-npm-wait
