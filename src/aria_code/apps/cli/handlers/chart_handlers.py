@@ -672,7 +672,12 @@ def handle_stock_chart_analysis_direct(symbol: str, period: str = "1y") -> dict:
     pe         = info.get("trailingPE")
     pb         = info.get("priceToBook")
     roe        = info.get("returnOnEquity")
-    div_yield  = info.get("trailingAnnualDividendYield") or info.get("dividendYield")
+    # A fraction, as _fv(div_yield, 100, pct=True) below expects. The fallback
+    # was dividendYield, which yfinance gives already in percent: 100x too big.
+    trailing   = info.get("trailingAnnualDividendYield")
+    rate       = info.get("dividendRate")
+    price_now  = info.get("regularMarketPrice") or info.get("currentPrice")
+    div_yield  = trailing or (float(rate) / float(price_now) if rate and price_now else None)
     market_cap = info.get("marketCap")
 
     def _fv(v, mult=1.0, pct=False):

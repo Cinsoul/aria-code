@@ -559,6 +559,15 @@ def _calculate_factors(params: dict) -> dict:
 # 5. backtest_strategy
 # ---------------------------------------------------------------------------
 
+# Every name the local engine accepts, mapped to the strategy it runs.
+_LOCAL_STRATEGIES = {
+    "sma_cross": "sma_cross", "ma_cross": "sma_cross", "ma_crossover": "sma_cross", "sma": "sma_cross",
+    "rsi_mean_revert": "rsi_mean_revert", "rsi": "rsi_mean_revert", "mean_reversion": "rsi_mean_revert",
+    "momentum": "momentum", "mom": "momentum",
+    "buy_hold": "buy_hold", "buy_and_hold": "buy_hold", "bh": "buy_hold",
+}
+
+
 def _backtest_strategy(params: dict) -> dict:
     """
     Simple backtest engine.  Supports:
@@ -566,6 +575,15 @@ def _backtest_strategy(params: dict) -> dict:
     """
     symbol   = params.get("symbol", "AAPL")
     strategy = params.get("strategy", "sma_cross").lower().replace(" ", "_").replace("-", "_")
+    # An unknown name used to fall through to buy-and-hold and report its
+    # numbers under the name asked for: /compare showed mean_reversion,
+    # breakout, turtle and ma_crossover with identical results, all of them
+    # buy-and-hold.
+    known = _LOCAL_STRATEGIES.get(strategy)
+    if known is None:
+        return {"success": False, "error": f"Unknown strategy '{strategy}'. The local engine runs: "
+                                           + ", ".join(sorted(set(_LOCAL_STRATEGIES.values())))}
+    strategy = known
     start    = params.get("start", _parse_date(None, 3 * 365))
     end      = params.get("end", _today())
     fast     = int(params.get("fast_period", 20))
@@ -598,12 +616,12 @@ def _backtest_strategy(params: dict) -> dict:
     close = df["Close"].astype(float)
 
     # ── Signal generation ─────────────────────────────────────────────────
-    if strategy in ("sma_cross", "ma_cross"):
+    if strategy == "sma_cross":
         ma_f = close.rolling(fast).mean()
         ma_s = close.rolling(slow).mean()
         signal = (ma_f > ma_s).astype(int)
 
-    elif strategy in ("rsi_mean_revert", "rsi"):
+    elif strategy == "rsi_mean_revert":
         delta = close.diff()
         gain  = delta.clip(lower=0).rolling(14).mean()
         loss  = (-delta.clip(upper=0)).rolling(14).mean()
@@ -2955,6 +2973,24 @@ def _walk_forward_backtest(params: dict) -> dict:
 # 25. Peer Comparison  (同行对比)
 # ---------------------------------------------------------------------------
 
+def _dividend_yield_pct(info: dict):
+    """Dividend yield in percent from a yfinance info dict, or None.
+
+    yfinance's ``dividendYield`` is already a percentage (0.32 for AAPL's
+    0.32%); multiplied by 100 again it showed AAPL at 32% and MSFT at 75%.
+    ``trailingAnnualDividendYield`` is a fraction, and rate / price needs no
+    knowledge of either.
+    """
+    trailing = info.get("trailingAnnualDividendYield")
+    if trailing:
+        return float(trailing) * 100
+    rate = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+    price = info.get("regularMarketPrice") or info.get("currentPrice") or info.get("previousClose")
+    if rate and price:
+        return float(rate) / float(price) * 100
+    return None
+
+
 def _peer_comparison(params: dict) -> dict:
     """
     同行估值与表现对比。
@@ -3000,7 +3036,7 @@ def _peer_comparison(params: dict) -> dict:
             pe     = info.get("trailingPE") or info.get("forwardPE")
             pb     = info.get("priceToBook")
             roe    = info.get("returnOnEquity")
-            dy     = info.get("dividendYield")
+            dy     = _dividend_yield_pct(info)
             mc     = info.get("marketCap")
             ytd    = (price / prev - 1) if prev else None
             rows.append({
@@ -3010,7 +3046,7 @@ def _peer_comparison(params: dict) -> dict:
                 "pe":        round(pe, 1)  if pe  else None,
                 "pb":        round(pb, 2)  if pb  else None,
                 "roe_pct":   round(roe * 100, 1) if roe else None,
-                "div_yield": round(dy * 100, 2)  if dy  else None,
+                "div_yield": round(dy, 2)        if dy  else None,
                 "market_cap_b": round(mc / 1e9, 1) if mc else None,
                 "is_target": sym == symbol,
             })
@@ -3021,20 +3057,39 @@ def _peer_comparison(params: dict) -> dict:
         return {"success": False, "error": "无法获取对比数据"}
 
     # Relative rankings
-    pe_vals  = [r["pe"]   for r in rows if r["pe"] is not None]
-    pb_vals  = [r["pb"]   for r in rows if r["pb"] is not None]
-    roe_vals = [r["roe_pct"] for r in rows if r["roe_pct"] is not None]
-
     target_row = next((r for r in rows if r["is_target"]), rows[0])
+    # The peers only. The target was counted among its own peers, so with one
+    # peer the "peer median" PE was the target's own PE and the verdict was
+    # always "fair"; the ROE average was half the target's.
+    others   = [r for r in rows if r is not target_row]
+    pe_vals  = [r["pe"] for r in others if r["pe"] is not None]
+    roe_vals = [r["roe_pct"] for r in others if r["roe_pct"] is not None]
+    zh = str(params.get("lang", "zh")).lower().startswith("zh")
+
+    def _median(values):
+        ordered = sorted(values)
+        mid = len(ordered) // 2
+        return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+
     analysis = []
     if target_row.get("pe") and pe_vals:
-        med_pe = sorted(pe_vals)[len(pe_vals)//2]
-        vs = "高估" if target_row["pe"] > med_pe * 1.2 else "低估" if target_row["pe"] < med_pe * 0.8 else "合理"
-        analysis.append(f"PE {target_row['pe']:.1f}x vs 同行中位数 {med_pe:.1f}x → {vs}")
+        med_pe = _median(pe_vals)
+        high, low = target_row["pe"] > med_pe * 1.2, target_row["pe"] < med_pe * 0.8
+        if zh:
+            vs = "高估" if high else "低估" if low else "合理"
+            analysis.append(f"PE {target_row['pe']:.1f}x vs 同行中位数 {med_pe:.1f}x → {vs}")
+        else:
+            vs = "above peers" if high else "below peers" if low else "in line"
+            analysis.append(f"PE {target_row['pe']:.1f}x vs peer median {med_pe:.1f}x → {vs}")
     if target_row.get("roe_pct") and roe_vals:
         avg_roe = sum(roe_vals) / len(roe_vals)
-        vs = "优于同行" if target_row["roe_pct"] > avg_roe else "低于同行"
-        analysis.append(f"ROE {target_row['roe_pct']:.1f}% vs 同行均值 {avg_roe:.1f}% → {vs}")
+        better = target_row["roe_pct"] > avg_roe
+        if zh:
+            analysis.append(f"ROE {target_row['roe_pct']:.1f}% vs 同行均值 {avg_roe:.1f}% → "
+                            f"{'优于同行' if better else '低于同行'}")
+        else:
+            analysis.append(f"ROE {target_row['roe_pct']:.1f}% vs peer average {avg_roe:.1f}% → "
+                            f"{'above peers' if better else 'below peers'}")
 
     return {
         "success":   True,
@@ -3042,6 +3097,7 @@ def _peer_comparison(params: dict) -> dict:
         "peers":     peers,
         "table":     rows,
         "analysis":  analysis,
+        "lang":      "zh" if zh else "en",
         "provider":  "yfinance",
     }
 

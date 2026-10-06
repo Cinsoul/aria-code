@@ -1309,15 +1309,16 @@ def render_peer_comparison(r: dict, *, console=None, has_rich: bool = True) -> N
         from rich.table import Table
         from rich.rule import Rule
         symbol = r.get("symbol","")
-        console.print(Rule(f"[bold]{symbol}[/bold] 同行估值对比", style="dim"))
+        zh = str(r.get("lang", "zh")).lower().startswith("zh")
+        console.print(Rule(f"[bold]{symbol}[/bold] " + ("同行估值对比" if zh else "peer valuation"), style="dim"))
         t = Table(show_header=True, box=None, padding=(0,1))
-        t.add_column("代码",      style="bold",  width=8)
-        t.add_column("名称",      width=14)
+        t.add_column("代码" if zh else "Symbol", style="bold",  width=8)
+        t.add_column("名称" if zh else "Name",   width=14)
         t.add_column("PE",        justify="right")
         t.add_column("PB",        justify="right")
         t.add_column("ROE%",      justify="right")
-        t.add_column("股息%",     justify="right")
-        t.add_column("市值(B)",   justify="right", style="dim")
+        t.add_column("股息%" if zh else "Div%",   justify="right")
+        t.add_column("市值(B)" if zh else "Mkt cap (B)", justify="right", style="dim")
         for row in rows:
             is_t = row.get("is_target", False)
             pe   = f"{row['pe']:.1f}" if row.get("pe") else "—"
@@ -1337,7 +1338,8 @@ def render_peer_comparison(r: dict, *, console=None, has_rich: bool = True) -> N
         for line in analysis:
             console.print(f"  [dim]▸ {line}[/dim]")
     else:
-        print(f"\n{r.get('symbol','')} 同行对比")
+        zh = str(r.get("lang", "zh")).lower().startswith("zh")
+        print(f"\n{r.get('symbol','')} " + ("同行对比" if zh else "peer comparison"))
         for row in rows:
             print(f"  {row['symbol']:<8} PE:{row.get('pe','—')} PB:{row.get('pb','—')}")
 
