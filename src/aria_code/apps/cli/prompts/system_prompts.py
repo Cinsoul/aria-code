@@ -38,7 +38,7 @@ def build_response_style_rule(lang: str) -> str:
         return (
             "## Terminal Answer Style\n"
             "- Lead with the answer or conclusion. Do not start with filler such as 'Sure' or 'I can help'.\n"
-            "- Strict Currency: US assets (e.g. AAPL, TSLA) use '$' (USD); A-shares use '¥' (CNY); HK assets use 'HK$'. Never mix currencies.\n"
+            "- Strict Currency: label amounts with the asset's currency as the data gives it — USD for US assets (e.g. AAPL, TSLA), CNY for A-shares, HKD for Hong Kong — and never mix currencies.\n"
             "- Format Financial Metrics Cleanly: Use structured Markdown tables or concise bullet points for Price, RSI, MACD, MA, and Bollinger Bands.\n"
             "- Never dump raw, unexecuted Python code or pseudo-scripts in chat when performing analytical queries. Synthesize insights directly.\n"
             "- Never explain tool errors, missing parameters, or recovery mechanics to the user. Silently proceed with available data.\n"
@@ -53,7 +53,7 @@ def build_response_style_rule(lang: str) -> str:
     return (
         "## 终端回答风格\n"
         "- 先给结论或直接答案，不要以“好的/当然/我来帮你”开头。\n"
-        "- 严格匹配货币符号：美股（如 AAPL、TSLA）必须使用 '$' (USD)；A股使用 '¥' (CNY)；港股使用 'HK$'。严禁将美股均线/价格标注为人民币。\n"
+        "- 严格匹配货币：按数据给出的货币代码标注金额——美股（如 AAPL、TSLA）用 USD，A股用 CNY，港股用 HKD；严禁混用，严禁将美股均线/价格标注为人民币。\n"
         "- 金融指标结构化排版：价格、涨跌幅、RSI、MACD、均线、布林带等必须使用结构清晰的 Markdown 表格或整齐键值对呈现，禁止乱序纯文本堆砌。\n"
         "- 严禁在对话中向用户输出未执行的 Python 伪代码或脚本片段；直接给出整理后的金融分析结论与核心数据。\n"
         "- 严禁向用户解释底层工具调用失败的原因或道歉（如“因缺少参数导致web_search失败”）；遇网络或工具异常时静默使用备用数据并继续分析。\n"

@@ -2752,6 +2752,34 @@ def _render_answer_block(text: str) -> None:
     console.print(Padding(make_markdown(_strip_latex(text)), (0, 0, 0, 4)))
 
 
+_MODEL_UNAVAILABLE_MARKERS = (
+    "vertex_needs_project", "vertex_not_logged_in", "vertex_gcloud_failed", "missing_api_key:",
+    "no_cloud_provider", "no_provider", "all_providers_failed", "http 401", "http 403", "http 402",
+    "insufficient balance", "http 429", "rate limit",
+)
+
+
+def _model_unavailable(error: object) -> bool:
+    """The turn failed because no model could be reached — not because of what was asked."""
+    text = str(error or "").lower()
+    return any(marker in text for marker in _MODEL_UNAVAILABLE_MARKERS)
+
+
+def _data_without_model(message: str, history: list) -> dict:
+    """What Aria can answer from data alone, for a turn whose model is unreachable.
+
+    With no Google project set, "AAPL price" printed setup guidance and
+    nothing else, though the quote needs no model: the same pre-fetch that
+    serves tool-less routes answers it.
+    """
+    try:
+        found = _run_deterministic_chain(message, model_has_tools=False, history=history)
+    except Exception as exc:
+        logger.debug("data fallback failed: %s", exc)
+        return {}
+    return found if found.get("success") and (found.get("response") or "").strip() else {}
+
+
 def _announce_route(command_text: str) -> None:
     """Say which command a plain-language message ran: "→ /news AAPL".
 
@@ -5353,6 +5381,30 @@ class ArtheraTerminal:
                     result.get("error", "Unknown error"),
                     lang=self.config.get("ui_lang", "en") or "en",
                 )
+                _offline_answer = (
+                    _data_without_model(message, self.conversation[:-1])
+                    if _model_unavailable(result.get("error")) else {}
+                )
+                if _offline_answer:
+                    # The data is the answer; the model problem is a note under it.
+                    _en_note = _detect_lang(message) == "en"
+                    _answer = _offline_answer["response"]
+                    if HAS_RICH:
+                        console.print()
+                        console.print(make_markdown(_strip_latex(_answer)))   # its header carries the disclaimer
+                    else:
+                        print("\n" + _answer)
+                    self.conversation.append({"role": "assistant", "content": _answer})
+                    self._last_response = _answer
+                    error_presentation = AgentErrorPresentation(
+                        error=error_presentation.error,
+                        level="warning",
+                        lines=[
+                            ("模型不可用，以上为数据快照（未经模型分析）。" if not _en_note else
+                             "The model is unavailable, so this is the data snapshot without model analysis."),
+                            *error_presentation.lines[-1:],
+                        ],
+                    )
                 console.print() if HAS_RICH else print()
                 if error_presentation.use_generic_error_prefix:
                     _print_error(error_presentation.lines[0])
