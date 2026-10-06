@@ -109,14 +109,14 @@ def test_an_english_question_gets_an_english_snapshot(offline_market):
     text = result["response"]
     assert result["success"] and result["symbol"] == "AAPL"
     assert "**Takeaway**: " in text and "| RSI(14) | 50.7 | Neutral |" in text
-    assert "For: 1-5 days" in text and "For: 1-8 weeks" in text and "For: 2-12 months" in text
+    assert "(1-5 days)" in text and "(1-8 weeks)" in text and "(2-12 months)" in text
     assert not CJK.findall(text), CJK.findall(text)
 
 
 def test_a_chinese_question_still_gets_the_chinese_snapshot(offline_market):
     text = deterministic.run_deterministic_chain("分析苹果股票", model_has_tools=False)["response"]
     assert "**结论**：" in text and "| RSI(14) | 50.7，中性 | 中性 |" in text
-    assert "适合：1-5 日" in text and "**下一步**" in text
+    assert "（1-5 日）" in text and "**下一步**" in text
 
 
 def test_an_english_failure_is_explained_in_english(monkeypatch):
@@ -214,3 +214,21 @@ def test_takeaway_and_levels_render_as_two_lines(offline_market):
     text = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"]
     assert re.search(r"\*\*Takeaway\*\*: .+  \n\*\*Levels\*\*: Watch ", text)
     assert "**Watch**" not in text
+
+
+def test_each_timeframe_takes_two_lines(offline_market):
+    """The snapshot ran to about 48 lines; each timeframe took four."""
+    text = market_handlers._try_handle_market_snapshot_analysis("AAPL price")["response"]
+    block = text.split("**Multi-timeframe key levels**", 1)[1].split("\n\n", 2)[0].strip().splitlines()
+    assert len(block) == 6
+    assert block[0].startswith("- **4H/Short-term** (1-5 days) — support USD ")
+    assert " / " in block[0] and " · resistance USD " in block[0]
+
+
+def test_the_currency_rule_matches_the_data():
+    """The model was told to write "$" while the data it was given says USD."""
+    from aria_code.apps.cli.prompts.system_prompts import build_response_style_rule
+
+    en, zh = build_response_style_rule("en"), build_response_style_rule("zh")
+    assert "USD for US assets" in en and "'$'" not in en
+    assert "美股（如 AAPL、TSLA）用 USD" in zh and "'$'" not in zh

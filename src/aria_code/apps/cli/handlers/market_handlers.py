@@ -294,6 +294,11 @@ def _nearest_levels(
     return support, resistance
 
 
+def _compact_levels(currency: str, levels: list[float]) -> str:
+    """"USD 332.54 / 328.35 / 325.81": the currency once."""
+    return f"{currency} " + " / ".join(f"{v:,.2f}" for v in levels) if levels else "—"
+
+
 def _format_levels(currency: str, levels: list[float]) -> str:
     return ", ".join(f"{currency} {v:,.2f}" for v in levels) if levels else "—"
 
@@ -389,22 +394,17 @@ def _append_timeframe_levels(
         resistance = row.get("resistance") or []
         action = _level_action_line(name, support, resistance, currency, english=english)
 
+        # Two lines a timeframe, not four: the levels on one line, what to do
+        # with them on the next. Every level stays; the data source is in the
+        # header already. The whole snapshot ran to about 48 lines.
         if english:
-            meta = f"For: {horizon}"
-            if source:
-                meta += f" · Source: {source}"
-            lines.append(f"- **{name}** — {meta}")
-            lines.append(f"  - Support: {_format_levels(currency, support)}")
-            lines.append(f"  - Resistance: {_format_levels(currency, resistance)}")
-            lines.append(f"  - Use: {action}")
+            lines.append(f"- **{name}** ({horizon}) — support {_compact_levels(currency, support)}"
+                         f" · resistance {_compact_levels(currency, resistance)}  ")
+            lines.append(f"  {action}")
         else:
-            meta = f"适合：{horizon}"
-            if source:
-                meta += f" · 来源：{source}"
-            lines.append(f"- **{name}** — {meta}")
-            lines.append(f"  - 支撑：{_format_levels(currency, support)}")
-            lines.append(f"  - 压力：{_format_levels(currency, resistance)}")
-            lines.append(f"  - 用法：{action}")
+            lines.append(f"- **{name}**（{horizon}）— 支撑 {_compact_levels(currency, support)}"
+                         f" · 压力 {_compact_levels(currency, resistance)}  ")
+            lines.append(f"  {action}")
 
 
 _HORIZON_UNITS_EN = {"日": "days", "周": "weeks", "月": "months"}

@@ -122,10 +122,11 @@ def test_market_snapshot_output_avoids_na_placeholders(monkeypatch):
     assert "日线/波段" in result["response"]
     assert "周线/长线" in result["response"]
     assert "| 周期 | 适合 | 支撑 | 压力 | 用法 |" not in result["response"]
-    assert "- **4H/短线**" in result["response"]
-    assert "  - 支撑：" in result["response"]
-    assert "  - 压力：" in result["response"]
-    assert "  - 用法：" in result["response"]
+    # Two lines a timeframe: levels, then what to do with them.
+    assert "- **4H/短线**（" in result["response"]
+    assert "— 支撑 USD " in result["response"]
+    assert " · 压力 USD " in result["response"]
+    assert "来源：" not in result["response"]
     assert "N/A" not in result["response"]
     assert result.get("analysis_complete") is True
     assert result.get("timeframe_levels")
