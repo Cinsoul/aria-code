@@ -31,3 +31,21 @@ def test_a_logistics_line_is_plain_text():
     owner = SimpleNamespace(context=SimpleNamespace(has_rich=True, console=console))
     _emit(owner, "SKU [A-100] in file [bold].csv", "bold")
     assert "SKU [A-100] in file [bold].csv" in console.file.getvalue()
+
+
+def test_a_review_finding_wraps_under_its_title():
+    """Recorded on a real /review: the finding's explanation fell back to column 0."""
+    from types import SimpleNamespace as NS
+
+    from aria_code.apps.cli.commands.workflow_cmds import _print_review
+
+    finding = NS(in_change=True, priority=2, label="P2", title="convert() crashes on infinite inputs",
+                 location="fx.py:10-13", confidence=0.9,
+                 body="When `amount` or `rate` is an infinite float, their product is Decimal('Infinity') and "
+                      "quantize() raises decimal.InvalidOperation; the function should handle that case.")
+    result = NS(structured=True, correct=False, confidence=0.9, explanation="", findings=[finding],
+                omitted_files=[])
+    console = Console(file=io.StringIO(), width=70, color_system=None)
+    _print_review(console, result, "en")
+    body = [line for line in console.file.getvalue().splitlines() if line and not line.startswith(("Needs", "1."))]
+    assert len(body) > 1 and all(line.startswith("   ") for line in body)

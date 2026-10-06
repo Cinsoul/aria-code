@@ -466,8 +466,12 @@ def _print_review(console, result, lang: str) -> None:
         style = _PRIORITY_STYLE.get(f.priority, "dim")
         console.print(f"\n[{style}]{number}. {escape('[' + f.label + ']')}[/{style}] [bold]{escape(f.title)}[/bold]  "
                       f"[dim]{escape(f.location)} · {f.confidence:.2f}[/dim]")
+        # Under the finding's title, wrapped rows included: printed with
+        # three leading spaces, a long explanation fell back to column 0.
+        from aria_code.ui.render.output import print_hanging
+
         for line in f.body.splitlines():
             if line.strip():
-                console.print(f"   {escape(line)}")
+                print_hanging(console, "   ", line.strip())
     if result.omitted_files:
         console.print(f"\n[yellow]{t['omitted']}: {escape(', '.join(result.omitted_files))}[/yellow]")
