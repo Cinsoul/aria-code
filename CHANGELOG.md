@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.95.0] — 2026-10-06
+
+- Merge pull request #120 from Cinsoul/fix/compare-strategies
+
 ## [0.94.0] — 2026-10-06
 
 - Merge pull request #118 from Cinsoul/feat/exec-events
