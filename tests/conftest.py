@@ -138,3 +138,60 @@ def make_providers_file(tmp_path: pathlib.Path, llm_section: dict) -> pathlib.Pa
     p = tmp_path / "providers.json"
     p.write_text(json.dumps({"llm": llm_section}), encoding="utf-8")
     return p
+
+
+# ── Terminal snapshots ────────────────────────────────────────────────────────
+
+SNAPSHOT_DIR = pathlib.Path(__file__).parent / "snapshots"
+
+
+class _Snapshot:
+    """Compare terminal output with tests/snapshots/<name>.txt.
+
+    ARIA_UPDATE_SNAPSHOTS=1 writes the file instead, for a change to the
+    output that is meant. A missing file is written and the test fails, so a
+    new snapshot is always looked at once before it is trusted.
+    """
+
+    @staticmethod
+    def console(width: int = 100):
+        import io
+        from rich.console import Console
+
+        return Console(file=io.StringIO(), width=width, color_system=None, force_terminal=False,
+                       legacy_windows=False, emoji=False, highlight=False, soft_wrap=False)
+
+    @staticmethod
+    def normalise(text: str) -> str:
+        lines = [line.rstrip() for line in text.splitlines()]
+        while lines and not lines[0]:
+            lines.pop(0)
+        while lines and not lines[-1]:
+            lines.pop()
+        return "\n".join(lines) + "\n"
+
+    def __call__(self, name: str, text: str) -> None:
+        import os
+
+        path = SNAPSHOT_DIR / f"{name}.txt"
+        got = self.normalise(text)
+        if os.environ.get("ARIA_UPDATE_SNAPSHOTS") == "1" or not path.exists():
+            created = not path.exists()
+            SNAPSHOT_DIR.mkdir(exist_ok=True)
+            path.write_text(got, encoding="utf-8")
+            if created and os.environ.get("ARIA_UPDATE_SNAPSHOTS") != "1":
+                pytest.fail(f"new snapshot {path.name} written; check it and run again")
+            return
+        want = path.read_text(encoding="utf-8")
+        if got != want:
+            import difflib
+
+            diff = "".join(difflib.unified_diff(want.splitlines(True), got.splitlines(True),
+                                                f"snapshots/{path.name}", "this run"))
+            pytest.fail(f"terminal output changed:\n{diff}\n"
+                        "If the change is meant, rerun with ARIA_UPDATE_SNAPSHOTS=1.")
+
+
+@pytest.fixture
+def snapshot():
+    return _Snapshot()

@@ -758,10 +758,12 @@ class PortfolioCommandsMixin:
                 # NEEDS_ATTENTION (signal SELL) came out as HIGH_RISK.
                 _port_verdict = str((result.data_used or {}).get("verdict") or "NEEDS_ATTENTION")
                 if self.context.has_rich:
-                    self.context.console.print()
+                    # The header already ends in a blank line, and the banner's
+                    # panel opens with one: two blank lines each side before.
+                    if tokens:
+                        self.context.console.print()
                     for pt in (result.key_points or []):
                         self.context.console.print(f"  [dim]• {pt}[/dim]")
-                    self.context.console.print()
                     _subtitle = " · ".join(result.key_points[:2]) if result.key_points else ""
                     _print_verdict_banner(_port_verdict, subtitle=_subtitle,
                                           confidence=result.confidence, lang=_lang)

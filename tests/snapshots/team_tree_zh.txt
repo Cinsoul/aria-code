@@ -1,0 +1,6 @@
+  ⏺  多代理分析 AAPL  4 个分析师并行
+  ⎿ ⏺ 技术面  BUY  RSI 58 · MACD above signal · price above MA20
+  ⎿ ⏺ 基本面  HOLD  降级 · PE 38.1 above sector median
+  ⎿ ⏺ 新闻  数据源限流
+  ⎿ ⏺ 风险  SELL  Annualised volatility 31% with a drawdown of 24% ove…
+  ⎿ 综合  ─  HOLD  置信 45%  耗时 81.9s

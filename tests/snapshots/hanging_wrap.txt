@@ -1,0 +1,5 @@
+  ! Turns go to Arthera cloud chat (backend_chat), where the
+    model cannot read this folder or run commands; anything
+    it says about files here is a guess.
+  └ Usage: /compare SYMBOL [YYYY-MM-DD] [YYYY-MM-DD] —
+    brackets kept, not markup

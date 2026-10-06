@@ -1,0 +1,2 @@
+   ✗   HIGH_RISK  confidence 65%
+   5 symbols, equal weight · Annualised portfolio volatility 22.0% (medium)

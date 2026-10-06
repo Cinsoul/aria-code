@@ -1,0 +1,6 @@
+  ⏺  Multi-agent analysis AAPL  4 analysts in parallel
+  ⎿ ⏺ Technical  BUY  RSI 58 · MACD above signal · price above MA20
+  ⎿ ⏺ Fundamental  HOLD  degraded · PE 38.1 above sector median
+  ⎿ ⏺ News  data source rate-limited
+  ⎿ ⏺ Risk  SELL  Annualised volatility 31% with a drawdown of 24% ove…
+  ⎿ Synthesis  ─  HOLD  confidence 45%  took 81.9s
