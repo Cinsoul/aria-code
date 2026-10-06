@@ -322,6 +322,14 @@ ignore = ["E501", "F401", "E402", "F811"]
 "apps/cli/broker_render.py" = ["F821"]
 "src/aria_code/apps/cli/broker_render.py" = ["F821"]
 "**/apps/cli/broker_render.py" = ["F821"]
+# ArtheraTerminal blocks moved out of aria_cli.py; mixin_binding.bind_mixin
+# binds them to aria_cli's namespace at import.
+"apps/cli/headless.py" = ["F821"]
+"src/aria_code/apps/cli/headless.py" = ["F821"]
+"**/apps/cli/headless.py" = ["F821"]
+"apps/cli/chat_turn.py" = ["F821"]
+"src/aria_code/apps/cli/chat_turn.py" = ["F821"]
+"**/apps/cli/chat_turn.py" = ["F821"]
 
 # aria_cli.py 的"未使用 import"绝不能自动清理：它的 globals() 就是所有 rebound
 # mixin 方法的命名空间，94 个 ruff 眼里没用到的 import 里有 51 个是给它们准备的
