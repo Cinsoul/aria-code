@@ -169,12 +169,19 @@ def _abc_xyz(item: dict) -> str:
 
 
 def _emit(self, text: str, style: str = "") -> None:
-    if self.context.has_rich and style:
-        self.context.console.print(f"[{style}]{text}[/{style}]")
-    elif self.context.has_rich:
-        self.context.console.print(text)
-    else:
+    """One line of a report, wrapped under its own indent.
+
+    The indent was typed as leading spaces, so in an 80-column terminal a
+    wrapped line went back to column 0 ("cover · ABC/XYZ –/X" under the
+    margin). It is plain text, not markup: a SKU or file name may hold "[".
+    """
+    if not self.context.has_rich:
         print(text)
+        return
+    from aria_code.ui.render.output import print_hanging
+
+    body = text.lstrip(" ")
+    print_hanging(self.context.console, text[: len(text) - len(body)], body, style)
 
 
 class LogisticsCommandsMixin:
