@@ -553,46 +553,51 @@ class BacktestCommandsMixin:
                 actual_end = self._bt_value(d, "end", "end_date", default=end_date)
                 bars = self._bt_int(d.get("bars"))
                 initial = self._bt_money(d.get("initial_capital", _initial_capital))
-                self.context.console.print(
-                    f"  [#57606a]source:[/#57606a] {src}"
-                    f"  [#57606a]period:[/#57606a] {actual_start} → {actual_end}"
-                    f"  [#57606a]bars:[/#57606a] {bars}"
-                    f"  [#57606a]capital:[/#57606a] {initial}"
-                )
-                self.context.console.print(
-                    f"  [#57606a]params:[/#57606a] "
-                    f"momentum={_momentum_period} fast={_fast_period} slow={_slow_period}"
-                )
+                # One label per row, values wrapping in their own column: four
+                # "label: value" pairs on one line wrapped anywhere in an
+                # 80-column terminal, and the report path fell to column 0.
+                from rich.padding import Padding
+                from rich.style import Style
+                from rich.table import Table
+                from rich.text import Text
+                from aria_code.ui.render.output import file_uri
+
+                facts: list[tuple[str, object]] = [
+                    ("source", src),
+                    ("period", f"{actual_start} → {actual_end} · {bars} bars"),
+                    ("capital", initial),
+                    ("params", f"momentum={_momentum_period} fast={_fast_period} slow={_slow_period}"),
+                ]
                 if d.get("provider_chain"):
                     chain = " → ".join(str(x) for x in d.get("provider_chain") or [])
                     status = d.get("data_status") or "complete"
                     missing = ", ".join(str(x) for x in (d.get("missing_fields") or [])) or "none"
-                    self.context.console.print(
-                        f"  [#57606a]data:[/#57606a] {chain}"
-                        f"  [#57606a]status:[/#57606a] {status}"
-                        f"  [#57606a]missing:[/#57606a] {missing}"
-                    )
+                    facts.append(("data", f"{chain} · {status} · missing {missing}"))
                 vol = self._bt_volume_summary(d)
                 if vol:
                     avg = vol.get("average")
                     last = vol.get("last")
                     coverage = self._bt_num(vol.get("coverage"))
-                    self.context.console.print(
-                        f"  [#57606a]volume:[/#57606a] "
-                        f"avg {avg:,.0f} · last {last:,.0f} · coverage {coverage:.0%}"
-                        if avg is not None and last is not None
-                        else "  [#57606a]volume:[/#57606a] unavailable"
-                    )
+                    facts.append(("volume", f"avg {avg:,.0f} · last {last:,.0f} · coverage {coverage:.0%}"
+                                  if avg is not None and last is not None else "unavailable"))
                 if d.get("report_path"):
                     _report = str(d["report_path"])
                     _home = str(pathlib.Path.home())
-                    if _report.startswith(_home + os.sep):
-                        _report = "~" + _report[len(_home):]
-                    self.context.console.print(f"  [#57606a]report:[/#57606a] {_report}")
+                    _shown = "~" + _report[len(_home):] if _report.startswith(_home + os.sep) else _report
+                    facts.append(("report", Text(_shown, style=Style(link=file_uri(_report)))))
+                grid = Table.grid(padding=(0, 1))
+                grid.add_column(style="#57606a", no_wrap=True)
+                grid.add_column(overflow="fold")
+                for label, value in facts:
+                    grid.add_row(f"{label}:", value if isinstance(value, Text) else Text(str(value)))
+                self.context.console.print(Padding(grid, (0, 0, 0, 2)))
                 if trades == 0:
+                    _zh_bt = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
                     self.context.console.print(
                         "  [yellow]注意:[/yellow] # Trades 为 0，表示本次规则没有触发入场；"
-                        "收益可能来自全程空仓/持仓逻辑或上游交易统计口径。"
+                        "收益可能来自全程空仓/持仓逻辑或上游交易统计口径。" if _zh_bt else
+                        "  [yellow]Note:[/yellow] 0 trades — the rules never triggered an entry; any return "
+                        "comes from holding or from how the data source counts trades."
                     )
             else:
                 print(f"Total Return: {d.get('total_return',0)*100:.1f}%  Sharpe: {d.get('sharpe_ratio',0):.2f}  MaxDD: {d.get('max_drawdown',0)*100:.1f}%")

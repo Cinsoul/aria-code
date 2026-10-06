@@ -4401,13 +4401,17 @@ class ArtheraTerminal:
                     # improve its finance model — so disclose it up front.
                     import os as _os
                     if not _os.environ.get("ARIA_NO_TELEMETRY"):
-                        console.print(
-                            "  [dim]隐私：反馈默认[bold]仅存本地[/bold]，不上传。"
+                        # Padded, not prefixed with spaces: in 80 columns the
+                        # second line fell back to column 0.
+                        from rich.padding import Padding as _Pad
+                        from rich.text import Text as _Txt
+                        console.print(_Pad(_Txt.from_markup(
+                            "[dim]隐私：反馈默认[bold]仅存本地[/bold]，不上传。"
                             "opt-in 后可用于改进金融模型 · /privacy 查看与开关 · /bug 报告问题[/dim]"
                             if str(_ui_lang).lower().startswith("zh") else
-                            "  [dim]Feedback stays [bold]on this machine[/bold] unless you opt in to "
+                            "[dim]Feedback stays [bold]on this machine[/bold] unless you opt in to "
                             "help improve Aria · /privacy · /bug[/dim]"
-                        )
+                        ), (0, 0, 0, 2)))
         else:
             if _banner_mode != "off":
                 from ui.banner import render_full_banner as _rfb
