@@ -109,7 +109,7 @@ class FundamentalAgent(BaseAgent):
 
         analysis  = await self._call_llm(self._SYSTEM, prompt, max_tokens=500, quote=quote)
         if not analysis:
-            analysis = _template_fundamental(symbol, pe, pb, roe, rev_g)
+            analysis = _template_fundamental(symbol, pe, pb, roe, rev_g, lang=self.lang)
 
         signal     = _extract_signal(analysis, pe or 0)
         confidence = _calc_confidence(pe or 0, pb or 0, roe or 0)
@@ -173,7 +173,23 @@ def _extract_key_points(text: str) -> List[str]:
 
 
 def _template_fundamental(symbol: str, pe: Optional[float], pb: Optional[float],
-                           roe: Optional[float], rev_g: Optional[float]) -> str:
+                           roe: Optional[float], rev_g: Optional[float], lang: str = "zh") -> str:
+    if not str(lang).lower().startswith("zh"):
+        if not pe or pe <= 0:
+            valuation, conclusion = "not enough data", "DATA_LIMITED"
+        elif pe < 15:
+            valuation, conclusion = "undervalued", "UNDERVALUED"
+        elif pe > 40:
+            valuation, conclusion = "overvalued", "OVERVALUED"
+        else:
+            valuation, conclusion = "fairly valued", "FAIRLY_VALUED"
+        return (
+            f"{symbol} fundamentals (template):\n"
+            f"• Valuation: PE={_fmt_num(pe, 1, 'x')}  PB={_fmt_num(pb, 2, 'x')}  → {valuation}\n"
+            f"• Profitability: ROE={_fmt_num(roe, 1, '%')}  revenue growth={_fmt_num(rev_g, 1, '%')}\n"
+            "• Missing figures are not zeros; check against the filings and peers\n"
+            f"• Conclusion: {conclusion}"
+        )
     if not pe or pe <= 0:
         valuation, conclusion = "数据不足", "DATA_LIMITED"
     elif pe < 15:

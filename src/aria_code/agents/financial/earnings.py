@@ -128,9 +128,10 @@ class EarningsAgent(BaseAgent):
         if not earnings:
             return AgentResult(
                 agent=self.name, symbol=symbol,
-                analysis=f"{symbol}: 未获取到财报数据。",
+                analysis=(f"{symbol}: 未获取到财报数据。" if str(self.lang).startswith("zh")
+                          else f"{symbol}: no earnings data."),
                 confidence=0.3, signal="HOLD",
-                key_points=["无财报数据"],
+                key_points=["无财报数据" if str(self.lang).startswith("zh") else "no earnings data"],
             )
 
         earnings_block    = _format_earnings(earnings)
@@ -150,10 +151,10 @@ class EarningsAgent(BaseAgent):
 
         analysis = await self._call_llm(self._SYSTEM, prompt, max_tokens=500)
         if not analysis:
-            analysis = _template_analysis(symbol, earnings, most_recent, beat_miss_summary)
+            analysis = _template_analysis(symbol, earnings, most_recent, beat_miss_summary, lang=self.lang)
 
         signal, confidence = _derive_signal(analysis, most_recent, earnings)
-        key_points         = _build_key_points(earnings, most_recent, signal)
+        key_points         = _build_key_points(earnings, most_recent, signal, lang=self.lang)
 
         return AgentResult(
             agent=self.name, symbol=symbol,
@@ -265,26 +266,30 @@ def _derive_signal(analysis: str, most_recent: Dict, earnings: Dict) -> tuple[st
     return "HOLD", 0.40
 
 
-def _build_key_points(earnings: Dict, most_recent: Dict, signal: str) -> List[str]:
+def _build_key_points(earnings: Dict, most_recent: Dict, signal: str, lang: str = "zh") -> List[str]:
+    zh = str(lang).lower().startswith("zh")
     pts = []
     sup = most_recent.get("pct_surprise")
     if sup is not None:
-        pts.append(f"EPS 超预期 {sup:+.1f}%" if sup >= 0 else f"EPS 低于预期 {sup:.1f}%")
+        if zh:
+            pts.append(f"EPS 超预期 {sup:+.1f}%" if sup >= 0 else f"EPS 低于预期 {sup:.1f}%")
+        else:
+            pts.append(f"EPS beat by {sup:+.1f}%" if sup >= 0 else f"EPS missed by {sup:.1f}%")
     rx = earnings.get("price_reaction_pct")
     if rx is not None:
-        pts.append(f"财报后股价反应: {rx:+.1f}%")
+        pts.append(f"财报后股价反应: {rx:+.1f}%" if zh else f"post-earnings move {rx:+.1f}%")
     rev = earnings.get("revenue_trend", [])
     if len(rev) >= 2:
         v0 = rev[0].get("revenue")
         v1 = rev[1].get("revenue")
         if v0 and v1:
             qoq = (v0 - v1) / abs(v1) * 100
-            pts.append(f"营收环比 {qoq:+.1f}%")
-    pts.append(f"财报信号: {signal}")
+            pts.append(f"营收环比 {qoq:+.1f}%" if zh else f"revenue {qoq:+.1f}% q/q")
+    pts.append(f"财报信号: {signal}" if zh else f"earnings signal: {signal}")
     return pts[:5]
 
 
-def _template_analysis(symbol: str, earnings: Dict, most_recent: Dict, summary: str) -> str:
+def _template_analysis(symbol: str, earnings: Dict, most_recent: Dict, summary: str, lang: str = "zh") -> str:
     sup = most_recent.get("pct_surprise")
     if sup is not None:
         if sup >= 10:   verdict = "STRONG_BEAT"
@@ -295,6 +300,13 @@ def _template_analysis(symbol: str, earnings: Dict, most_recent: Dict, summary: 
     else:
         verdict = "IN_LINE"
 
+    if not str(lang).lower().startswith("zh"):
+        return (
+            f"{symbol} earnings (template):\n"
+            f"First read: {summary}\n"
+            f"Rating: {verdict}\n"
+            f"Suggested signal: {'BUY' if 'BEAT' in verdict else ('SELL' if 'MISS' in verdict else 'HOLD')}"
+        )
     return (
         f"{symbol} 财报解读（模板）：\n"
         f"初步判断：{summary}\n"

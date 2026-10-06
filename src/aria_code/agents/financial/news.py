@@ -90,9 +90,10 @@ class NewsAgent(BaseAgent):
         if not news:
             return AgentResult(
                 agent=self.name, symbol=symbol,
-                analysis=f"{symbol}: 未获取到近期新闻数据。",
+                analysis=(f"{symbol}: 未获取到近期新闻数据。" if str(self.lang).startswith("zh")
+                          else f"{symbol}: no recent news."),
                 confidence=0.3, signal="HOLD",
-                key_points=["无近期新闻数据"],
+                key_points=["无近期新闻数据" if str(self.lang).startswith("zh") else "no recent news"],
             )
 
         events = _classify_events(news)
@@ -110,11 +111,11 @@ class NewsAgent(BaseAgent):
 
         analysis = await self._call_llm(self._SYSTEM, prompt, max_tokens=500)
         if not analysis:
-            analysis = _template_analysis(symbol, news, events)
+            analysis = _template_analysis(symbol, news, events, lang=self.lang)
 
         signal     = _extract_signal(analysis, events)
         confidence = _estimate_confidence(news, events)
-        key_points = _build_key_points(news, events)
+        key_points = _build_key_points(news, events, lang=self.lang)
 
         return AgentResult(
             agent=self.name, symbol=symbol,
@@ -170,12 +171,21 @@ def _estimate_confidence(news: List[Dict], events: Dict[str, int]) -> float:
     return min(round(base, 2), 0.75)
 
 
-def _build_key_points(news: List[Dict], events: Dict[str, int]) -> List[str]:
+_EVENT_EN = {"earnings": "earnings-related", "upgrade": "analyst upgrades", "downgrade": "analyst downgrades",
+             "insider": "insider trades", "regulatory": "regulatory events", "dividend": "dividend news",
+             "merger": "M&A news"}
+
+
+def _build_key_points(news: List[Dict], events: Dict[str, int], lang: str = "zh") -> List[str]:
+    zh = str(lang).lower().startswith("zh")
     points = []
     recent = [n for n in news if n.get("age_days", 999) <= 3]
     if recent:
-        points.append(f"近3日 {len(recent)} 条新鲜新闻")
+        points.append(f"近3日 {len(recent)} 条新鲜新闻" if zh else f"{len(recent)} stories in the last 3 days")
     for etype, count in events.items():
+        if not zh:
+            points.append(f"{_EVENT_EN.get(etype, etype)} × {count}")
+            continue
         label = {
             "earnings": "业绩/财报相关",
             "upgrade": "分析师升级评级",
@@ -189,8 +199,22 @@ def _build_key_points(news: List[Dict], events: Dict[str, int]) -> List[str]:
     return points[:5]
 
 
-def _template_analysis(symbol: str, news: List[Dict], events: Dict[str, int]) -> str:
+def _template_analysis(symbol: str, news: List[Dict], events: Dict[str, int], lang: str = "zh") -> str:
     recent = [n for n in news if n.get("age_days", 999) <= 7]
+    if not str(lang).lower().startswith("zh"):
+        tone = "neutral"
+        if events.get("upgrade", 0) > events.get("downgrade", 0):
+            tone = "positive"
+        elif events.get("downgrade", 0) > 0 or events.get("regulatory", 0) > 0:
+            tone = "negative"
+        titles = "\n".join(f"  • {n['title'][:60]}" for n in recent[:3])
+        return (
+            f"{symbol} recent news tone: {tone}\n"
+            f"{len(recent)} related stories in the last 7 days\n"
+            f"Headlines:\n{titles or '  (no recent headlines)'}\n"
+            f"Events: {', '.join(events.keys()) or 'none'}\n"
+            f"Conclusion: {tone.upper() if tone != 'neutral' else 'NEUTRAL'}"
+        )
     sentiment = "中性"
     if events.get("upgrade", 0) > events.get("downgrade", 0):
         sentiment = "偏正面"

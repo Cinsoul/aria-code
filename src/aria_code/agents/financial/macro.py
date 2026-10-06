@@ -54,7 +54,7 @@ class MacroAgent(BaseAgent):
 
         analysis = await self._call_llm(self._SYSTEM, prompt, max_tokens=500, quote=quote)
         if not analysis:
-            analysis = _template_macro(symbol, indices)
+            analysis = _template_macro(symbol, indices, lang=self.lang)
 
         signal     = _extract_signal(analysis)
         key_points = _extract_key_points(analysis)
@@ -85,15 +85,27 @@ def _extract_key_points(text: str) -> List[str]:
 
 _IDX_NAMES = {"000001": "上证", "399006": "创业板"}
 
-def _template_macro(symbol: str, indices: Dict) -> str:
-    idx_str = "、".join(
-        f"{_IDX_NAMES.get(k, k)} {v.get('change_pct', 0):+.2f}%"
+def _template_macro(symbol: str, indices: Dict, lang: str = "zh") -> str:
+    """Without a model: the index moves, and nothing claimed beyond them.
+
+    This stated "当前货币政策偏宽松，流动性充裕" (policy loose, liquidity
+    ample) as fact — a macro view with no data behind it.
+    """
+    zh = str(lang).lower().startswith("zh")
+    idx_str = ("、" if zh else ", ").join(
+        f"{_IDX_NAMES.get(k, k) if zh else k} {v.get('change_pct', 0):+.2f}%"
         for k, v in indices.items()
-    ) if indices else "指数数据不可用"
+    ) if indices else ("指数数据不可用" if zh else "index data unavailable")
+    if not zh:
+        return (
+            f"{symbol} macro (template):\n"
+            f"• Market indices: {idx_str}\n"
+            "• Policy and liquidity were not assessed (no model analysis)\n"
+            "• Conclusion: NEUTRAL"
+        )
     return (
         f"{symbol} 宏观分析（模板）:\n"
         f"• 市场指数: {idx_str}\n"
-        "• 当前货币政策偏宽松，流动性充裕\n"
-        "• 建议关注政策面变化和外资动向\n"
+        "• 未评估货币政策与流动性（无模型分析）\n"
         "• 结论: NEUTRAL"
     )

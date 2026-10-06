@@ -58,11 +58,11 @@ class TechnicalAgent(BaseAgent):
 
         analysis = await self._call_llm(self._SYSTEM, prompt, max_tokens=600, quote=quote)
         if not analysis:
-            analysis = _template_analysis(symbol, price, history)
+            analysis = _template_analysis(symbol, price, history, lang=self.lang)
 
         signal     = _extract_signal(analysis, history)
         confidence = history.get("signal_strength", 0.5)
-        key_points = _extract_key_points(history, price)
+        key_points = _extract_key_points(history, price, lang=self.lang)
 
         return AgentResult(
             agent=self.name, symbol=symbol,
@@ -218,35 +218,54 @@ def _extract_signal(analysis: str, history: Dict) -> str:
     return "HOLD"
 
 
-def _extract_key_points(history: Dict, price: float) -> List[str]:
+# Pattern values stay as _detect_simple_pattern returns them; this is how
+# they read in English.
+_PATTERN_EN = {"锤子线": "hammer", "阳线吞噬": "bullish engulfing", "十字星": "doji", "数据不足": "not enough data"}
+
+
+def _extract_key_points(history: Dict, price: float, lang: str = "zh") -> List[str]:
+    """The analyst's one-line findings, in the team's language.
+
+    They were Chinese only, so an English /team listed "距MA20 -0.5%" and
+    "MACD死叉，空头压力" under "Technical".
+    """
+    zh = str(lang).lower().startswith("zh")
     points = []
     rsi = history.get("rsi", 50)
     ma20 = history.get("ma20", 0)
-    ma60 = history.get("ma60", 0)
     if rsi < 35:
-        points.append(f"RSI超卖({rsi:.0f})，有反弹机会")
+        points.append(f"RSI超卖({rsi:.0f})，有反弹机会" if zh else f"RSI oversold ({rsi:.0f}), room to rebound")
     elif rsi > 70:
-        points.append(f"RSI超买({rsi:.0f})，注意回调风险")
+        points.append(f"RSI超买({rsi:.0f})，注意回调风险" if zh else f"RSI overbought ({rsi:.0f}), pullback risk")
     if ma20 > 0:
         diff_pct = (price - ma20) / ma20 * 100
-        points.append(f"距MA20 {diff_pct:+.1f}%")
+        points.append(f"距MA20 {diff_pct:+.1f}%" if zh else f"{diff_pct:+.1f}% vs MA20")
     macd = history.get("macd", 0)
     sig  = history.get("macd_signal", 0)
     if macd > sig and history.get("macd_hist", 0) > 0:
-        points.append("MACD金叉，多头动能")
+        points.append("MACD金叉，多头动能" if zh else "MACD bullish crossover")
     elif macd < sig:
-        points.append("MACD死叉，空头压力")
+        points.append("MACD死叉，空头压力" if zh else "MACD bearish crossover")
     pattern = history.get("pattern", "")
     if pattern and pattern != "无特殊形态":
-        points.append(f"K线形态: {pattern}")
+        points.append(f"K线形态: {pattern}" if zh else f"Candle pattern: {_PATTERN_EN.get(pattern, pattern)}")
     return points
 
 
-def _template_analysis(symbol: str, price: float, history: Dict) -> str:
+def _template_analysis(symbol: str, price: float, history: Dict, lang: str = "zh") -> str:
     rsi  = history.get("rsi", 50)
     ma20 = history.get("ma20", 0)
     macd = history.get("macd", 0)
     sig  = history.get("macd_signal", 0)
+    if not str(lang).lower().startswith("zh"):
+        up, bull = price > ma20, macd > sig
+        return (
+            f"{symbol} technicals (template):\n"
+            f"• Price {price}, {'uptrend' if up else 'downtrend'} (MA20={ma20:.2f})\n"
+            f"• RSI={rsi:.0f}, {'oversold' if rsi < 35 else 'overbought' if rsi > 70 else 'normal range'}\n"
+            f"• MACD momentum {'bullish' if bull else 'bearish'}\n"
+            f"• Overall {'BULLISH' if bull and up else 'NEUTRAL'}"
+        )
     trend = "上升趋势" if price > ma20 else "下降趋势"
     momentum = "偏多" if macd > sig else "偏空"
     return (

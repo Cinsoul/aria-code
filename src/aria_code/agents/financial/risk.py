@@ -94,15 +94,16 @@ class RiskAgent(BaseAgent):
 
         analysis  = await self._call_llm(self._SYSTEM, prompt, max_tokens=400, quote=quote)
         if not analysis:
-            analysis = _template_risk(symbol, metrics)
+            analysis = _template_risk(symbol, metrics, lang=self.lang)
 
         signal     = _risk_to_signal(metrics)
         confidence = 0.70
+        zh = str(self.lang).lower().startswith("zh")
         key_points = [
-            f"年化波动率 {metrics.get('ann_vol',0):.1f}%",
-            f"最大回撤 {metrics.get('max_dd',0):.1f}%",
-            f"夏普比率 {metrics.get('sharpe',0):.2f}",
-        ] if metrics else ["风险数据不可用"]
+            f"年化波动率 {metrics.get('ann_vol',0):.1f}%" if zh else f"annualised volatility {metrics.get('ann_vol',0):.1f}%",
+            f"最大回撤 {metrics.get('max_dd',0):.1f}%" if zh else f"max drawdown {metrics.get('max_dd',0):.1f}%",
+            f"夏普比率 {metrics.get('sharpe',0):.2f}" if zh else f"Sharpe ratio {metrics.get('sharpe',0):.2f}",
+        ] if metrics else ["风险数据不可用" if zh else "risk data unavailable"]
 
         return AgentResult(
             agent=self.name, symbol=symbol,
@@ -151,9 +152,19 @@ def _risk_to_signal(metrics: Dict) -> str:
     return "HOLD"
 
 
-def _template_risk(symbol: str, m: Dict) -> str:
+def _template_risk(symbol: str, m: Dict, lang: str = "zh") -> str:
     vol = m.get("ann_vol", 0)
     dd  = m.get("max_dd",  0)
+    if not str(lang).lower().startswith("zh"):
+        level = "high" if vol > 40 else ("medium" if vol > 20 else "low")
+        return (
+            f"{symbol} risk (template):\n"
+            f"• Annualised volatility: {vol:.1f}% (risk {level})\n"
+            f"• Max drawdown: {dd:.1f}%\n"
+            f"• Sharpe ratio: {m.get('sharpe',0):.2f}\n"
+            f"• Suggested position: {'5-10%' if vol>40 else '10-15%' if vol>20 else '15-20%'}\n"
+            f"• Risk Score: {min(10, int(vol/5))}/10"
+        )
     risk_level = "高" if vol > 40 else ("中" if vol > 20 else "低")
     return (
         f"{symbol} 风险分析（模板）:\n"
