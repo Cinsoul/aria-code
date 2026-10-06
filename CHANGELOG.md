@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.86.0] — 2026-10-06
+
+- Merge pull request #103 from Cinsoul/feat/natural-language-routing
+
 ## [0.85.0] — 2026-10-06
 
 - Merge pull request #102 from Cinsoul/fix/ci-secret-scan-and-npm-poll
