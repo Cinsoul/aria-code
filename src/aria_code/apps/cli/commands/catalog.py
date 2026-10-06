@@ -158,3 +158,26 @@ def short_description(description: str) -> str:
     text = str(description or "")
     cut = text.find(": /")
     return (text[:cut] if cut > 0 else text).strip()
+
+
+# What /help and the "/" popup say about the commands they show, in the Chinese
+# UI: the descriptions in the command table are English, so a Chinese session
+# read "Show commands and examples" under 命令.
+COMMAND_DESCRIPTIONS_ZH = {
+    "/help": "命令与示例", "/model": "切换模型", "/review": "代码审查", "/plan": "起草计划",
+    "/init": "为当前项目生成 ARIA.md", "/status": "运行状态：引擎 · 模型 · 工具 · 上下文",
+    "/sessions": "查看与搜索会话", "/clear": "清空对话", "/compact": "压缩上下文",
+    "/copy": "复制上一条回答", "/rewind": "恢复代码或对话", "/permissions": "工具权限",
+    "/config": "查看与修改配置", "/doctor": "诊断安装、模型与 API Key", "/login": "登录",
+    "/code": "生成并运行代码", "/ta": "技术指标", "/backtest": "回测并生成 HTML 报告",
+    "/team": "多智能体研究团队", "/report": "研究报告", "/portfolio": "投资组合",
+    "/inventory": "3PL 库存策略：补货点、安全库存、ABC/XYZ、呆滞库存",
+    "/carriers": "3PL 承运商评分：按线路排名、成本异常与节省",
+}
+
+
+def describe(name: str, description: str, lang: str = "en") -> str:
+    """The short description to show for a command, in the UI language."""
+    if str(lang).lower().startswith("zh") and name in COMMAND_DESCRIPTIONS_ZH:
+        return COMMAND_DESCRIPTIONS_ZH[name]
+    return short_description(description)

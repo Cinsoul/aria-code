@@ -264,12 +264,13 @@ class CoreCommandsMixin:
         commands that matter scrolled out of view. The rest is a topic away.
         """
         from aria_code.apps.cli.commands.catalog import (
-            CORE_SLASH_COMMANDS, ENTRY_SLASH_COMMANDS, HELP_TOPICS, short_description,
+            CORE_SLASH_COMMANDS, ENTRY_SLASH_COMMANDS, HELP_TOPICS, describe,
         )
         zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
         T = (lambda a, b: a) if zh else (lambda a, b: b)
-        core = [(n, short_description(self.commands[n][1])) for n in CORE_SLASH_COMMANDS if n in self.commands]
-        entry = [(n, short_description(self.commands[n][1])) for n in ENTRY_SLASH_COMMANDS if n in self.commands]
+        lang = "zh" if zh else "en"
+        core = [(n, describe(n, self.commands[n][1], lang)) for n in CORE_SLASH_COMMANDS if n in self.commands]
+        entry = [(n, describe(n, self.commands[n][1], lang)) for n in ENTRY_SLASH_COMMANDS if n in self.commands]
         examples = (
             T("给 utils.py 补上测试并运行", "Add tests for utils.py and run them"),
             T("NVDA 这周走势怎么样？", "How's NVDA this week?"),

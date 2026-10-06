@@ -21,8 +21,8 @@ from aria_code.apps.cli.commands.catalog import (
     COMMAND_ALIASES,
     CORE_SLASH_COMMANDS,
     ENTRY_SLASH_COMMANDS,
+    describe,
     popup_rank,
-    short_description,
 )
 from aria_code.packages.aria_services.references import REFERENCE_KINDS, reference_search_roots
 
@@ -307,7 +307,7 @@ if HAS_PT:
                     "设置": "运行设置" if self.lang == "zh" else "Runtime",
                     "系统": "会话" if self.lang == "zh" else "Session",
                 }.get(cat, "")
-                desc = short_description(desc)
+                desc = describe(name, desc, self.lang)
                 meta_body = desc[:44] + ("…" if len(desc) > 44 else "")
                 meta_str = f"{cat_label} · {meta_body}" if cat_label else meta_body
 

@@ -156,8 +156,38 @@ _LABELS = {
 }
 
 
+def _inventory_headline(result: dict, zh: bool) -> str:
+    """The first line of /inventory, in the UI language.
+
+    The tool's summary is English; in a Chinese session the detail lines under
+    it were Chinese and the headline above them was not. The formulas in the
+    basis line stay as the tool writes them.
+    """
+    if not zh:
+        return result["summary"]
+    data, counts = result["data"], result["data"].get("counts", {})
+    return (f"分析 {len(data['items'])} 个 SKU（{result.get('source', '')}）："
+            f"{counts.get('reorder', 0)} 个需补货，{counts.get('insufficient_history', 0)} 个历史数据不足，"
+            f"{counts.get('no_demand', 0)} 个无需求；呆滞 {data.get('dead_stock', 0)} 个，慢动 {data.get('slow_stock', 0)} 个。")
+
+
+def _carriers_headline(result: dict, zh: bool) -> str:
+    """The first line of /carriers, in the UI language (see _inventory_headline)."""
+    if not zh:
+        return result["summary"]
+    import re
+
+    data = result["data"]
+    waybills = re.match(r"(\d+)", result.get("summary", ""))
+    lanes = {c["lane"] for c in data.get("scorecard", [])}
+    carriers = {c["carrier"] for c in data.get("scorecard", [])}
+    return (f"{waybills.group(1) if waybills else '?'} 张运单，{len(lanes)} 条线路、{len(carriers)} 家承运商"
+            f"（{result.get('source', '')}）；{len(data.get('anomalies', []))} 个异常待核实；"
+            f"{len(data.get('savings', []))} 个节省机会，预计共 {data.get('estimated_total_saving', 0):,.2f}。")
+
+
 def _labels(self) -> dict:
-    """Labels in the UI language. The tools' summaries and formulas stay English."""
+    """Labels in the UI language. The tools' formulas stay as they write them."""
     config = getattr(getattr(self, "terminal", None), "config", None) or {}
     lang = str(config.get("ui_lang", "en") or "en").lower()
     return _LABELS["zh" if lang.startswith("zh") else "en"]
@@ -214,7 +244,7 @@ class LogisticsCommandsMixin:
         data = result["data"]
         if not data["scope"]["client_facing"]:
             _emit(self, data["scope"]["marker"], "bold red")
-        _emit(self, result["summary"], "bold")
+        _emit(self, _inventory_headline(result, text is _LABELS["zh"]), "bold")
         for item in data["items"]:
             if item["action"] != "reorder":
                 continue
@@ -246,7 +276,7 @@ class LogisticsCommandsMixin:
         data = result["data"]
         if not data["scope"]["client_facing"]:
             _emit(self, data["scope"]["marker"], "bold red")
-        _emit(self, result["summary"], "bold")
+        _emit(self, _carriers_headline(result, text is _LABELS["zh"]), "bold")
         for entry in data["scorecard"]:
             rank = f"#{entry['rank_in_lane']}" if entry["rank_in_lane"] else text["too_few"]
             on_time = (text["on_time"].format(rate=entry["on_time_rate"], low=entry["on_time_lower_bound"])

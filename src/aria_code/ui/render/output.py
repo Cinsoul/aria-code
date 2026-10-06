@@ -52,6 +52,43 @@ def _is_markdown_table_separator(line: str) -> bool:
     return bool(cells) and all(_TABLE_SEPARATOR_CELL.fullmatch(cell) for cell in cells)
 
 
+# Column headers that name no dimension — the value column of a key/value table.
+_GENERIC_TABLE_HEADERS = {"value", "values", "meaning", "数值", "值", "含义", "说明"}
+
+
+def _table_rows_as_lines(headers: list[str], rows: list[list[str]]) -> list[str]:
+    """One line per table row: the first cell as its label, the rest after it.
+
+    Each cell used to become its own bullet — "• 指标：最新价 / • 数值：USD 332.89"
+    — so a ten-row snapshot table took about thirty lines in an 80-column
+    terminal. Generic value columns ("Value", "数值") lose their header; a
+    column that names a dimension keeps it ("观察：价格高于 MA20"). A value
+    already contained in the one before it ("51.9，中性" then "中性") is dropped.
+    """
+    lines: list[str] = []
+    for row in rows:
+        cells = [(header, (row[pos] if pos < len(row) else "").strip())
+                 for pos, header in enumerate(headers) if header]
+        if not cells:
+            continue
+        label = cells[0][1] or "—"
+        parts: list[str] = []
+        previous = ""
+        for header, value in cells[1:]:
+            if not value or value in ("—", "-") or (previous and value in previous):
+                continue
+            generic = header.strip().lower() in _GENERIC_TABLE_HEADERS
+            parts.append(value if generic else f"{header}{'：' if _has_cjk(header) else ': '}{value}")
+            previous = value
+        colon = "：" if _has_cjk(label) or any(_has_cjk(h) for h, _ in cells) else ": "
+        lines.append(f"- **{label}**{colon}{' · '.join(parts) or '—'}")
+    return lines
+
+
+def _has_cjk(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text or "")
+
+
 def adapt_markdown_for_width(markup: str, width: int, *, table_breakpoint: int = 96) -> str:
     """Convert GFM tables to stacked records when the terminal is narrow.
 
@@ -92,18 +129,7 @@ def adapt_markdown_for_width(markup: str, width: int, *, table_breakpoint: int =
                 cursor += 1
 
             if headers and rows:
-                for row in rows:
-                    pairs = [
-                        (header, row[pos] if pos < len(row) else "—")
-                        for pos, header in enumerate(headers)
-                        if header
-                    ]
-                    if not pairs:
-                        continue
-                    first_header, first_value = pairs[0]
-                    output.append(f"- **{first_header}**：{first_value or '—'}")
-                    for header, value in pairs[1:]:
-                        output.append(f"  - **{header}**：{value or '—'}")
+                output.extend(_table_rows_as_lines(headers, rows))
                 index = cursor
                 continue
 
