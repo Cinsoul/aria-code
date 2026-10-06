@@ -14,7 +14,7 @@
 #     analysis cannot see that, so those three files are excluded from the
 #     blocking pass and still covered by the non-blocking one below. Every
 #     other module is checked normally — that gate caught real NameErrors.
-#     headless.py and chat_turn.py joined them: blocks of ArtheraTerminal moved
+#     headless.py, chat_turn.py and terminal_chrome.py joined them: blocks of ArtheraTerminal moved
 #     out of aria_cli.py and bound to its namespace by mixin_binding.bind_mixin.
 #  3. Bare `pytest` also collects tests/e2e and test_provider_integration,
 #     which need a live LLM and network. Matches ci.yml's invocation now.
@@ -58,7 +58,7 @@ jobs:
         # Stop the build on syntax errors or undefined names. The three
         # rebound modules are excluded — see the note at the top of this file.
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
-          --extend-exclude=src/aria_code/apps/cli/providers/llm/ollama_stream.py,src/aria_code/apps/cli/football_reports.py,src/aria_code/apps/cli/broker_render.py,src/aria_code/apps/cli/headless.py,src/aria_code/apps/cli/chat_turn.py
+          --extend-exclude=src/aria_code/apps/cli/providers/llm/ollama_stream.py,src/aria_code/apps/cli/football_reports.py,src/aria_code/apps/cli/broker_render.py,src/aria_code/apps/cli/headless.py,src/aria_code/apps/cli/chat_turn.py,src/aria_code/apps/cli/terminal_chrome.py
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
