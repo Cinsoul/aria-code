@@ -321,31 +321,76 @@ if HAS_PT:
                     display_meta    = meta_str,
                 )
 
+        def _mention_index(self):
+            if getattr(self, "_mentions", None) is None:
+                from aria_code.ui.mentions import MentionIndex
+
+                self._mentions = MentionIndex(self.workspace, output_root=self.output_root, symbols=self.symbols)
+            return self._mentions
+
+        def _kind_label(self, name: str) -> str:
+            for kind in REFERENCE_KINDS:
+                if kind.name == name:
+                    return kind.label_zh if self.lang == "zh" else kind.label_en
+            return name
+
+        def _kind_shortcuts(self, frag: str) -> Iterator[Completion]:
+            lowered = frag.lower()
+            for kind in REFERENCE_KINDS:
+                if kind.name.startswith(lowered):
+                    yield Completion(
+                        f"{kind.name}:",
+                        start_position=-len(frag),
+                        display=FormattedText([("class:fz-hi", f"@{kind.name}"), ("class:fz-cat", ":")]),
+                        display_meta=(f"只看{self._kind_label(kind.name)}" if self.lang == "zh"
+                                      else f"{self._kind_label(kind.name)} only"),
+                    )
+
+        def _mention_completions(self, mentions, replace: int) -> Iterator[Completion]:
+            for mention in mentions:
+                hits = set(mention.matched)
+                parts = [("class:fz-hi" if i in hits else "", ch) for i, ch in enumerate(mention.label)]
+                yield Completion(
+                    mention.insert_text,
+                    start_position=-replace,
+                    display=FormattedText(parts),
+                    display_meta=self._kind_label(mention.kind),
+                )
+
         def _reference_completions(self, frag: str) -> Iterator[Completion]:
-            """Complete typed reference namespaces and their values."""
+            """Complete "@" references: results across every kind first.
+
+            "@" used to open on the kinds (file:, asset: …) and list files only
+            after a path character, so attaching a file took three steps. A
+            bare "@" now shows recently changed files, "@fx" searches files,
+            folders, assets and saved resources together, and "@file:" or
+            another kind prefix narrows to that kind.
+            """
             if ":" not in frag:
-                lowered = frag.lower()
-                for kind in REFERENCE_KINDS:
-                    if kind.name.startswith(lowered):
-                        label = kind.label_zh if self.lang == "zh" else kind.label_en
-                        yield Completion(
-                            f"{kind.name}:",
-                            start_position=-len(frag),
-                            display=FormattedText([
-                                ("class:fz-hi", f"@{kind.name}"),
-                                ("class:fz-cat", ":"),
-                            ]),
-                            display_meta=label,
-                        )
-                # Keep the first-level @ menu semantic and compact. Plain-path
-                # completion remains available only after an explicit path
-                # prefix; normal discovery goes through @file:/@folder:.
+                # Browsing by path ("@src/", "@./", "@~/") works as before.
                 if frag and (frag.startswith((".", "/", "~")) or "/" in frag):
                     yield from self._file_completions(frag)
+                    return
+                index = self._mention_index()
+                if not frag:
+                    from aria_code.ui.mentions import Mention
+
+                    recent = [Mention("file", path, 0) for path in index.recent_files()]
+                    yield from self._mention_completions(recent, 0)
+                    yield from self._kind_shortcuts("")
+                    return
+                if len(frag) >= 2:
+                    yield from self._kind_shortcuts(frag)
+                yield from self._mention_completions(index.search(frag), len(frag))
                 return
 
             kind, value_frag = frag.split(":", 1)
             kind = kind.lower()
+            path_like = value_frag.startswith((".", "/", "~")) or "/" in value_frag
+            if kind in {"file", "folder"} and value_frag and not path_like:
+                found = self._mention_index().search(value_frag, kind=kind)
+                yield from self._mention_completions(found, len(frag))
+                return
             if kind == "asset":
                 for symbol in self.symbols:
                     if symbol.lower().startswith(value_frag.lower()):

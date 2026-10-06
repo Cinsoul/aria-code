@@ -24,16 +24,15 @@ def _completer(tmp_path: Path, **kwargs) -> AriaPTCompleter:
     )
 
 
-def test_at_opens_typed_context_namespace_palette(tmp_path):
-    (tmp_path / "README.md").write_text("not listed at first level", encoding="utf-8")
+def test_at_opens_on_recent_files_then_the_kind_filters(tmp_path):
+    """A bare "@" lists recently changed files first, as Codex does, then the
+    kind prefixes that narrow the search. It used to list only the kinds."""
+    (tmp_path / "README.md").write_text("recent", encoding="utf-8")
     values = _values(_completer(tmp_path), "@")
 
-    assert "file:" in values
-    assert "folder:" in values
-    assert "asset:" in values
-    assert "portfolio:" in values
-    assert "strategy:" in values
-    assert "README.md" not in values
+    assert values[0] == "file:README.md"
+    for kind in ("file:", "folder:", "asset:", "portfolio:", "strategy:"):
+        assert kind in values
 
 
 def test_reference_completion_works_inside_natural_language(tmp_path):
