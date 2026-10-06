@@ -176,20 +176,24 @@ class PortfolioAgent(BaseAgent):
     async def analyze_portfolio(
         self, symbols: List[str], data: Dict[str, Any]
     ) -> AgentResult:
+        zh = self.lang != "en"
         if len(symbols) < 2:
             return AgentResult(
                 agent=self.name, symbol=",".join(symbols),
-                analysis="组合分析需要至少 2 个标的。",
+                analysis=("组合分析需要至少 2 个标的。" if zh
+                          else "A portfolio analysis needs at least 2 symbols."),
                 confidence=0.0, signal="HOLD",
-                key_points=["标的数量不足"],
+                key_points=["标的数量不足" if zh else "Not enough symbols"],
             )
 
         if data.get("error") == "insufficient_data":
             return AgentResult(
                 agent=self.name, symbol=",".join(symbols),
-                analysis="无法获取足够的历史价格数据进行组合分析。",
+                analysis=("无法获取足够的历史价格数据进行组合分析。" if zh
+                          else "Not enough price history could be fetched to analyse the portfolio."),
                 confidence=0.3, signal="HOLD",
-                key_points=["历史数据不足（需要 >20 个交易日）"],
+                key_points=["历史数据不足（需要 >20 个交易日）" if zh
+                            else "Not enough history (needs more than 20 trading days)"],
             )
 
         valid_syms = data.get("valid_symbols", symbols)
@@ -210,12 +214,12 @@ class PortfolioAgent(BaseAgent):
 
         analysis = await self._call_llm(self._SYSTEM, prompt, max_tokens=650)
         if not analysis:
-            analysis = _template_analysis(valid_syms, data)
+            analysis = _template_analysis(valid_syms, data, self.lang)
 
         verdict    = _extract_verdict(analysis)
         signal     = _verdict_to_signal(verdict)
         confidence = _estimate_confidence(data)
-        key_points = _build_key_points(data, verdict)
+        key_points = _build_key_points(data, verdict, self.lang)
 
         return AgentResult(
             agent=self.name,
@@ -225,6 +229,9 @@ class PortfolioAgent(BaseAgent):
             signal=signal,
             key_points=key_points,
             data_used={
+                # The verdict itself: the signal maps NEEDS_ATTENTION to SELL,
+                # and a banner built from the signal said HIGH_RISK.
+                "verdict": verdict,
                 "n": len(valid_syms),
                 "port_vol_ann": data.get("port_vol_ann"),
                 "div_ratio": data.get("div_ratio"),
@@ -312,35 +319,45 @@ def _estimate_confidence(d: Dict) -> float:
     return min(round(base, 2), 0.75)
 
 
-def _build_key_points(d: Dict, verdict: str) -> List[str]:
+def _build_key_points(d: Dict, verdict: str, lang: str = "zh") -> List[str]:
+    zh  = lang != "en"
     pts = []
     n   = len(d.get("valid_symbols", []))
     if d.get("weight_source") == "ledger":
-        pts.append(f"{n} 个标的，按真实持仓成本加权")
+        pts.append(f"{n} 个标的，按真实持仓成本加权" if zh
+                   else f"{n} symbols, weighted by the cost of your real positions")
     else:
-        pts.append(f"{n} 个标的，等权配置（无真实持仓数据，非实际风险暴露）")
+        pts.append(f"{n} 个标的，等权配置（无真实持仓数据，非实际风险暴露）" if zh
+                   else f"{n} symbols, equal weight (no real positions recorded, so not your actual exposure)")
 
     port_vol = d.get("port_vol_ann", 0)
     if port_vol:
-        risk_lv = "高风险" if port_vol > 0.30 else ("中等" if port_vol > 0.18 else "低风险")
-        pts.append(f"组合年化波动 {port_vol*100:.1f}%（{risk_lv}）")
+        if zh:
+            risk_lv = "高风险" if port_vol > 0.30 else ("中等" if port_vol > 0.18 else "低风险")
+            pts.append(f"组合年化波动 {port_vol*100:.1f}%（{risk_lv}）")
+        else:
+            risk_lv = "high" if port_vol > 0.30 else ("medium" if port_vol > 0.18 else "low")
+            pts.append(f"Annualised portfolio volatility {port_vol*100:.1f}% ({risk_lv})")
 
     div_r = d.get("div_ratio", 1)
     if div_r < 1.1:
-        pts.append(f"分散度不足（ratio {div_r:.2f}x，标的相关性高）")
+        pts.append(f"分散度不足（ratio {div_r:.2f}x，标的相关性高）" if zh
+                   else f"Poorly diversified (ratio {div_r:.2f}x, the symbols move together)")
     else:
-        pts.append(f"分散度合理（ratio {div_r:.2f}x）")
+        pts.append(f"分散度合理（ratio {div_r:.2f}x）" if zh
+                   else f"Reasonably diversified (ratio {div_r:.2f}x)")
 
     high_corr = d.get("high_corr", [])
     if high_corr:
         top = high_corr[0]
-        pts.append(f"最高相关对: {top['sym1']}↔{top['sym2']} ({top['corr']:+.2f})")
+        pts.append(f"{'最高相关对' if zh else 'Most correlated pair'}: "
+                   f"{top['sym1']}↔{top['sym2']} ({top['corr']:+.2f})")
 
-    pts.append(f"整体评级: {verdict}")
+    pts.append(f"{'整体评级' if zh else 'Overall'}: {verdict}")
     return pts[:6]
 
 
-def _template_analysis(symbols: List[str], d: Dict) -> str:
+def _template_analysis(symbols: List[str], d: Dict, lang: str = "zh") -> str:
     high_corr = d.get("high_corr", [])
     port_vol  = d.get("port_vol_ann", 0)
     div_r     = d.get("div_ratio", 1)
@@ -350,6 +367,18 @@ def _template_analysis(symbols: List[str], d: Dict) -> str:
         verdict = "HEALTHY"
     elif len(high_corr) >= 3 or port_vol > 0.30:
         verdict = "HIGH_RISK"
+
+    if lang == "en":
+        lines = [f"{','.join(symbols)} portfolio report (template)"]
+        lines.append(f"Annualised volatility: {port_vol*100:.1f}%")
+        lines.append(f"Diversification ratio: {div_r:.2f}x")
+        if high_corr:
+            lines.append(f"{len(high_corr)} highly correlated pairs, the highest "
+                         f"{high_corr[0]['sym1']}↔{high_corr[0]['sym2']} {high_corr[0]['corr']:+.2f}")
+        else:
+            lines.append("No highly correlated pairs.")
+        lines.append(f"\n{verdict}")
+        return "\n".join(lines)
 
     lines = [f"{','.join(symbols)} 组合分析报告（模板）"]
     lines.append(f"年化波动率: {port_vol*100:.1f}%")
