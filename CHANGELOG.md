@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.97.0] — 2026-10-06
+
+- Merge pull request #124 from Cinsoul/refactor/terminal-chrome
+
 ## [0.96.0] — 2026-10-06
 
 - Merge pull request #122 from Cinsoul/refactor/headless-module
