@@ -30,9 +30,19 @@ _BUILTIN: Dict[str, Type[BaseAgent]] = {
 }
 
 # 尝试加载其他内置 agent（文件存在则注册）
+# The package this module was loaded as: "aria_code.agents", or "agents" when the
+# CLI's bare import root is in use. The built-ins were imported by the fixed
+# name "aria_code.agents.…" — a second copy of the package under the other
+# root, whose classes subclass a different BaseAgent. issubclass() then said
+# no and they were dropped without a word: /team announced four analysts and
+# only "technical" (imported relatively, above) ever ran.
+_PACKAGE = __package__ or "aria_code.agents"
+
+
 def _try_import_builtin(module_path: str, name: str) -> None:
+    if module_path.startswith("aria_code.agents."):
+        module_path = _PACKAGE + module_path[len("aria_code.agents"):]
     try:
-        parts = module_path.split(".")
         mod = importlib.import_module(module_path)
         for _, cls in inspect.getmembers(mod, inspect.isclass):
             if issubclass(cls, BaseAgent) and cls is not BaseAgent:

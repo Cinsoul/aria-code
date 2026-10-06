@@ -505,6 +505,11 @@ class TerminalRuntimeEventConsumer:
         self._finish_thinking()
 
         # Cursor/Windsurf 风格的实时加载动画
+        # One spinner at a time. /team's analysts call tools in parallel; the
+        # second spinner replaced the first in this one slot, the first was
+        # never stopped, and after the report the CLI sat on "Running
+        # run_factor_research" with no prompt.
+        self.close_tool_spinner()
         if self.has_rich and hasattr(self, 'console'):
             hint = _tool_activity_hint(tool, params)
             verb = "调用工具" if str(self.ui_lang).lower().startswith("zh") else "Running"
@@ -521,14 +526,19 @@ class TerminalRuntimeEventConsumer:
         safe_params = dict(params) if isinstance(params, dict) else {}
         self.tool_params.setdefault(tool, []).append(safe_params)
 
-    def on_tool_result(self, tool: str, summary: Any) -> None:
-        # 关闭工具加载动画
-        if hasattr(self, 'tool_spinner') and self.tool_spinner is not None:
+    def close_tool_spinner(self) -> None:
+        """Stop the tool spinner, if one is running."""
+        spinner = getattr(self, "tool_spinner", None)
+        if spinner is not None:
             try:
-                self.tool_spinner.__exit__(None, None, None)
+                spinner.__exit__(None, None, None)
             except Exception:
                 pass
-            self.tool_spinner = None
+        self.tool_spinner = None
+
+    def on_tool_result(self, tool: str, summary: Any) -> None:
+        # 关闭工具加载动画
+        self.close_tool_spinner()
 
         starts = self.tool_start_times.get(tool) or []
         started_at = starts.pop(0) if starts else time.time()

@@ -176,6 +176,12 @@ class BaseAgent(ABC):
         _lang_rule = self._LANG_RULES.get(self.lang, self._LANG_RULES["zh"])
         _data_warn = self._data_guard(quote or {})
         system = system + self._TIME_SENSITIVE_FACT_POLICY + _lang_rule + _data_warn
+        if self.lang == "en":
+            # The agents' own prompts and much of their data are Chinese. A rule
+            # appended at the end lost to them: an English /team synthesis on
+            # Gemini came back in Chinese. Say it first as well.
+            system = ("Write your entire answer in English, even though the instructions and data "
+                      "below may be in Chinese.\n\n" + system)
         from aria_code.providers.llm.base import Message
 
         # 自动注入 DAG pipeline 中的 upstream context
