@@ -6,6 +6,7 @@ CLI, Feishu, and future gateway adapters can share the same command semantics.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -56,13 +57,13 @@ _DASHBOARD_MODE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 _CHART_PERIOD_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("近一年", "一年", "1y", "1年"), "1y"),
-    (("近三个月", "三个月", "3m", "3个月"), "3m"),
-    (("近六个月", "六个月", "6m", "6个月"), "6m"),
-    (("年初至今", "ytd"), "ytd"),
-    (("两年", "2y"), "2y"),
-    (("三年", "3y"), "3y"),
-    (("五年", "5y"), "5y"),
+    (("近三个月", "三个月", "3m", "3个月", "3 months", "three months", "3-month", "quarter"), "3m"),
+    (("近六个月", "六个月", "6m", "6个月", "6 months", "six months", "6-month", "half a year"), "6m"),
+    (("年初至今", "ytd", "year to date"), "ytd"),
+    (("两年", "2y", "2 years", "two years"), "2y"),
+    (("三年", "3y", "3 years", "three years"), "3y"),
+    (("五年", "5y", "5 years", "five years"), "5y"),
+    (("近一年", "一年", "1y", "1年", "1 year", "one year", "a year", "12 months"), "1y"),
 )
 
 _REPORT_TYPE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
@@ -80,7 +81,13 @@ _TRADINGVIEW_ANALYSIS_HINTS = (
     "指标", "信号", "analyze", "analysis", "data", "indicator", "signal",
 )
 
-_ROUTE_SYMBOL_BLOCKLIST = {"K", "LINE", "CHART", "PLOT"}
+_ROUTE_SYMBOL_BLOCKLIST = {
+    "K", "LINE", "CHART", "PLOT",
+    # Product and engineering acronyms, typed in capitals and almost never a
+    # ticker in a message: "news app UI design ideas" ran `/news UI`.
+    "UI", "UX", "API", "CLI", "SDK", "URL", "PDF", "CSS", "HTML", "SQL", "JSON", "CSV", "IDE",
+    "OS", "PR", "QA", "CI", "CD", "MVP", "LLM", "GPU", "CPU", "RAM", "SSD", "DB",
+}
 _CHART_CONTEXT_TOKEN_BLOCKLIST = {
     "ABOVE", "BELOW", "INC", "TTM", "RATIO", "SIGNAL", "SUPPORT", "RESIST",
     "RESISTANCE", "LEVEL", "LEVELS", "HIGH", "LOW", "OPEN", "CLOSE", "AVG",
@@ -115,8 +122,31 @@ def _news_topic(text: str, symbols: list[str]) -> str:
     return symbols[0] if symbols else text
 
 
+def _known_tickers() -> frozenset[str]:
+    """Tickers Aria knows by name — the company table's values."""
+    global _KNOWN_TICKERS
+    if _KNOWN_TICKERS is None:
+        try:
+            from aria_code.apps.cli.utils.market_detect import _COMPANY_TO_TICKER
+
+            _KNOWN_TICKERS = frozenset(str(v).upper() for v in _COMPANY_TO_TICKER.values() if v)
+        except Exception:
+            _KNOWN_TICKERS = frozenset()
+    return _KNOWN_TICKERS
+
+
+_KNOWN_TICKERS: frozenset[str] | None = None
+
+
 def _route_symbols(text: str, *, limit: int = 6) -> list[str]:
-    """Resolve ticker/company mentions for natural-language command routing."""
+    """Resolve ticker/company mentions for natural-language command routing.
+
+    The second pass reads the message upper-cased so "aapl" is found — and it
+    used to accept anything that came out of it, so every English word became
+    a ticker: "what's the latest version of python?" ran `/news WHAT`, "write a
+    report generator script" ran `/report WRITE`. That pass now adds only
+    tickers Aria knows; the message as typed is read as before.
+    """
     seen: set[str] = set()
     out: list[str] = []
     for source in (text, text.upper()):
@@ -126,6 +156,8 @@ def _route_symbols(text: str, *, limit: int = 6) -> list[str]:
                 not normalized
                 or normalized in _ROUTE_SYMBOL_BLOCKLIST
                 or _is_blocked_market_symbol_candidate(normalized)
+                or (source is not text and normalized not in _known_tickers()
+                    and normalized not in text)
             ):
                 continue
             if len(normalized) == 1 and "." not in normalized:
@@ -135,7 +167,10 @@ def _route_symbols(text: str, *, limit: int = 6) -> list[str]:
                 out.append(normalized)
                 if len(out) >= limit:
                     return out
-    single = _extract_market_symbol(text) or _extract_market_symbol(text.upper())
+    single = _extract_market_symbol(text)
+    if not single:
+        upper = _extract_market_symbol(text.upper())
+        single = upper if str(upper or "").upper() in _known_tickers() else ""
     normalized = str(single or "").upper()
     if (
         normalized
@@ -236,11 +271,66 @@ def parse_analysis_args(args: str, *, default_symbol: str = "AAPL") -> AnalysisA
     return AnalysisArgs(symbol=(symbol or default_symbol).upper(), focus=focus, lang=lang)
 
 
+_DATA_FILE_RE = re.compile(r"(?<![\w/.-])([\w./-]+\.(?:csv|tsv|xlsx|xls|json))(?![\w.])", re.I)
+_CODE_FILE_RE = re.compile(r"\b[\w./-]+\.(?:py|js|ts|tsx|jsx|go|rs|java|rb|php|c|cc|cpp|h|cs|swift|kt|sh|"
+                           r"md|txt|toml|ya?ml|html|css|sql|ipynb|csv|tsv|json|xlsx?)\b", re.I)
+_CODE_WORDS = (
+    "script", "function", "class", "method", "refactor", "repo", "repository", "stack trace", "traceback",
+    "test coverage", "unit test", "pattern", "code", "compile", "debug", "regex", "api", "endpoint",
+    "代码", "脚本", "函数", "重构", "仓库", "测试", "报错", "调试", "接口",
+)
+# English words match whole words ("repo" is not in "report"); Chinese has no
+# spaces, so it matches as a substring.
+_CODE_WORD_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(w) for w in _CODE_WORDS if w.isascii()) + r")(?:s|es)?\b", re.I)
+_INVENTORY_WORDS = ("inventory", "reorder", "re-order", "safety stock", "stockout", "sku", "库存", "补货", "安全库存", "断货")
+_CARRIER_WORDS = ("carrier", "freight", "waybill", "shipping cost", "lane", "承运商", "运单", "运费", "物流成本")
+_FINANCE_WORDS = ("market", "stock", "finance", "financial", "earnings", "市场", "股", "财经", "金融", "财报")
+# Commands that act on one instrument and must not guess one.
+_SYMBOL_COMMANDS = {"/analyze", "/risk", "/strategy", "/signal", "/predict", "/report", "/news", "/chart",
+                    "/backtest"}
+
+
+def _logistics_route(text: str, low: str, available_commands: set[str]) -> RoutedCommand | None:
+    """ "Which SKUs in skus.csv need reordering?" → /inventory skus.csv, when that file exists."""
+    import os
+
+    files = [m.group(1) for m in _DATA_FILE_RE.finditer(text) if os.path.isfile(m.group(1))]
+    if not files:
+        return None
+    if "/inventory" in available_commands and any(w in low for w in _INVENTORY_WORDS):
+        return RoutedCommand(command="/inventory", args=files[0])
+    if "/carriers" in available_commands and any(w in low for w in _CARRIER_WORDS):
+        return RoutedCommand(command="/carriers", args=files[0])
+    return None
+
+
+def _looks_like_code_work(text: str, low: str) -> bool:
+    """A message about code or a data file, which is the model's to answer.
+
+    "plot a histogram of ages in data.csv" ran `/chart OF AGES GE IN CSV`,
+    "analyze this stack trace" ran `/analyze`, "strategy pattern in python"
+    ran `/strategy`. None of them is a market request.
+    """
+    return (bool(_CODE_FILE_RE.search(text)) or bool(_CODE_WORD_RE.search(low))
+            or any(word in low for word in _CODE_WORDS if not word.isascii()))
+
+
 def route_top_level_text(user_input: str, available_commands: set[str]) -> RoutedCommand | None:
-    """Translate bare workflow text into a slash command when possible."""
+    """Translate bare workflow text into a slash command when possible.
+
+    Only requests this can answer with certainty run a command; anything else
+    — code, data files, a keyword with no instrument — goes to the model,
+    which has the same tools and can ask.
+    """
 
     stripped = user_input.strip()
     if not stripped or stripped.startswith("/"):
+        return None
+    logistics = _logistics_route(stripped, stripped.lower(), available_commands)
+    if logistics is not None:
+        return logistics
+    if _looks_like_code_work(stripped, stripped.lower()):
         return None
         
     low = stripped.lower()
@@ -336,12 +426,22 @@ def route_top_level_text(user_input: str, available_commands: set[str]) -> Route
         "新闻", "消息", "最新进展", "最近进展", "news", "latest", "recent",
     )):
         symbols = _route_symbols(stripped)
-        return RoutedCommand(command="/news", args=_news_topic(stripped, symbols))
+        topic = _news_topic(stripped, symbols)
+        # "latest"/"recent" alone are ordinary words ("the latest version of
+        # python"): without an instrument, only an explicit news request about
+        # markets is one ("今天有什么财经新闻", "market news today").
+        explicit = any(k in low for k in ("新闻", "news")) and any(k in low for k in _FINANCE_WORDS)
+        if symbols or topic in ("SpaceX", "LVMH") or explicit:
+            return RoutedCommand(command="/news", args=topic)
     parts = stripped.split(maxsplit=1)
     keyword = parts[0].lower()
     rest = parts[1] if len(parts) > 1 else ""
     command = TOP_LEVEL_ROUTES.get(keyword)
     if not command or command not in available_commands:
+        return None
+    # "risk of this refactor?", "strategy pattern …", "analyze this …": these
+    # commands act on one instrument, and parse_analysis_args fell back to AAPL.
+    if command in _SYMBOL_COMMANDS and not _route_symbols(rest or stripped):
         return None
     if command == "/analyze":
         parsed = parse_analysis_args(rest)

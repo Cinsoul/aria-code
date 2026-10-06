@@ -2752,6 +2752,22 @@ def _render_answer_block(text: str) -> None:
     console.print(Padding(make_markdown(_strip_latex(text)), (0, 0, 0, 4)))
 
 
+def _announce_route(command_text: str) -> None:
+    """Say which command a plain-language message ran: "→ /news AAPL".
+
+    Routed messages used to run their command silently, so a misroute looked
+    like Aria misunderstanding, and nobody learned the command for next time.
+    """
+    if _ARIA_BOT_MODE:
+        return
+    if HAS_RICH:
+        from rich.text import Text
+
+        console.print(Text(f"  → {command_text}", style="dim"))
+    else:
+        print(f"  → {command_text}")
+
+
 def _print_tool_call(tool_name: str, params: dict):
     """Print tool call header — Claude Code-style ⏺ bullet tree."""
     if _ARIA_BOT_MODE:
@@ -4694,6 +4710,7 @@ class ArtheraTerminal:
             if routed is not None:
                 self._send_message_route_active = True
                 try:
+                    _announce_route(routed.text)
                     self._maybe_show_intent_preflight(routed.text)
                     await self.commands.execute(routed.text)
                 finally:
@@ -4703,6 +4720,7 @@ class ArtheraTerminal:
             if routed is not None:
                 self._send_message_route_active = True
                 try:
+                    _announce_route(routed.text)
                     self._maybe_show_intent_preflight(routed.text)
                     await self.commands.execute(routed.text)
                 finally:
