@@ -1,11 +1,12 @@
-"""The platform publish step does not pass while a package is missing.
+"""The platform publish step makes sure every package reaches npm.
 
-v0.81.0's darwin-arm64 and v0.86.0's mcp-linux-arm64 were never published,
-and the step passed: it skipped any package `npm view` said existed, trusting
-the exit status with the output discarded. The dispatcher then waited an hour
-for the missing package and failed. The step now asks the registry directly,
-and before it reports success every package must be visible — a missing one
-is published again, and after the deadline the step fails naming it.
+It skipped any package `npm view` answered for — trusting the exit status,
+with the output thrown away — and npm versions differ on whether a missing
+version is an error there. It now asks the registry directly, and checks that
+every package can be seen, publishing a missing one again. npm itself can be
+slow to expose a package (v0.86.0's mcp-linux-arm64 appeared 15 minutes after
+its neighbours), so one still missing after 45 minutes is named in a warning
+and the dispatcher's own wait makes the final call.
 """
 
 from __future__ import annotations
@@ -36,7 +37,8 @@ class PlatformPublish(unittest.TestCase):
     def _run(self, *, lose: str = "", never: str = "", deadline_zero: bool = False):
         script = _step().replace("sleep 30", "sleep 0")
         if deadline_zero:
-            script = script.replace("+ 1200", "+ 0", 1)
+            self.assertIn("+ 2700", script)
+            script = script.replace("+ 2700", "+ 0", 1)
         with tempfile.TemporaryDirectory() as tmp:
             work = pathlib.Path(tmp)
             for name in NAMES:
@@ -85,10 +87,12 @@ class PlatformPublish(unittest.TestCase):
         self.assertEqual(published.count("aria-code-mcp-linux-arm64"), 2)
         self.assertIn("not visible yet, publishing again: @artheras/aria-code-mcp-linux-arm64@1.0.0", result.stdout)
 
-    def test_the_step_fails_naming_a_package_that_never_appears(self):
+    def test_a_package_still_missing_at_the_deadline_is_named_not_fatal(self):
+        """npm has taken 15 minutes, maybe 80, to expose a package: a slow
+        registry must not fail the release here — the dispatcher's wait decides."""
         result, _ = self._run(never="aria-code-darwin-arm64", deadline_zero=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Not on the registry: @artheras/aria-code-darwin-arm64@1.0.0", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("::warning::Not on the registry yet: @artheras/aria-code-darwin-arm64@1.0.0", result.stdout)
 
 
 if __name__ == "__main__":

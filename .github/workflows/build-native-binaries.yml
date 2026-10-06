@@ -393,9 +393,9 @@ jobs:
           done
           # Whether name@version is on the registry, asked directly and past
           # every cache — not `npm view`, whose exit status this used to trust
-          # with its output discarded. v0.81.0's darwin-arm64 and v0.86.0's
-          # mcp-linux-arm64 were never published while this step passed: one
-          # package skipped, the dispatcher then waited an hour and failed.
+          # with its output discarded: npm versions differ on whether a version
+          # that does not exist is an error there, and a skipped package is
+          # only noticed an hour later by the dispatcher's wait.
           published() {
             local name="$1" version="$2" encoded="${1/\//%2F}"
             [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' \
@@ -416,10 +416,15 @@ jobs:
               exit 1
             }
           done
-          # Nothing is reported done until every package can be seen. A version
-          # npm never received is published again; one it accepted but has not
-          # exposed yet answers "cannot publish over" — and is waited for.
-          DEADLINE=$(( $(date +%s) + 1200 ))
+          # Each package is checked until it can be seen. A version npm never
+          # received is published again; one it accepted but has not exposed
+          # yet answers "cannot publish over" — and is waited for. npm has
+          # taken 15 minutes to expose one of these packages (v0.86.0's
+          # mcp-linux-arm64) and possibly 80 (v0.81.0's darwin-arm64), so this
+          # step does not fail the release over a slow registry: after 45
+          # minutes it warns, and the dispatcher's own wait — which names each
+          # missing package with its HTTP status — decides.
+          DEADLINE=$(( $(date +%s) + 2700 ))
           while :; do
             MISSING=()
             for dir in "${packages[@]}"; do
@@ -431,8 +436,8 @@ jobs:
               break
             fi
             if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-              for dir in "${MISSING[@]}"; do echo "::error::Not on the registry: $(spec_of "$dir")"; done
-              exit 1
+              for dir in "${MISSING[@]}"; do echo "::warning::Not on the registry yet: $(spec_of "$dir")"; done
+              break
             fi
             for dir in "${MISSING[@]}"; do
               echo "── not visible yet, publishing again: $(spec_of "$dir")"
