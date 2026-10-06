@@ -103,6 +103,7 @@ except ImportError:
     readline = None
 import logging
 import time
+from aria_code.ui.render.output import file_uri as _file_uri
 import shlex
 import pathlib
 import uuid
@@ -2308,13 +2309,13 @@ def _print_pending_artifact_location(pending_artifact: dict) -> None:
         console.print(f"  [dim]类型: {kind}[/dim]")
         if paths:
             for label, path in paths:
-                console.print(f"  [dim]{label}:[/dim] [link={path}]{_display_path(path, fallback=label)}[/link]")
+                console.print(f"  [dim]{label}:[/dim] [link={_file_uri(path)}]{_display_path(path, fallback=label)}[/link]")
         elif command:
             console.print("  [yellow]上一项任务只记录了命令，尚未记录具体文件路径。[/yellow]")
         if child_paths:
             console.print("  [dim]包含的单标的图表:[/dim]")
             for child_label, label, path in child_paths:
-                console.print(f"    [dim]{child_label} {label}:[/dim] [link={path}]{_display_path(path, fallback=child_label)}[/link]")
+                console.print(f"    [dim]{child_label} {label}:[/dim] [link={_file_uri(path)}]{_display_path(path, fallback=child_label)}[/link]")
         if command:
             console.print(f"  [dim]复现命令: {command}[/dim]")
         console.print()
@@ -2515,7 +2516,7 @@ Plotly.newPlot('chart', [
             "rows": z_rows,
         })
         if HAS_RICH:
-            console.print(f"  [dim]Z-Score 图表: [link={art.path}]{_display_path(art.path)}[/link][/dim]")
+            console.print(f"  [dim]Z-Score 图表: [link={_file_uri(art.path)}]{_display_path(art.path)}[/link][/dim]")
             import subprocess
             try:
                 subprocess.Popen(["open", str(art.path)])
