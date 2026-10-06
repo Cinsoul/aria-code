@@ -391,9 +391,22 @@ jobs:
               exit 1
             fi
           done
+          # Whether name@version is on the registry, asked directly and past
+          # every cache — not `npm view`, whose exit status this used to trust
+          # with its output discarded. v0.81.0's darwin-arm64 and v0.86.0's
+          # mcp-linux-arm64 were never published while this step passed: one
+          # package skipped, the dispatcher then waited an hour and failed.
+          published() {
+            local name="$1" version="$2" encoded="${1/\//%2F}"
+            [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' \
+                "https://registry.npmjs.org/${encoded}/${version}?nocache=${RANDOM}$(date +%s)")" = "200" ] && return 0
+            curl -sf -H 'Accept: application/vnd.npm.install-v1+json' -H 'Cache-Control: no-cache' \
+              "https://registry.npmjs.org/${encoded}?nocache=${RANDOM}$(date +%s)" | grep -qF "\"${version}\""
+          }
+          spec_of() { node -e 'const p=require(process.argv[1]); console.log(p.name+"@"+p.version)' "./${1}package.json"; }
           for dir in "${packages[@]}"; do
-            spec="$(node -e 'const p=require(process.argv[1]); console.log(p.name+"@"+p.version)' "./${dir}package.json")"
-            if npm view "$spec" version --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+            spec="$(spec_of "$dir")"
+            if published "${spec%@*}" "${spec##*@}"; then
               echo "── already published $spec"
               continue
             fi
@@ -402,4 +415,28 @@ jobs:
               echo "::error::npm rejected $(basename "$dir"). E413 or a closed connection means it is too large (~201 MB packed limit); E403/E404 means the token cannot publish to the @artheras scope. The npm error is above."
               exit 1
             }
+          done
+          # Nothing is reported done until every package can be seen. A version
+          # npm never received is published again; one it accepted but has not
+          # exposed yet answers "cannot publish over" — and is waited for.
+          DEADLINE=$(( $(date +%s) + 1200 ))
+          while :; do
+            MISSING=()
+            for dir in "${packages[@]}"; do
+              spec="$(spec_of "$dir")"
+              published "${spec%@*}" "${spec##*@}" || MISSING+=("$dir")
+            done
+            if [ "${#MISSING[@]}" -eq 0 ]; then
+              echo "All ${#packages[@]} platform packages are visible on the registry"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+              for dir in "${MISSING[@]}"; do echo "::error::Not on the registry: $(spec_of "$dir")"; done
+              exit 1
+            fi
+            for dir in "${MISSING[@]}"; do
+              echo "── not visible yet, publishing again: $(spec_of "$dir")"
+              (cd "$dir" && npm publish --access public) || true
+            done
+            sleep 30
           done
