@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.96.0] — 2026-10-06
+
+- Merge pull request #122 from Cinsoul/refactor/headless-module
+
 ## [0.95.0] — 2026-10-06
 
 - Merge pull request #120 from Cinsoul/fix/compare-strategies
