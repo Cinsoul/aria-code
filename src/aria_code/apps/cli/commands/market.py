@@ -524,11 +524,18 @@ def parse_technical_args(args: str, *, default_symbol: str = "AAPL", default_day
     return TechnicalArgs(symbol=symbol, days=days)
 
 
-async def try_top_level_route(user_input: str, commands) -> bool:
-    """Execute a top-level routed slash command through a SlashCommands object."""
+async def try_top_level_route(user_input: str, commands, *, announce=None) -> bool:
+    """Execute a top-level routed slash command through a SlashCommands object.
+
+    ``announce`` is told the command first ("→ /news AAPL"): the interactive
+    loop routes here before send_message, so a routed message used to run its
+    command with nothing on screen saying which.
+    """
 
     routed = route_top_level_text(user_input, set(commands.commands))
     if routed is None:
         return False
+    if announce is not None:
+        announce(routed.text)
     await commands.execute(routed.text)
     return True

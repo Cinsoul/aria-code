@@ -79,3 +79,40 @@ def test_a_routed_message_says_what_it_ran(monkeypatch):
     monkeypatch.setattr(cli, "HAS_RICH", True)
     cli._announce_route("/news AAPL")
     assert console.file.getvalue().strip() == "→ /news AAPL"
+
+
+def test_the_interactive_loop_announces_its_route_too():
+    """The input loop routes before send_message: "aapl news" ran /news with no line saying so."""
+    import asyncio
+
+    from aria_code.apps.cli.commands.market import try_top_level_route
+
+    ran, said = [], []
+
+    class Commands:
+        commands = {"/news": None}
+
+        async def execute(self, text):
+            ran.append(text)
+
+    assert asyncio.run(try_top_level_route("aapl news", Commands(), announce=said.append))
+    assert said == ran == ["/news AAPL"]
+
+
+@pytest.mark.parametrize("raw, shown", [
+    ("Mon, 05 Oct 2026 12:00:00 GMT", "2026-10-05"),       # was "Mon, 05 Oc"
+    ("2026-10-05T08:00:00Z", "2026-10-05"),
+])
+def test_news_dates_are_dates(raw, shown):
+    from aria_code.apps.cli.commands.market_cmds import _news_date
+
+    assert _news_date(raw) == shown
+
+
+def test_the_chart_summary_follows_the_ui_language():
+    import inspect
+
+    from aria_code.apps.cli.commands import core_cmds
+
+    source = inspect.getsource(core_cmds.CoreCommandsMixin.cmd_chart)
+    assert "self-check passed" in source and '"偏多": "bullish"' in source

@@ -6375,7 +6375,7 @@ class ArtheraTerminal:
                 # Intercepts bare keywords like "analyze AAPL" → /analyze AAPL
                 # so users don't need to type the slash for common quant workflows.
                 self._maybe_show_intent_preflight(user_input)
-                _routed = await try_top_level_route(user_input, self.commands)
+                _routed = await try_top_level_route(user_input, self.commands, announce=_announce_route)
                 if _routed:
                     continue
 

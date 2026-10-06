@@ -352,6 +352,24 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _news_date(raw: str) -> str:
+    """A feed's publish time as 2026-10-05.
+
+    The first ten characters were kept, which suits ISO dates and cut an RSS
+    date mid-word: "Mon, 05 Oct 2026 12:00:00 GMT" showed as "Mon, 05 Oc".
+    """
+    from datetime import datetime
+    from email.utils import parsedate_to_datetime
+
+    text = str(raw or "").strip()
+    for parse in (lambda t: datetime.fromisoformat(t.replace("Z", "+00:00")), parsedate_to_datetime):
+        try:
+            return parse(text).strftime("%Y-%m-%d")
+        except (TypeError, ValueError, IndexError):
+            continue
+    return text[:10]
+
+
 class MarketCommandsMixin:
     """Mixin: Market commands: quote, realty, football, screen, news, screen_cn, limitup, north."""
 
@@ -1185,7 +1203,7 @@ class MarketCommandsMixin:
                         url_item = a.get("url", a.get("link", ""))
                         pub_date = a.get("published_at", a.get("date", a.get("publishedAt", "")))
                         if pub_date:
-                            pub_date = pub_date[:10] if len(pub_date) >= 10 else pub_date
+                            pub_date = _news_date(pub_date)
                     else:
                         title = str(a)
                         source = pub_date = url_item = ""
@@ -1224,7 +1242,7 @@ class MarketCommandsMixin:
                     source = a.get("source", "") if isinstance(a, dict) else ""
                     pub_date = a.get("published_at", "") if isinstance(a, dict) else ""
                     if pub_date:
-                        pub_date = pub_date[:10] if len(pub_date) >= 10 else pub_date
+                        pub_date = _news_date(pub_date)
                     if self.context.has_rich:
                         self.context.console.print(f"  [bold]{idx}.[/bold] {title}")
                         meta_parts = [p for p in [source, pub_date] if p]

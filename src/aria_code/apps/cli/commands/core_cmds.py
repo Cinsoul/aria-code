@@ -2187,28 +2187,40 @@ class CoreCommandsMixin:
                     "resistance": res3,
                 },
             }
+            # The summary was Chinese whatever the UI language ("趋势: 偏多 …
+            # 自审通过"); the trend value itself comes from the chart in Chinese.
+            _zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+            _T = (lambda a, b: a) if _zh else (lambda a, b: b)
+            _trend = str(result.get("trend") or "—")
+            if not _zh:
+                _trend = {"偏多": "bullish", "偏空": "bearish", "震荡": "range-bound",
+                          "震荡/中性": "range-bound"}.get(_trend, _trend)
+            _summary = (
+                f"{display_label}  {_T('趋势', 'trend')}: {_trend}  "
+                f"RSI: {f'{rsi_val:.1f}' if rsi_val else '—'}  "
+                f"{_T('支撑', 'support')}: {'/'.join(str(v) for v in sup3) or '—'}  "
+                f"{_T('阻力', 'resistance')}: {'/'.join(str(v) for v in res3) or '—'}  "
+                f"{_T('数据', 'source')}: {provider}"
+            )
+            _issues_head = _T(f"自审发现 {len(issues)} 个问题:", f"self-check found {len(issues)} issue(s):")
+            _clean = _T("自审通过（数据质量正常）", "self-check passed (data quality normal)")
             if self.context.has_rich:
-                self.context.console.print(f"  [green]✓[/green] chart generated  [dim]({elapsed_ms}ms)[/dim]")
-                self.context.console.print(f"    saved: [link={path}]{path_label}[/link]")
-                self.context.console.print(
-                    f"    [dim]{display_label}  "
-                    f"趋势: {result.get('trend','—')}  "
-                    f"RSI: {f'{rsi_val:.1f}' if rsi_val else '—'}  "
-                    f"支撑: {'/'.join(str(v) for v in sup3) or '—'}  "
-                    f"阻力: {'/'.join(str(v) for v in res3) or '—'}  "
-                    f"数据: {provider}[/dim]"
-                )
+                from rich.markup import escape as _esc
+
+                self.context.console.print(f"  [green]✓[/green] {_T('图表已生成', 'chart generated')}  [dim]({elapsed_ms}ms)[/dim]")
+                self.context.console.print(f"    {_T('已保存', 'saved')}: [link={path}]{path_label}[/link]")
+                self.context.console.print(f"    [dim]{_esc(_summary)}[/dim]")
                 if issues:
-                    self.context.console.print(f"  [yellow]⚠ 自审发现 {len(issues)} 个问题:[/yellow]")
+                    self.context.console.print(f"  [yellow]⚠ {_issues_head}[/yellow]")
                     for iss in issues:
-                        self.context.console.print(f"    [yellow]· {iss}[/yellow]")
+                        self.context.console.print(f"    [yellow]· {_esc(str(iss))}[/yellow]")
                 else:
-                    self.context.console.print("  [green dim]✓ 自审通过（数据质量正常）[/green dim]")
+                    self.context.console.print(f"  [green dim]✓ {_clean}[/green dim]")
             else:
-                print(f"  OK chart generated ({elapsed_ms}ms): {path_label}")
-                print(f"  {display_label}  趋势: {result.get('trend','—')}  RSI: {f'{rsi_val:.1f}' if rsi_val else '—'}  数据: {provider}")
+                print(f"  OK {_T('图表已生成', 'chart generated')} ({elapsed_ms}ms): {path_label}")
+                print(f"  {_summary}")
                 if issues:
-                    print(f"  ⚠ 自审发现 {len(issues)} 个问题:")
+                    print(f"  ⚠ {_issues_head}")
                     for iss in issues:
                         print(f"    · {iss}")
             import subprocess as _sp
