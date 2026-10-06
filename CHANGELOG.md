@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.87.0] — 2026-10-06
+
+- Merge pull request #105 from Cinsoul/fix/platform-publish-verify
+
 ## [0.86.0] — 2026-10-06
 
 - Merge pull request #103 from Cinsoul/feat/natural-language-routing
