@@ -43,7 +43,9 @@ AGENT_LABELS: dict[str, str] = {
 }
 
 
-def agent_label(name: str) -> str:
+def agent_label(name: str, lang: str = "zh") -> str:
+    if not str(lang).lower().startswith("zh"):
+        return (name or "?").replace("_", " ").title()
     return AGENT_LABELS.get((name or "").lower(), name or "?")
 
 
@@ -58,14 +60,18 @@ def render_agent_tree_root(console, sym: str, n_agents: int, lang: str = "zh") -
 def render_agent_node(console, name: str, signal: str | None,
                       key_point: str | None, success: bool = True,
                       error: str | None = None,
-                      degraded: bool = False) -> None:
-    """Print one completed-agent leaf: ⎿ ⏺ 基本面  BUY  ROE 24%·PE 32 偏高"""
-    label = agent_label(name)
+                      degraded: bool = False, lang: str = "zh") -> None:
+    """Print one completed-agent leaf: ⎿ ⏺ 基本面  BUY  ROE 24%·PE 32 偏高 (Fundamental … in English)"""
+    zh = str(lang).lower().startswith("zh")
+    label = agent_label(name, lang)
     if not success or error:
-        _err_label = {
+        _err_label = ({
             "timeout": "超时", "rate_limited": "数据源限流",
             "no_data": "无数据", "": "失败",
-        }.get((error or "").lower(), error or "失败")
+        } if zh else {
+            "timeout": "timed out", "rate_limited": "data source rate-limited",
+            "no_data": "no data", "": "failed",
+        }).get((error or "").lower(), error or ("失败" if zh else "failed"))
         console.print(f"  [dim]⎿ ⏺ {label}  {_err_label}[/dim]")
         return
     sig   = (signal or "").upper()
@@ -75,7 +81,8 @@ def render_agent_node(console, name: str, signal: str | None,
     if len(kp) > 52:
         kp = kp[:52] + "…"
     if degraded:
-        kp = f"降级 · {kp}" if kp else "降级执行"
+        tag = "降级" if zh else "degraded"
+        kp = f"{tag} · {kp}" if kp else (f"{tag}执行" if zh else tag)
     console.print(
         f"  [dim]⎿[/dim] [#C08050]⏺[/#C08050] [bold]{label}[/bold]  "
         f"{sig_disp}[dim]{kp}[/dim]"

@@ -316,6 +316,7 @@ class AgentTeam:
                     llm_provider=self.llm,
                     data_router=self.data,
                     on_token=self.on_token,
+                    lang=self.lang,   # without it the agent answered in Chinese for an English /team
                 )
                 synth_data = {
                     "agent_results": [r.to_dict() for r in results],
@@ -332,11 +333,11 @@ class AgentTeam:
                     synthesis_text = synth_result.analysis
                 except Exception as e:
                     logger.warning(f"[synthesis] 失败: {e}")
-                    synthesis_text = _template_synthesis(results, self.signal_scheme)
+                    synthesis_text = _template_synthesis(results, self.signal_scheme, lang=self.lang)
             else:
-                synthesis_text = _template_synthesis(results, self.signal_scheme)
+                synthesis_text = _template_synthesis(results, self.signal_scheme, lang=self.lang)
         else:
-            synthesis_text = _template_synthesis(results, self.signal_scheme)
+            synthesis_text = _template_synthesis(results, self.signal_scheme, lang=self.lang)
 
         return TeamResult(
             symbol       = symbol,
@@ -386,7 +387,7 @@ class AgentTeam:
 
         # 执行最终的信号表决与综合
         final_signal, confidence = self.signal_scheme.vote(results)
-        synthesis_text = _template_synthesis(results, self.signal_scheme)
+        synthesis_text = _template_synthesis(results, self.signal_scheme, lang=self.lang)
 
         return TeamResult(
             symbol       = symbol,
@@ -468,25 +469,32 @@ def _vote_signal(results: List[AgentResult], scheme: SignalScheme = FINANCIAL_SC
     return scheme.vote(results)
 
 
-def _template_synthesis(results: List[AgentResult], scheme: SignalScheme = FINANCIAL_SCHEME) -> str:
-    """无 synthesis agent 时的模板汇总"""
+def _template_synthesis(results: List[AgentResult], scheme: SignalScheme = FINANCIAL_SCHEME,
+                        lang: str = "zh") -> str:
+    """无 synthesis agent 时的模板汇总 — the summary when no model wrote one, in the team's language."""
+    zh = str(lang).lower().startswith("zh")
+    T = (lambda a, b: a) if zh else (lambda a, b: b)
     if not results:
-        return "分析完成，无结果。"
-    lines = ["## 团队分析汇总\n"]
+        return T("分析完成，无结果。", "Analysis finished with no results.")
+    lines = [T("## 团队分析汇总\n", "## Team summary\n")]
     failed_count = sum(1 for r in results if not r.success)
     if failed_count:
-        lines.append(f"> ⚠️ {failed_count}/{len(results)} 个 agent 未能完成分析"
-                     f"（超时或 LLM 不可用），以下结论仅基于成功的 agent。\n")
+        lines.append(T(f"> ⚠️ {failed_count}/{len(results)} 个 agent 未能完成分析"
+                       f"（超时或 LLM 不可用），以下结论仅基于成功的 agent。\n",
+                       f"> ⚠️ {failed_count} of {len(results)} analysts did not finish (timeout or no model); "
+                       "the conclusion uses only the ones that did.\n"))
     for r in results:
         if r.success:
-            lines.append(f"**{r.agent.upper()}** ({r.signal}, 置信度 {r.confidence:.0%})")
+            lines.append(f"**{r.agent.upper()}** ({r.signal}, {T('置信度', 'confidence')} {r.confidence:.0%})")
             for pt in (r.key_points or [])[:3]:
                 lines.append(f"  • {pt}")
         else:
-            err_label = "超时" if r.error == "timeout" else (r.error or "分析失败")
+            err_label = T("超时", "timed out") if r.error == "timeout" else (r.error or T("分析失败", "failed"))
             lines.append(f"**{r.agent.upper()}** ⚠️ {err_label}")
     signal, conf = scheme.vote(results)
-    lines.append(f"\n**综合结论**: {signal}（置信度 {conf:.0%}）")
+    lines.append(f"\n**{T('综合结论', 'Conclusion')}**: {signal}（{T('置信度', 'confidence')} {conf:.0%}）"
+                 if zh else f"\n**Conclusion**: {signal} (confidence {conf:.0%})")
     if failed_count == len(results):
-        lines.append("\n> ⚠️ 所有 agent 均未成功，此结论仅为默认值，不具参考意义。请确认 LLM 服务正常后重试。")
+        lines.append(T("\n> ⚠️ 所有 agent 均未成功，此结论仅为默认值，不具参考意义。请确认 LLM 服务正常后重试。",
+                       "\n> ⚠️ No analyst succeeded; this is a default, not a conclusion. Check the model and retry."))
     return "\n".join(lines)

@@ -286,10 +286,12 @@ def build_team_agent_data(data_bundle: Any) -> dict[str, dict[str, Any]]:
     return prepared
 
 
-def build_team_terminal_summary(data_bundle: Any) -> str:
-    """Return compact Rich markup summary for the /team panel."""
+def build_team_terminal_summary(data_bundle: Any, lang: str = "zh") -> str:
+    """Return compact Rich markup summary for the /team panel, in the UI language."""
+    zh = str(lang).lower().startswith("zh")
+    L = (lambda a, b: a) if zh else (lambda a, b: b)
     if not data_bundle:
-        return "[#57606a]数据:[/#57606a] unavailable"
+        return f"[#57606a]{L('数据', 'Data')}:[/#57606a] unavailable"
     snapshot = team_quote_snapshot(data_bundle)
     currency = snapshot.get("currency") or "USD"
     price = snapshot.get("price")
@@ -307,9 +309,10 @@ def build_team_terminal_summary(data_bundle: Any) -> str:
     stale = "yes" if snapshot.get("stale") else "no"
     return "\n".join([
         f"[bold]{snapshot.get('name') or snapshot.get('symbol') or ''}[/bold]  "
-        f"价格 {price_text} ({change_text}) · 市值 {cap_text} · 成交量 {volume_text}",
-        f"技术面 RSI {rsi_text} · MACD hist {macd_text} · MA20 {ma20_text} · MA60 {ma60_text}",
-        f"[#57606a]数据:[/#57606a] {providers} · status {status} · stale {stale} · missing {missing}",
+        f"{L('价格', 'Price')} {price_text} ({change_text}) · {L('市值', 'Mkt cap')} {cap_text} · "
+        f"{L('成交量', 'Volume')} {volume_text}",
+        f"{L('技术面', 'Technicals')} RSI {rsi_text} · MACD hist {macd_text} · MA20 {ma20_text} · MA60 {ma60_text}",
+        f"[#57606a]{L('数据', 'Data')}:[/#57606a] {providers} · status {status} · stale {stale} · missing {missing}",
     ])
 
 
@@ -318,17 +321,68 @@ def clean_team_synthesis_text(text: str) -> str:
     import re
     cleaned = str(text or "").strip()
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+    # Headings too: "## 团队分析汇总" showed with its hashes inside the panel.
+    cleaned = re.sub(r"(?m)^\s*#{1,6}\s+", "", cleaned)
+    # Quote markers and emoji variation selectors: "> ⚠️ 1 of 4 analysts…"
+    # broke the panel — Rich measures "⚠️" one cell short, and the line wrapped
+    # into "> ⚠" and a stray "that did.".
+    cleaned = re.sub(r"(?m)^\s*>\s?", "", cleaned).replace("\ufe0f", "")
     cleaned = re.sub(r"(?m)^\s*-\s*$", "", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
 
+class ConfiguredTeamProvider:
+    """The model Aria is configured for, behind the agents' stream() interface.
+
+    The team was always handed an Ollama provider at localhost:11434 with the
+    configured model's name — "google/gemini-2.5-pro" sent to a local Ollama
+    that is not running — so every model-driven analyst failed on a cloud
+    setup. This streams through the same provider the chat and /review use.
+    """
+
+    def __init__(self, config: dict[str, Any], model: str):
+        self.app_config = config
+        self.model = model
+        self.name = "configured"
+
+    async def stream(self, messages, tools=None, temperature=None, max_tokens=None, cancel_event=None):
+        from aria_code.apps.cli.providers.base import ConfiguredProvider, event_kind
+
+        plain = [m if isinstance(m, dict) else {"role": m.role, "content": m.content} for m in messages]
+        async for event in ConfiguredProvider(self.app_config, self.model).stream(plain, tools=[]):
+            kind = event_kind(event)
+            if kind == "LLMToken":
+                yield {"type": "token", "text": event.text}
+            elif kind == "LLMDone":
+                if not event.success:
+                    yield {"type": "error", "message": event.error or "the model call failed"}
+                yield {"type": "done"}
+                return
+
+    async def complete(self, messages, tools=None, temperature=None, max_tokens=None):
+        text, error = "", ""
+        async for event in self.stream(messages, max_tokens=max_tokens):
+            if event.get("type") == "token":
+                text += event.get("text", "")
+            elif event.get("type") == "error":
+                error = event.get("message", "")
+        return {"text": text, "content": text, "error": error, "tool_calls": []}
+
+
 def build_team_llm_provider(config: dict[str, Any]) -> Any:
+    model = config.get("model", "qwen2.5:7b")
+    try:
+        from aria_code.apps.cli.providers.chat_routing import first_round_route
+
+        if first_round_route(model, config, None) != "ollama":
+            return ConfiguredTeamProvider(config, model)
+    except Exception as exc:
+        logger.debug("team route check failed, using Ollama: %s", exc)
     try:
         from providers.llm.base import ProviderConfig
         from providers.llm.ollama import OllamaProvider
 
-        model = config.get("model", "qwen2.5:7b")
         url = config.get("ollama_url", "http://localhost:11434")
         return OllamaProvider(ProviderConfig(name="ollama", model=model, base_url=url))
     except Exception as exc:

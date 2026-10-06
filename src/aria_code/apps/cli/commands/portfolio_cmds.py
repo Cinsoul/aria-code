@@ -1056,6 +1056,7 @@ class PortfolioCommandsMixin:
                         success=bool(getattr(result, "success", True)),
                         error=getattr(result, "error", None),
                         degraded=bool(getattr(result, "degraded", False)),
+                        lang=_lang,
                     )
                 else:
                     print(f"  ⎿ {name}  {getattr(result, 'signal', '')}  {_kp[:50]}")
@@ -1111,8 +1112,12 @@ class PortfolioCommandsMixin:
         team_args = parse_team_args(args)
         symbols = resolve_team_symbols(team_args, self.terminal.config)
         agent_names = team_agent_names(team_args)
+        # The UI language, unless the request itself is Chinese. Guessing from
+        # the arguments alone made "/team AAPL" English in a Chinese session.
         _zh = sum(1 for c in args if '一' <= c <= '鿿')
-        _lang = "zh" if _zh / max(len(args), 1) > 0.15 else "en"
+        _ui_zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+        _lang = "zh" if (_zh / max(len(args), 1) > 0.15 or _ui_zh) else "en"
+        _T = (lambda a, b: a) if _lang == "zh" else (lambda a, b: b)
 
         for sym in symbols:
             _agent_count = len(agent_names)
@@ -1136,6 +1141,7 @@ class PortfolioCommandsMixin:
                         success=bool(getattr(result, "success", True)),
                         error=getattr(result, "error", None),
                         degraded=bool(getattr(result, "degraded", False)),
+                        lang=_lang,
                     )
                 else:
                     print(f"  ⎿ {name}  {getattr(result, 'signal', '')}  {_kp[:50]}")
@@ -1173,6 +1179,9 @@ class PortfolioCommandsMixin:
                     on_tool_end=consumer.on_tool_result,
                 )
 
+                # A tool whose result never came back leaves its spinner up,
+                # and the prompt does not return while it runs.
+                consumer.close_tool_spinner()
                 team_result = _analysis.team_result
                 _data_bundle = _analysis.data_bundle
                 _quality_notes = _analysis.quality_notes or []
@@ -1187,9 +1196,10 @@ class PortfolioCommandsMixin:
                         lang=_lang,
                     )
                     if _quality_notes:
+                        from rich.markup import escape as _esc_q
                         self.context.console.print(
-                            "  [yellow]数据质量警告:[/yellow] "
-                            + "; ".join(_quality_notes[:3])
+                            f"  [yellow]{_T('数据质量警告', 'Data quality')}:[/yellow] "
+                            + _esc_q("; ".join(_quality_notes[:3]))
                         )
 
                     # Signal divergence notice — only when DebateAgent ran
@@ -1199,7 +1209,7 @@ class PortfolioCommandsMixin:
                     )
                     if _has_debate:
                         self.context.console.print(
-                            "  [#C08050]🔥 信号分歧已触发 DebateAgent 调解[/#C08050]"
+                            f"  [#C08050]🔥 {_T('信号分歧已触发 DebateAgent 调解', 'Signals disagreed; the debate agent weighed in')}[/#C08050]"
                         )
 
                     # Synthesis in a _get_Panel() for visual separation
@@ -1209,11 +1219,13 @@ class PortfolioCommandsMixin:
                         build_team_terminal_summary as _team_terminal_summary,
                         clean_team_synthesis_text as _clean_team_synthesis,
                     )
-                    _syn      = _clean_team_synthesis(team_result.synthesis or "*(无综合结论)*")
-                    _market_summary = _team_terminal_summary(_data_bundle)
-                    _elapsed  = f"  [dim]耗时 {team_result.elapsed_sec:.1f}s[/dim]"
+                    from rich.markup import escape as _esc_syn
+                    _syn      = _esc_syn(_clean_team_synthesis(
+                        team_result.synthesis or _T("（无综合结论）", "(no synthesis)")))
+                    _market_summary = _team_terminal_summary(_data_bundle, lang=_lang)
+                    _elapsed  = f"  [dim]{_T('耗时', 'took')} {team_result.elapsed_sec:.1f}s[/dim]"
                     _sig_str  = team_result.final_signal or ""
-                    _conf_str = (f"  [dim]置信度 {team_result.confidence:.0%}[/dim]"
+                    _conf_str = (f"  [dim]{_T('置信度', 'confidence')} {team_result.confidence:.0%}[/dim]"
                                  if team_result.confidence else "")
                     _sig_color = _SC.get(_sig_str.upper(), "dim")
                     _sig_icon  = _VS.get(_sig_str.upper(), ("dim", "●"))[1]
@@ -1221,7 +1233,7 @@ class PortfolioCommandsMixin:
                                   f"{_conf_str}{_elapsed}")
                     self.context.console.print(Panel(
                         f"{_market_summary}\n\n{_syn}\n\n{_footer}",
-                        title="[bold]综合结论[/bold]",
+                        title=f"[bold]{_T('综合结论', 'Conclusion')}[/bold]",
                         box=_rbox_team.ROUNDED,
                         border_style="#C08050",
                         padding=(0, 1),
@@ -1229,21 +1241,21 @@ class PortfolioCommandsMixin:
                 else:
                     # agents already streamed via _on_agent_done (plain print)
                     if _quality_notes:
-                        print("  数据质量警告: " + "; ".join(_quality_notes[:3]))
-                    print("\n  ── 综合结论 ──")
+                        print(f"  {_T('数据质量警告', 'Data quality')}: " + "; ".join(_quality_notes[:3]))
+                    print(f"\n  ── {_T('综合结论', 'Conclusion')} ──")
                     from apps.cli.commands.team import (
                         build_team_terminal_summary as _team_terminal_summary,
                         clean_team_synthesis_text as _clean_team_synthesis,
                     )
-                    print(_team_terminal_summary(_data_bundle))
+                    print(_team_terminal_summary(_data_bundle, lang=_lang))
                     print()
-                    print(_clean_team_synthesis(team_result.synthesis or "*(无综合结论)*"))
-                    print(f"\n  耗时 {team_result.elapsed_sec:.1f}s  "
+                    print(_clean_team_synthesis(team_result.synthesis or _T("（无综合结论）", "(no synthesis)")))
+                    print(f"\n  {_T('耗时', 'took')} {team_result.elapsed_sec:.1f}s  "
                           f"Signal: {team_result.final_signal}  "
-                          f"置信度: {team_result.confidence:.0%}")
+                          f"{_T('置信度', 'confidence')}: {team_result.confidence:.0%}")
 
                 # 保存报告
-                await self._save_team_report(sym, team_result, _data_bundle, _quality_notes)
+                await self._save_team_report(sym, team_result, _data_bundle, _quality_notes, lang=_lang)
 
                 # Record the directional call for outcome verification (DPO loop).
                 # synthesis + final_signal → detect_direction; entry price fetched
@@ -1261,11 +1273,14 @@ class PortfolioCommandsMixin:
                 self.context.console.print(f"\n  [red]{_m}[/red]") if self.context.has_rich else print(f"\n  {_m}")
                 continue
             except Exception as e:
-                msg = f"团队分析失败: {e}"
+                if "consumer" in locals():
+                    consumer.close_tool_spinner()
+                msg = f"团队分析失败: {e}" if _lang == "zh" else f"Team analysis failed: {e}"
                 self.context.console.print(f"\n  [red]{msg}[/red]") if self.context.has_rich else print(f"\n  {msg}")
                 continue
 
-    async def _save_team_report(self, symbol: str, team_result, data_bundle=None, quality_notes: Optional[list] = None) -> None:
+    async def _save_team_report(self, symbol: str, team_result, data_bundle=None, quality_notes: Optional[list] = None,
+                                lang: str = "zh") -> None:
         """将 /team 分析结果保存为 Markdown 报告"""
         saved = save_team_report(
             symbol=symbol,
@@ -1278,5 +1293,9 @@ class PortfolioCommandsMixin:
             short_path = "/".join(parts[-5:]) if len(parts) > 5 else str(saved.path)
         except Exception:
             short_path = str(saved.path)
-        msg = f"  报告已保存: .../{short_path}"
-        self.context.console.print(f"  [dim]{msg}[/dim]") if self.context.has_rich else print(msg)
+        label = "报告已保存" if str(lang).startswith("zh") else "Report saved"
+        if self.context.has_rich:
+            self.context.console.print(
+                f"    [dim]{label}:[/dim] [link={_file_uri(saved.path)}]…/{short_path}[/link]")
+        else:
+            print(f"    {label}: .../{short_path}")
