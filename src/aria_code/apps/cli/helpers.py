@@ -33,52 +33,70 @@ __all__ = [
 ]
 
 
-def _load_project_context() -> str:
-    """Load ARIA.md / CLAUDE.md by walking up from cwd (Claude Code style).
+# Per directory: the AGENTS.md family (the convention Codex and other agents
+# share) and Aria's own ARIA.md are both read; CLAUDE.md only when neither is
+# there. AGENTS.override.md stands in for AGENTS.md, as in Codex.
+_AGENTS_NAMES = ("AGENTS.override.md", "AGENTS.md")
+_ARIA_NAMES = ("ARIA.md", ".aria.md")
+_FALLBACK_NAMES = ("CLAUDE.md",)
 
-    Search order per directory: ARIA.md → .aria.md → CLAUDE.md
-    Walks up at most 5 levels, stops at home dir.
-    Multiple files are concatenated (child file takes precedence at top).
-    Total cap: 12KB.
+
+def _project_rule_files(directory: pathlib.Path) -> list[pathlib.Path]:
+    picked = []
+    for family in (_AGENTS_NAMES, _ARIA_NAMES):
+        hit = next((directory / n for n in family if (directory / n).is_file()), None)
+        if hit:
+            picked.append(hit)
+    if not picked:
+        picked = [directory / n for n in _FALLBACK_NAMES if (directory / n).is_file()][:1]
+    return picked
+
+
+def _load_project_context() -> str:
+    """Load AGENTS.md / ARIA.md / CLAUDE.md by walking up from cwd.
+
+    Only ARIA.md and CLAUDE.md were read, so a repository set up for Codex
+    and other agents through AGENTS.md gave Aria none of its rules. The walk
+    now stops at the repository root (a parent of the repository is not part
+    of the project), files nearer the working directory come first and get
+    first claim on the size cap, and ~/.arthera/ARIA.md comes last. It came
+    first, so a long global profile could crowd the project's rules out.
     """
     _MAX_BYTES = 12288
     _MAX_LEVELS = 5
-    _NAMES = ("ARIA.md", ".aria.md", "CLAUDE.md")
 
     home = pathlib.Path.home()
     cwd  = pathlib.Path.cwd().resolve()
 
-    found: list[tuple[pathlib.Path, str]] = []  # (file_path, content)
+    found: list[tuple[pathlib.Path, str]] = []  # nearest first
+    seen_text: set[str] = set()
+
+    def add(path: pathlib.Path) -> None:
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            return
+        key = content.strip()
+        if key and key not in seen_text:      # a CLAUDE.md copied to AGENTS.md, a symlink
+            seen_text.add(key)
+            found.append((path, content))
+
     current = cwd
     for _ in range(_MAX_LEVELS):
-        for name in _NAMES:
-            p = current / name
-            if p.is_file():
-                try:
-                    content = p.read_text(encoding="utf-8")
-                    found.append((p, content))
-                except Exception:
-                    pass
-                break  # only one file per directory level
-        if current == home or current.parent == current:
+        for path in _project_rule_files(current):
+            add(path)
+        if current == home or current.parent == current or (current / ".git").exists():
             break
         current = current.parent
 
-    # Global user file — lowest priority background layer, project files override it.
-    # Lives at ~/.arthera/ARIA.md; user can edit with /memory edit global
+    # Global user file — lowest priority; /memory edit global edits it.
     _global_aria = home / ".arthera" / "ARIA.md"
     if _global_aria.is_file() and not any(f == _global_aria for f, _ in found):
-        try:
-            _gc = _global_aria.read_text(encoding="utf-8")
-            if _gc.strip():
-                found.insert(0, (_global_aria, _gc))   # prepend = lowest priority
-        except Exception:
-            pass
+        add(_global_aria)
 
     if not found:
         return ""
 
-    # Child directories first (most specific context wins), then parents
     blocks: list[str] = []
     total = 0
     for fpath, content in found:
@@ -89,7 +107,9 @@ def _load_project_context() -> str:
         if total >= _MAX_BYTES:
             break
 
-    return "\n\n## Project Context\n" + "\n\n".join(blocks)
+    header = ("\n\n## Project Context\n"
+              "Where these files disagree, the one listed first (nearest the working directory) wins.\n\n")
+    return header + "\n\n".join(blocks)
 
 
 def _display_value(value, digits: int = 2, suffix: str = "") -> str:
