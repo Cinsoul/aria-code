@@ -163,7 +163,7 @@ class CalledWorkflowsAcceptATag(unittest.TestCase):
 class NpmDispatcherGate(unittest.TestCase):
     """Exercise the actual release step without contacting npm."""
 
-    def _run_wait(self, npm_available: bool):
+    def _run_wait(self, npm_available: bool, status: str = ""):
         steps = _load("publish")["jobs"]["publish-npm"]["steps"]
         script = next(step["run"] for step in steps
                       if step.get("name") == "Wait for this version's platform packages")
@@ -182,7 +182,16 @@ class NpmDispatcherGate(unittest.TestCase):
             # The registry is asked directly (curl), not through npm's cache.
             calls = bin_dir / "calls"
             curl = bin_dir / "curl"
-            curl.write_text(f"#!/bin/sh\necho \"$@\" >> {calls}\nexit {0 if npm_available else 22}\n")
+            # Like the registry: a status for the version path, the package
+            # document (with its version list) for the fallback.
+            code = status or ("200" if npm_available else "404")
+            listed = '{"versions":{"0.52.0":{}}}' if npm_available else '{"versions":{"0.51.0":{}}}'
+            curl.write_text(
+                "#!/bin/sh\n"
+                f"echo \"$@\" >> {calls}\n"
+                'case "$*" in *http_code*) printf %s ' + code + "; exit 0;; esac\n"
+                f"echo '{listed}'\n"
+            )
             node.chmod(0o755)
             curl.chmod(0o755)
             env = dict(os.environ, PATH=f"{tmp}:{os.environ.get('PATH', '')}",
@@ -200,6 +209,17 @@ class NpmDispatcherGate(unittest.TestCase):
         missing = self._run_wait(False)
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("Refusing to publish a dispatcher", missing.stdout)
+        self.assertIn("linux-x64@0.52.0 (HTTP 404)", missing.stdout)
+
+    def test_a_package_listed_in_its_document_counts_as_published(self):
+        """A 404 on the version path alone is not proof it is missing."""
+        listed = self._run_wait(True, status="404")
+        self.assertEqual(listed.returncode, 0, listed.stdout + listed.stderr)
+
+    def test_throttling_is_reported_as_throttling(self):
+        throttled = self._run_wait(False, status="429")
+        self.assertNotEqual(throttled.returncode, 0)
+        self.assertIn("(HTTP 429)", throttled.stdout)
 
 
 if __name__ == "__main__":

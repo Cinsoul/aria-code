@@ -140,18 +140,33 @@ jobs:
           # after the old 30-minute gate expired. Keep checking the real
           # versions for up to an hour; never publish an incomplete dispatcher.
           DEADLINE=$(( $(date +%s) + 3600 ))
+          PAUSE=20
           while :; do
             MISSING=()
+            THROTTLED=0
             for pkg in "${PACKAGES[@]}"; do
               name="${pkg%@*}"
               version="${pkg##*@}"
+              encoded="${name/\//%2F}"
               # Ask the registry for that exact version, past every cache.
               # `npm view` reads through the runner's npm cache and the
               # registry CDN (about five minutes each), so a package published
               # mid-wait could stay invisible for several more polls.
-              curl -sf -o /dev/null -H "Cache-Control: no-cache" \
-                "https://registry.npmjs.org/${name/\//%2F}/${version}?nocache=${RANDOM}$(date +%s)" \
-                || MISSING+=("$pkg")
+              status="$(curl -s -o /dev/null -w '%{http_code}' -H "Cache-Control: no-cache" \
+                "https://registry.npmjs.org/${encoded}/${version}?nocache=${RANDOM}$(date +%s)")" || true
+              [ "$status" = "200" ] && continue
+              # v0.84.0: all ten packages were on npm by 18:05 and this loop
+              # still waited until its 18:46 deadline, saying only "missing".
+              # A 404 on the version path is not proof — the package document
+              # lists every published version — and a 429 or 5xx means the
+              # registry is throttling this runner, not that nothing is there.
+              if curl -sf -H "Accept: application/vnd.npm.install-v1+json" -H "Cache-Control: no-cache" \
+                  "https://registry.npmjs.org/${encoded}?nocache=${RANDOM}$(date +%s)" \
+                  | grep -qF "\"${version}\""; then
+                continue
+              fi
+              case "$status" in 429|5*|000|"") THROTTLED=1 ;; esac
+              MISSING+=("$pkg (HTTP ${status:-none})")
             done
             if [ "${#MISSING[@]}" -eq 0 ]; then
               echo "All ${#PACKAGES[@]} platform packages are published at $VERSION"
@@ -162,8 +177,16 @@ jobs:
               echo "::error::Refusing to publish a dispatcher with missing optional dependencies"
               exit 1
             fi
+            # Ten requests every 20 seconds for an hour invites throttling;
+            # back off while the registry pushes back.
+            if [ "$THROTTLED" = 1 ]; then
+              PAUSE=$(( PAUSE * 2 > 120 ? 120 : PAUSE * 2 ))
+              echo "Registry throttled or unavailable; next check in ${PAUSE}s"
+            else
+              PAUSE=20
+            fi
             echo "Waiting for platform packages: ${MISSING[*]}"
-            sleep 20
+            sleep "$PAUSE"
           done
 
       - name: Require npm publishing token
