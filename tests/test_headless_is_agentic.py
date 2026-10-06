@@ -16,7 +16,9 @@ class HeadlessPathTests(unittest.TestCase):
     def _source(self) -> str:
         import aria_code.aria_cli as cli
 
-        return inspect.getsource(cli.ArtheraTerminal.run_prompt)
+        # run_prompt hands the turn to _run_prompt_turn and the output to _finish_prompt.
+        return "".join(inspect.getsource(getattr(cli.ArtheraTerminal, name))
+                       for name in ("run_prompt", "_run_prompt_turn", "_finish_prompt"))
 
     def test_run_prompt_goes_through_the_shared_runtime(self):
         self.assertIn("run_chat_via_runtime", self._source())
@@ -80,7 +82,9 @@ class EmptyClosingMessageTests(unittest.TestCase):
     def _source(self) -> str:
         import aria_code.aria_cli as cli
 
-        return inspect.getsource(cli.ArtheraTerminal.run_prompt)
+        # run_prompt hands the turn to _run_prompt_turn and the output to _finish_prompt.
+        return "".join(inspect.getsource(getattr(cli.ArtheraTerminal, name))
+                       for name in ("run_prompt", "_run_prompt_turn", "_finish_prompt"))
 
     def test_empty_response_after_tool_use_is_not_an_error(self):
         # Observed for real: the agent edited the file correctly, produced no

@@ -95,6 +95,12 @@ aria-code -p "检查这个项目，修复失败的测试，运行测试并总结
 
 Aria 会根据所配置的权限模式，在编辑文件或运行命令前请求批准。提交代码前请检查改动和测试结果。
 
+在脚本或 CI 中，`--json` 输出一份 JSON 结果，`--format jsonl` 在运行过程中每一步输出一行 JSON 事件（`turn.started`、`tool.started`、`tool.completed`、`turn.completed`）。stdout 只有 JSON，失败时退出码为 1。无人审批时，用 `--allow-tools edit_file,run_command` 指定允许使用的工具。
+
+```bash
+aria-code -p "修复失败的测试并运行" --format jsonl --allow-tools edit_file,run_command > events.jsonl
+```
+
 ## 模型与账户
 
 | 使用方式 | 需要准备 |

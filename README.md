@@ -95,6 +95,12 @@ aria-code -p "Inspect this project, fix the failing tests, run them, and summari
 
 Aria may request approval before editing files or running commands, according to the configured permission mode. Review changes and test results before committing them.
 
+In a script or CI job, `--json` prints one JSON result and `--format jsonl` prints one JSON event per line as the turn runs (`turn.started`, `tool.started`, `tool.completed`, `turn.completed`). Only JSON goes to stdout, and a failed turn exits 1. With no one there to approve, pass `--allow-tools edit_file,run_command` for the tools the job may use.
+
+```bash
+aria-code -p "Fix the failing tests and run them" --format jsonl --allow-tools edit_file,run_command > events.jsonl
+```
+
 ## Models and accounts
 
 | Route | What it needs |
