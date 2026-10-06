@@ -147,12 +147,15 @@ def tool_run_command(
         mode=params.get("permission_mode", "read-only"),
         network_enabled=bool(params.get("network_enabled", True)),
     )
+    mode = str(params.get("permission_mode", "read-only"))
+    network = bool(params.get("network_enabled", True))
+    sandbox_hint = ""
     command = decision.normalized_command
 
-    dangerous = ["rm -rf /", "mkfs", "dd if=", "> /dev/", ":(){ :", "fork bomb"]
-    for d in dangerous:
-        if d in command:
-            return {"success": False, "error": f"Blocked dangerous command: {command}"}
+    from aria_code.safety.permissions import writes_a_device
+    dangerous = ["rm -rf /", "mkfs", "dd if=", ":(){ :", "fork bomb"]
+    if any(d in command for d in dangerous) or writes_a_device(command):
+        return {"success": False, "error": f"Blocked dangerous command: {command}"}
 
     # Prevent executing text/doc files as Python — they are analysis reports, not scripts
     import re as _re_cmd
@@ -207,14 +210,28 @@ def tool_run_command(
             except Exception as e:
                 return {"success": False, "error": f"Sandbox execution failed: {e}"}
         else:
-            result = subprocess.run(
+            from aria_code.safety import sandbox as _os_sandbox
+            confined = _os_sandbox.wrap(
                 argv if (argv and not use_shell) else command,
-                shell=use_shell,
+                use_shell=use_shell, mode=mode, network=network, cwd=cwd,
+                setting=params.get("os_sandbox"),
+            )
+            result = subprocess.run(
+                confined or (argv if (argv and not use_shell) else command),
+                shell=use_shell and not confined,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 cwd=cwd,
             )
+            if confined and "sandbox-exec: sandbox_apply" in (result.stderr or ""):
+                # Never fall back to running it unconfined.
+                return {"success": False, "error": "The command sandbox could not start: "
+                        + result.stderr.strip()[:300]
+                        + " — set os_sandbox=off in the config to run commands without it."}
+            if confined and result.returncode != 0:
+                sandbox_hint = _os_sandbox.denial_hint(result.stdout + "\n" + result.stderr,
+                                                       mode=mode, network=network)
         full_stdout = result.stdout
         full_stderr = result.stderr
         output = full_stdout[-5000:] if len(full_stdout) > 5000 else full_stdout
@@ -228,7 +245,7 @@ def tool_run_command(
         # could not reverse them, and a package install that ignored network
         # off and the sandbox. The model gets the error and a hint, and makes
         # the change through edit_file or an approved run_command.
-        hint = _failure_hint(output + "\n" + stderr) if result.returncode != 0 else ""
+        hint = sandbox_hint or (_failure_hint(output + "\n" + stderr) if result.returncode != 0 else "")
 
 
         if has_rich and console is not None:

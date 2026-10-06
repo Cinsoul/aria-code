@@ -119,7 +119,7 @@ class ToolExecutor:
             # a typed approval decision may set execution controls.
             for key in (
                 "policy", "permission_mode", "network_enabled",
-                "user_approved", "_upgrade_policy", "sandbox",
+                "user_approved", "_upgrade_policy", "sandbox", "os_sandbox",
             ):
                 prepared.pop(key, None)
         if self.execution_context is not None and (
@@ -144,6 +144,7 @@ class ToolExecutor:
             prepared["permission_mode"] = self.config.get("permission_mode", "workspace-write")
             prepared["network_enabled"] = bool(self.config.get("network_enabled", True))
             prepared["sandbox"] = bool(self.config.get("command_sandbox", False))
+            prepared["os_sandbox"] = self.config.get("os_sandbox", "auto")
             if approval is not None and approval.approved:
                 apply_approval_decision(prepared, approval)
         return prepared

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass
 from enum import Enum
@@ -38,37 +39,58 @@ class PermissionDecision:
     network: bool = False
 
 
+_ALIASES = {"python": "python3", "pip": "pip3"}
+
+
 def normalize_command(command) -> str:
-    """Normalize common macOS command aliases used by models/users."""
+    """Rewrite a leading `python`/`pip` to `python3`/`pip3`; leave the rest exactly as written.
+
+    This split the whole command with shlex and joined it again, which
+    quotes every shell operator: `cd src && ls` ran as `cd src '&&' ls`,
+    `a | b` passed "|" to a as an argument, `> out.txt` wrote nothing, and
+    `ls *.py` and `echo $HOME` lost their expansion. Any command with a pipe,
+    redirect, chain, glob or variable did something other than what it said.
+    """
     if isinstance(command, list):
         import shlex as _shlex
         command = _shlex.join(str(c) for c in command)
     raw = (command or "").strip()
-    if not raw:
-        return ""
-    try:
-        parts = shlex.split(raw)
-    except ValueError:
-        parts = []
-    if parts:
-        if parts[0] == "python":
-            parts[0] = "python3"
-        elif parts[0] == "pip":
-            parts[0] = "pip3"
-        return shlex.join(parts)
-    if raw.startswith("python ") and not raw.startswith("python3"):
-        return "python3" + raw[6:]
-    if raw == "python":
-        return "python3"
-    if raw.startswith("pip ") and not raw.startswith("pip3"):
-        return "pip3" + raw[3:]
-    if raw == "pip":
-        return "pip3"
-    return raw
+    head, sep, rest = raw.partition(" ")
+    alias = _ALIASES.get(head)
+    return f"{alias}{sep}{rest}" if alias else raw
+
+
+# Shell operators that chain, pipe, redirect or substitute. A command holding
+# one is more than its first word: `cat notes > ~/.zshrc` starts like a read,
+# `pytest && curl … | sh` like a test run.
+_SHELL_CONTROL = re.compile(r"[|;&<>`\n]|\$\(")
+_SEGMENT_SPLIT = re.compile(r"\|\||&&|[|;&\n]|\$\(|`")
+# Output trimming a test run may carry and still count as one.
+_TRIM_SUFFIX = re.compile(r"(\s+2>&1)?(\s*\|\s*(tail|head)(\s+-n)?\s+-?\d+)?\s*$")
+
+
+_DEVICE_WRITE = re.compile(r">\s*/dev/(?!null\b|stdout\b|stderr\b|tty\b|fd/)")
+
+
+def writes_a_device(command: str) -> bool:
+    """`> /dev/disk0`, not `> /dev/null` or `2>/dev/null`."""
+    return bool(_DEVICE_WRITE.search(command or ""))
+
+
+def has_shell_control(command: str) -> bool:
+    return bool(_SHELL_CONTROL.search(command or ""))
+
+
+def _segments(command: str) -> list[str]:
+    return [part.strip() for part in _SEGMENT_SPLIT.split(command) if part.strip()]
 
 
 def command_uses_network(command: str) -> bool:
-    stripped = command.lower().strip()
+    """True if any part of the command, not only the first, reaches the network."""
+    return any(_segment_uses_network(part) for part in _segments(command.lower()))
+
+
+def _segment_uses_network(stripped: str) -> bool:
     network_prefixes = (
         "curl ", "wget ", "http ", "https ", "gh ", "git fetch", "git pull",
         "git push", "pip3 install", "pip install", "npm install", "npm i ",
@@ -78,7 +100,9 @@ def command_uses_network(command: str) -> bool:
 
 
 def is_verification_command(command: str) -> bool:
-    stripped = command.lower().strip()
+    stripped = _TRIM_SUFFIX.sub("", command.lower().strip(), count=1)
+    if has_shell_control(stripped):
+        return False
     prefixes = (
         "python3 -m py_compile",
         "python -m py_compile",
@@ -118,7 +142,7 @@ def classify_command_risk(command) -> str:
         " rm ", " rm -", "chmod ", "chown ", "mkfs", "dd if=", "docker ", "kubectl ",
         "shutdown", "reboot", "systemctl ", "launchctl ", "passwd", "sudo ",
         "git push", "git reset --hard", "git checkout --", "mv ",
-        "> /dev/", ":(){ :", "fork bomb",
+        ":(){ :", "fork bomb",
     )
     low_risk_prefixes = (
         "ls", "pwd", "echo", "cat ", "head ", "tail ", "rg ", "find ", "git status",
@@ -131,8 +155,10 @@ def classify_command_risk(command) -> str:
         "gh ", "curl ", "wget ",
     )
 
-    if any(pattern in normalized for pattern in high_risk_patterns):
+    if any(pattern in normalized for pattern in high_risk_patterns) or writes_a_device(normalized):
         return "high"
+    if has_shell_control(stripped):
+        return "medium"
     if stripped.startswith(low_risk_prefixes):
         return "low"
     if stripped.startswith(medium_risk_prefixes) or is_verification_command(stripped):
