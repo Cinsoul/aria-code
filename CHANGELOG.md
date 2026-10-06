@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.93.0] — 2026-10-06
+
+- Merge pull request #117 from Cinsoul/feat/background-processes
+
 ## [0.92.0] — 2026-10-06
 
 - Merge pull request #116 from Cinsoul/feat/os-sandbox
