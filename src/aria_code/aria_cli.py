@@ -5133,6 +5133,21 @@ class ArtheraTerminal:
                 console.print(f"[{_agent_color}]{_agent_name}[/{_agent_color}]{_answer_meta}")
             else:
                 print(f"{_agent_name}{' · ' + _answer_model if _answer_model else ''}")
+        # A task about this folder on a model that cannot open it gets a guess
+        # that reads like a result (backend_chat answered "5" for a function
+        # that returns -1). Say so before the answer, once a session; the
+        # person can still read it, and knows what it is.
+        if not _model_has_tools and not getattr(self, "_no_tools_notice_shown", False):
+            from apps.cli.workspace_route import needs_workspace, no_tools_message
+            if needs_workspace(message):
+                self._no_tools_notice_shown = True
+                _zh_nt = str(self.config.get("ui_lang", "en")).lower().startswith("zh")
+                _why = no_tools_message(self.config, lang="zh" if _zh_nt else "en")
+                if HAS_RICH:
+                    from aria_code.ui.render.output import print_hanging
+                    print_hanging(console, "  ! ", _why, style="yellow")
+                else:
+                    print(f"  ! {_why}")
         # ── Single-shot turn through the shared runtime Gateway ─────────────
         # The per-round inline agent loop that used to live here was removed
         # (2026-07) after the runtime path was validated with real turns:
@@ -6523,13 +6538,11 @@ class ArtheraTerminal:
         self._maybe_show_intent_preflight(prompt, quiet=quiet)
 
         _curr_model_id_p = self.config.get("model", "")
-        _model_has_tools_p = False
-        if _HAS_MODEL_CAP:
-            try:
-                _mc_p = get_model_capability(_curr_model_id_p)
-                _model_has_tools_p = bool(_mc_p.tool_calls and _mc_p.context_window >= 8192)
-            except Exception:
-                pass
+        # The route counts as much as the model: on backend_chat the model gets
+        # no local tools whatever it could do with them. This only looked at the
+        # model, so the deterministic chain skipped its data pre-fetch there.
+        from aria_code.apps.cli.workspace_route import no_tools_message, needs_workspace, route_has_tools
+        _model_has_tools_p = route_has_tools(_curr_model_id_p, self.config, self.api_url)
 
         # ── Broker guide intent: broad discovery should not start an add wizard ──
         if _is_broker_guide_intent(prompt):
@@ -6560,6 +6573,14 @@ class ArtheraTerminal:
         if deterministic.get("success") or _is_stock_chart_analysis_request(prompt):
             result = deterministic
         else:
+            # No one reads a headless answer before a script acts on it. A task
+            # about this folder on a model that cannot open it would come back as
+            # a confident guess with exit 0; fail before sending it instead.
+            if not _model_has_tools_p and needs_workspace(prompt):
+                _zh = str(self.config.get("ui_lang", "en")).lower().startswith("zh")
+                _why = no_tools_message(self.config, lang="zh" if _zh else "en")
+                print(_why, file=sys.stderr)
+                return {"success": False, "response": "", "error": "model_cannot_use_tools", "detail": _why}
             # Spinner for terminal usage: gives visual feedback while the model generates.
             # Only starts when we actually need to call the LLM (not for deterministic responses).
             _prompt_spinner = None
