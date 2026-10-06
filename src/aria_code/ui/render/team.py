@@ -22,9 +22,11 @@ SIGNAL_COLORS: dict[str, str] = {
 # ── Verdict banner ────────────────────────────────────────────────────────────
 
 VERDICT_STYLE: dict[str, tuple[str, str]] = {
-    "HEALTHY":         ("green",      "✅"),
-    "NEEDS_ATTENTION": ("yellow",     "⚠️ "),
-    "HIGH_RISK":       ("red",        "🔴"),
+    # Text glyphs, not emoji: "🔴" drew as an empty box in common terminal
+    # fonts, and the variation selector in "⚠️" threw the panel width off.
+    "HEALTHY":         ("green",      "✓ "),
+    "NEEDS_ATTENTION": ("yellow",     "! "),
+    "HIGH_RISK":       ("red",        "✗ "),
     "STRONG_BUY":      ("bold green", "▲▲"),
     "BUY":             ("green",      "▲ "),
     "HOLD":            ("dim",        "─ "),
@@ -108,11 +110,13 @@ def build_verdict_body(
     verdict: str,
     subtitle: str = "",
     confidence: float | None = None,
+    lang: str = "zh",
 ) -> str:
     """Return a Rich markup string suitable for a Panel body."""
     verdict_upper = verdict.upper()
     style, icon = VERDICT_STYLE.get(verdict_upper, ("dim", "●"))
-    conf_str = f"  [dim]置信度 {confidence:.0%}[/dim]" if confidence else ""
+    label = "置信度" if str(lang).lower().startswith("zh") else "confidence"
+    conf_str = f"  [dim]{label} {confidence:.0%}[/dim]" if confidence else ""
     body = f"[{style}]{icon}  {verdict_upper}[/{style}]{conf_str}"
     if subtitle:
         body += f"\n[dim]{subtitle}[/dim]"
@@ -126,6 +130,7 @@ def render_verdict_banner(
     *,
     console: "Console | None" = None,
     has_rich: bool = True,
+    lang: str = "zh",
 ) -> None:
     """Print a visually prominent verdict/signal result.
 
@@ -144,7 +149,7 @@ def render_verdict_banner(
     try:
         from rich import box as _rbox
         from rich.panel import Panel
-        body = build_verdict_body(verdict_upper, subtitle, confidence)
+        body = build_verdict_body(verdict_upper, subtitle, confidence, lang)
         console.print(Panel(body, box=_rbox.SIMPLE, padding=(0, 2)))
     except Exception:
         conf_str = f"  ({confidence:.0%})" if confidence else ""

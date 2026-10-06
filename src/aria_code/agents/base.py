@@ -103,6 +103,7 @@ class BaseAgent(ABC):
         self.on_tool_end = on_tool_end
         self.config   = config or {}
         self.lang     = lang
+        self.llm_error: Optional[str] = None   # why the last model call gave nothing, if it failed
         self.memory   = []         # Short-term conversation history for multi-turn context
 
     async def fetch_data(self, symbol: str) -> Dict[str, Any]:
@@ -234,10 +235,14 @@ class BaseAgent(ABC):
                     elif t == "tool_end" and self.on_tool_end:
                         self.on_tool_end(event.get("tool_name", ""), event.get("tool_result", None))
                     elif t == "error":
-                        logger.warning(f"[{self.name}] LLM 错误: {event.get('message')}")
+                        # The caller falls back to a template and says so; a
+                        # WARNING here went to the terminal as a raw log line.
+                        self.llm_error = str(event.get("message") or "error")
+                        logger.info(f"[{self.name}] LLM 错误: {event.get('message')}")
                         break
             except Exception as e:
-                logger.warning(f"[{self.name}] LLM 调用失败: {e}")
+                self.llm_error = str(e) or type(e).__name__
+                logger.info(f"[{self.name}] LLM 调用失败: {e}")
                 break
 
             # 将当前 Assistant 的回复加入消息流

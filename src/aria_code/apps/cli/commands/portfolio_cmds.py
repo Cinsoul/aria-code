@@ -688,8 +688,13 @@ class PortfolioCommandsMixin:
             else:
                 symbols = self.terminal.config.get("watchlist", ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA"])[:10]
 
+        _lang = "zh" if str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh") else "en"
+        _T = (lambda a, b: a) if _lang == "zh" else (lambda a, b: b)
+
         if not symbols:
-            msg = "请先设置 watchlist、记录持仓（/journal add buy ...）或指定标的：/portfolio analyze AAPL TSLA MSFT"
+            msg = _T("请先设置 watchlist、记录持仓（/journal add buy ...）或指定标的：/portfolio analyze AAPL TSLA MSFT",
+                     "Set a watchlist, record positions (/journal add buy ...) or name the symbols: "
+                     "/portfolio analyze AAPL TSLA MSFT")
             self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
             return
 
@@ -697,36 +702,34 @@ class PortfolioCommandsMixin:
         _use_new = False
         try:
             from agents.portfolio_agent import PortfolioAgent as _PA
-            from providers.llm.registry import get_provider as _get_prov, list_available_providers as _laps
             _use_new = True
         except ImportError:
             pass
 
         if _use_new:
             if sym_parts:
-                hdr = f"分析组合：{' '.join(symbols)}"
+                hdr = _T(f"分析组合：{' '.join(symbols)}", f"portfolio of {' '.join(symbols)}")
             elif ledger_weights:
-                hdr = "分析真实持仓组合（按成本加权）"
+                hdr = _T("分析真实持仓组合（按成本加权）", "your positions, weighted by cost")
             else:
-                hdr = "分析 watchlist 组合（等权，无真实持仓数据）"
+                hdr = _T("分析 watchlist 组合（等权，无真实持仓数据）",
+                         "watchlist, equal weight (no positions recorded)")
             if rebalance:
-                hdr = "再平衡方案：" + hdr
+                hdr = _T("再平衡方案：", "Rebalance · ") + hdr
+            _sym_label = _T("标的", "Symbols")
             if self.context.has_rich:
                 self.context.console.print()
                 self.context.console.print(f"  [bold cyan]━━━ /portfolio {hdr} ━━━[/bold cyan]")
-                self.context.console.print(f"  [dim]标的 ({len(symbols)}): {', '.join(symbols)}[/dim]")
+                self.context.console.print(f"  [dim]{_sym_label} ({len(symbols)}): {', '.join(symbols)}[/dim]")
                 self.context.console.print()
             else:
-                print(f"\n  ━━━ /portfolio ━━━\n  标的: {', '.join(symbols)}\n")
+                print(f"\n  ━━━ /portfolio ━━━\n  {_sym_label}: {', '.join(symbols)}\n")
 
-            _llm = None
-            try:
-                all_avail = [p for p in _laps() if p["available"]]
-                chosen    = [p for p in all_avail if p.get("local")] or all_avail
-                if chosen:
-                    _llm = _get_prov(chosen[0]["name"])
-            except Exception as _e:
-                logger.debug("portfolio LLM provider init failed: %s", _e)
+            # The model the session is configured for. This took the first
+            # local provider, so a Gemini session asked Ollama, which was not
+            # running, and printed the connection error as a log line.
+            from aria_code.apps.cli.commands.team import build_team_llm_provider
+            _llm = build_team_llm_provider(self.terminal.config)
 
             tokens: list = []
             def _on_tok(t):
@@ -734,42 +737,46 @@ class PortfolioCommandsMixin:
                 _sys.stdout.write(t); _sys.stdout.flush()
 
             try:
-                agent  = _PA(llm_provider=_llm, on_token=_on_tok)
+                agent  = _PA(llm_provider=_llm, on_token=_on_tok, lang=_lang)
                 result = await agent.run_portfolio(symbols, weights=ledger_weights)
-                print()  # 换行（流式输出后）
+                if tokens:
+                    print()  # 换行（流式输出后）
 
                 if not result:
                     if self.context.has_rich:
-                        self.context.console.print("[yellow]  ⚠ 组合分析返回空结果[/yellow]")
+                        self.context.console.print(f"[yellow]  {_T('组合分析返回空结果', 'The portfolio analysis came back empty')}[/yellow]")
                     return
 
+                if not tokens and getattr(agent, "llm_error", None):
+                    _note = _T("模型不可用，以下仅为统计结果", "Model unavailable, so this is the statistics only")
+                    if self.context.has_rich:
+                        self.context.console.print(f"  [dim]{_note}[/dim]")
+                    else:
+                        print(f"  {_note}")
+
+                # The verdict the analysis reached. Rebuilt from the signal,
+                # NEEDS_ATTENTION (signal SELL) came out as HIGH_RISK.
+                _port_verdict = str((result.data_used or {}).get("verdict") or "NEEDS_ATTENTION")
                 if self.context.has_rich:
                     self.context.console.print()
                     for pt in (result.key_points or []):
                         self.context.console.print(f"  [dim]• {pt}[/dim]")
                     self.context.console.print()
-                    # Derive portfolio verdict from signal for the banner
-                    _port_verdict = {
-                        "BUY":        "HEALTHY",
-                        "HOLD":       "NEEDS_ATTENTION",
-                        "SELL":       "HIGH_RISK",
-                        "STRONG_BUY": "HEALTHY",
-                        "STRONG_SELL":"HIGH_RISK",
-                    }.get(result.signal.upper() if result.signal else "HOLD", "NEEDS_ATTENTION")
                     _subtitle = " · ".join(result.key_points[:2]) if result.key_points else ""
                     _print_verdict_banner(_port_verdict, subtitle=_subtitle,
-                                          confidence=result.confidence)
+                                          confidence=result.confidence, lang=_lang)
                 else:
                     for pt in result.key_points:
                         print(f"  • {pt}")
-                    print(f"\n  置信度: {result.confidence:.0%}  信号: {result.signal}")
+                    print(f"\n  {_T('置信度', 'Confidence')}: {result.confidence:.0%}  {_port_verdict}")
 
                 if rebalance and self.context.has_rich:
-                    self.context.console.print("\n  [dim]提示: 再平衡建议已包含在上方分析中。"
-                                  "如需详细方案，可追问 Aria 具体操作步骤。[/dim]")
+                    self.context.console.print("\n  [dim]" + _T(
+                        "提示: 再平衡建议已包含在上方分析中。如需详细方案，可追问 Aria 具体操作步骤。",
+                        "The rebalancing suggestions are in the analysis above; ask Aria for the steps.") + "[/dim]")
 
             except Exception as e:
-                msg = f"组合分析失败: {e}"
+                msg = _T(f"组合分析失败: {e}", f"Portfolio analysis failed: {e}")
                 self.context.console.print(f"  [red]{msg}[/red]") if self.context.has_rich else print(f"  {msg}")
             return
 
