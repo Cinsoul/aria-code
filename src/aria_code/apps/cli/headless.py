@@ -11,9 +11,6 @@ on whichever module loaded last.
 
 from __future__ import annotations
 
-import types
-
-
 class HeadlessMixin:
     """run_prompt, _run_prompt_turn, _finish_prompt and run_watch for ArtheraTerminal."""
 
@@ -273,16 +270,9 @@ class HeadlessMixin:
 
 def bind_to(namespace: dict) -> type:
     """A copy of HeadlessMixin whose methods resolve bare names in ``namespace``."""
-    methods = {}
-    for name, attr in vars(HeadlessMixin).items():
-        if isinstance(attr, types.FunctionType):
-            bound = types.FunctionType(attr.__code__, namespace, attr.__name__,
-                                       attr.__defaults__, attr.__closure__)
-            bound.__kwdefaults__ = attr.__kwdefaults__
-            bound.__doc__ = attr.__doc__
-            bound.__qualname__ = f"ArtheraTerminal.{attr.__name__}"
-            methods[name] = bound
-    return type("HeadlessMixin", (), {"__doc__": HeadlessMixin.__doc__, "__module__": __name__, **methods})
+    from aria_code.apps.cli.mixin_binding import bind_mixin
+
+    return bind_mixin(HeadlessMixin, namespace)
 
 
 __all__ = ["HeadlessMixin", "bind_to"]
