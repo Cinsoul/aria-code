@@ -19,7 +19,7 @@ from .tool_executor import ToolExecutor
 from .budget import BudgetTracker
 
 
-DEFAULT_SERIAL_TOOLS = {"write_file", "edit_file", "multi_edit", "run_command"}
+DEFAULT_SERIAL_TOOLS = {"write_file", "edit_file", "multi_edit", "run_command", "process"}
 
 # Phrases the model uses to signal task completion
 _DONE_PHRASES = frozenset([

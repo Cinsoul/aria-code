@@ -1034,6 +1034,8 @@ from aria_code.apps.cli.tool_executor import *
 # Populated in place — the container is owned by apps/cli/tool_registry.py.
 # Rebinding it here instead would leave every reader over there with an
 # empty registry and no error.
+from aria_code.runtime.processes import tool_process as _tool_process
+
 LOCAL_TOOLS.update({
     # ── Core file tools ──────────────────────────────────────────────────────
     "read_file":      (_tool_read_file,      "Read a file's contents"),
@@ -1047,6 +1049,7 @@ LOCAL_TOOLS.update({
     "search_code":    (_tool_search_code,    "Search for patterns in code (grep)"),
     "search":         (_tool_search_code,    "Search for patterns in code (alias for search_code)"),
     "run_command":    (_tool_run_command,    "Execute a shell command"),
+    "process":        (_tool_process,        "Read, write to or stop a background command"),
     # These four had schemas in local_tool_schemas.py and no handler here,
     # which is the mirror of the earlier defect: a schema with nothing
     # behind it offers the model a tool that cannot run.
@@ -2694,6 +2697,7 @@ _TOOL_ACTION_LABELS: dict = {
     "list_files":                "listing files",
     "search_code":               "searching codebase",
     "run_command":               "executing command",
+    "process":                   "checking background process",
     # Macro / realty
     "get_macro_data":            "loading macro indicators",
     "get_house_price_index":     "loading house price data",
