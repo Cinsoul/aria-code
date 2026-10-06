@@ -53,3 +53,18 @@ regexes = [
     '''\babc123\b''',
     '''s3cr3t''',
 ]
+
+[[allowlists]]
+description = """
+A made-up Bearer token in the -p event tests.
+
+tests/test_exec_events.py checks that a command's parameters have their
+secrets masked before they reach the jsonl event stream, so it carries a
+curl command with an Authorization header. The value was never a credential.
+Since that commit (PR #118) the history scan has failed on it.
+
+Scoped to that one file AND to exactly this value.
+"""
+condition = "AND"
+paths = ['''(^|/)tests/test_exec_events\.py$''']
+regexes = ['''abc123def456''']
