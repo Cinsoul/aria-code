@@ -28,3 +28,28 @@ harmless while those are.
 condition = "AND"
 paths = ['''(^|/)google_login\.py$''']
 regexes = ['''AIza[0-9A-Za-z\-_]{35}''']
+
+[[allowlists]]
+description = """
+Made-up secrets in the masking tests.
+
+tests/test_tool_step_output.py checks that commands shown on screen have their
+secrets masked, so it has to contain secret-shaped strings: a Bearer token, a
+password in a URL, sk-/ghp_/AIza-shaped keys. None was ever a credential. The
+scan covers history, so the commit that added them keeps failing it unless
+they are allowed.
+
+Scoped to that one file AND to exactly these values, so a real key in that
+file, or these values anywhere else, still fails the scan.
+"""
+condition = "AND"
+paths = ['''(^|/)tests/test_tool_step_output\.py$''']
+regexes = [
+    '''abc\.def\.ghi''',
+    '''hunter2''',
+    '''sk-live1234567890abcd''',
+    '''ghp_abcdefghijklmnop''',
+    '''AIzaSyA1234567890abcdefghijk''',
+    '''\babc123\b''',
+    '''s3cr3t''',
+]
