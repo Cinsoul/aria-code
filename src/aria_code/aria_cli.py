@@ -6464,8 +6464,23 @@ class ArtheraTerminal:
         save_config(self.config)
 
     async def run_prompt(self, prompt: str, json_output: bool = False,
-                         fmt: str = "table", output_file: str = None, quiet: bool = False):
-        """Run a single prompt (non-interactive / pipe mode)."""
+                         fmt: str = "table", output_file: str = None, quiet: bool = False,
+                         machine_out=None):
+        """Run a single prompt (non-interactive / pipe mode).
+
+        ``machine_out`` is the real stdout when the output is JSON (sys.stdout
+        then points at stderr). With fmt "jsonl" each step is written there as
+        one JSON event per line as it happens.
+        """
+        from aria_code.apps.cli.exec_events import ExecEvents, json_safe
+        events = ExecEvents(machine_out if fmt == "jsonl" else None)
+        events.emit("turn.started", prompt=prompt, model=self.config.get("model", ""))
+        result = await self._run_prompt_turn(prompt, quiet=quiet, events=events)
+        self._finish_prompt(result, json_output=json_output, fmt=fmt, output_file=output_file,
+                            quiet=quiet, machine_out=machine_out, events=events)
+
+    async def _run_prompt_turn(self, prompt: str, *, quiet: bool, events) -> dict:
+        """The work of run_prompt: a slash command, a deterministic answer, or an agent turn."""
         model = self.config.get("model", "qwen2.5:7b")
         thinking_mode = self.config.get("thinking_mode", "auto")
         auth_token = self.config.get("auth_token")
@@ -6479,7 +6494,7 @@ class ArtheraTerminal:
         if self.commands.is_command(_stripped_prompt):
             self._maybe_show_intent_preflight(_stripped_prompt, quiet=quiet)
             await self.commands.execute(_stripped_prompt)
-            return
+            return {"success": True, "command": _stripped_prompt.split()[0], "response": ""}
 
         _reference_context = ""
         _reference_service = getattr(self, "_reference_service", None)
@@ -6487,7 +6502,7 @@ class ArtheraTerminal:
             _prepared_references = _reference_service.prepare(prompt)
             if _prepared_references.errors:
                 self._print_reference_errors(_prepared_references)
-                return
+                return {"success": False, "response": "", "error": "unresolved @ reference"}
             if _prepared_references.references:
                 self._print_reference_summary(_prepared_references)
                 prompt = _prepared_references.expanded_text
@@ -6519,7 +6534,7 @@ class ArtheraTerminal:
             await self.commands.cmd_broker("guide")
             await self.commands.cmd_broker("services")
             await self.commands.cmd_packages("services")
-            return
+            return {"success": True, "command": "/broker guide", "response": ""}
 
         # ── Broker setup intent: intercept before LLM / deterministic routing ──
         if _is_broker_setup_intent(prompt):
@@ -6530,11 +6545,11 @@ class ArtheraTerminal:
                 _label_p = f"  正在启动{_display_p}配置向导…" if _display_p else "  正在启动券商配置向导…"
                 console.print(f"\n[bold]Aria[/bold]  [dim]{_label_p}[/dim]\n")
             await self.commands._cmd_broker_add(_btype_p)
-            return
+            return {"success": True, "command": "/broker add", "response": ""}
 
         # ── Football prediction intercept → built-in Poisson handler ──────────
         if await self._try_football_nl_intercept(prompt):
-            return
+            return {"success": True, "command": "football", "response": ""}
 
         deterministic = _run_deterministic_chain(
             prompt, model_has_tools=_model_has_tools_p)
@@ -6583,6 +6598,8 @@ class ArtheraTerminal:
                         frozenset() if _auto_approve_session
                         else frozenset(_CONFIRM_TOOLS) - _session_always_allow
                     ),
+                    on_tool_call=events.tool_started,
+                    on_tool_result=events.tool_completed,
                     return_result=True,
                 )
                 _tools_used = list(getattr(_turn.final, "tools", []) or [])
@@ -6613,6 +6630,13 @@ class ArtheraTerminal:
                     except Exception:
                         pass
 
+        return result
+
+    def _finish_prompt(self, result: dict, *, json_output: bool, fmt: str, output_file,
+                       quiet: bool, machine_out, events) -> None:
+        """Print or save run_prompt's result, and exit 1 if it failed."""
+        from aria_code.apps.cli.exec_events import json_safe
+        result = result or {"success": False, "response": "", "error": "no result"}
         # The agent loop executes tools now, so there is nothing left over to
         # run here — only stream_provider_result ever populated
         # tool_calls_pending, and the deterministic chain never does. Keeping
@@ -6624,10 +6648,16 @@ class ArtheraTerminal:
         # and exit 0.
         _acceptance = (result or {}).get("acceptance") or {}
         if _acceptance.get("verified") is False and not quiet:
-            print(f"⚠ 验收未通过: {_acceptance.get('headline', '')}", file=sys.stderr)
+            _zh = str(self.config.get("ui_lang", "en")).lower().startswith("zh")
+            print(f"⚠ {'验收未通过' if _zh else 'Checks failed'}: {_acceptance.get('headline', '')}",
+                  file=sys.stderr)
 
-        if json_output or fmt == "json":
-            content = json.dumps(result, ensure_ascii=False, indent=2)
+        events.emit("turn.completed", **json_safe(result))
+        out = machine_out or sys.stdout
+        if fmt == "jsonl":
+            content = None              # the events were the output
+        elif json_output or fmt == "json":
+            content = json.dumps(json_safe(result), ensure_ascii=False, indent=2)
         elif fmt == "csv":
             content = f"role,content\nassistant,\"{result.get('response', '').replace(chr(34), chr(34)+chr(34))}\""
         elif fmt == "md":
@@ -6636,24 +6666,28 @@ class ArtheraTerminal:
             content = result.get("response", "") if result.get("success") else f"Error: {result.get('error', 'Unknown')}"
 
         # Output routing
-        if output_file:
+        if content is None or (fmt == "table" and not json_output and result.get("command") and not content):
+            pass                        # jsonl, or a command that printed its own output
+        elif output_file:
             with open(output_file, "w") as f:
                 f.write(content)
             if not quiet:
                 console.print(f"[green]Saved to {output_file}[/green]" if HAS_RICH
                               else f"Saved: {output_file}")
+        elif not result.get("success") and fmt == "table" and not json_output:
+            print(f"Error: {result.get('error', 'Unknown')}", file=sys.stderr)
+        # In default (table) format: render with Rich Markdown when output is
+        # a terminal.  This gives properly formatted headings, bold, and tables
+        # in interactive use.  When piped/redirected, fall back to plain text
+        # for scripting compatibility.
+        elif HAS_RICH and fmt == "table" and not json_output and sys.stdout.isatty() and result.get("success"):
+            console.print(make_markdown(_strip_latex(content)))
         else:
-            if not result.get("success") and fmt == "table":
-                print(f"Error: {result.get('error', 'Unknown')}", file=sys.stderr)
-                sys.exit(1)
-            # In default (table) format: render with Rich Markdown when output is
-            # a terminal.  This gives properly formatted headings, bold, and tables
-            # in interactive use.  When piped/redirected, fall back to plain text
-            # for scripting compatibility.
-            if HAS_RICH and fmt == "table" and sys.stdout.isatty() and result.get("success"):
-                console.print(make_markdown(_strip_latex(content)))
-            else:
-                print(content)
+            print(content, file=out, flush=True)
+        # A failed turn exits 1 in every format. Only table did; with --json a
+        # script got exit 0 and had to read the body to learn it had failed.
+        if not result.get("success"):
+            sys.exit(1)
 
     async def run_watch(self, command_fn, interval: int, cmd_args: str):
         """Run a command repeatedly with interval (like Unix watch)."""
@@ -6711,8 +6745,9 @@ Examples:
     parser.add_argument("--model", help="AI model: sonata|prelude|sonata-thinking|prelude-thinking or full Ollama ID")
     parser.add_argument("--thinking", action="store_true", help="Enable thinking mode")
     parser.add_argument("--json", action="store_true", help="JSON output (with -p)")
-    parser.add_argument("--format", choices=["table", "json", "csv", "md"], default="table",
-                        help="Output format (default: table)")
+    parser.add_argument("--format", choices=["table", "json", "jsonl", "csv", "md"], default="table",
+                        help="Output format (default: table). With -p, jsonl streams one JSON event "
+                             "per line (turn.started, tool.started, tool.completed, turn.completed)")
     parser.add_argument("--output", "-o", help="Save output to file")
     parser.add_argument("--quiet", "-q", action="store_true", help="Quiet mode (data only, no UI)")
     parser.add_argument("--watch", "-w", type=int, metavar="SECS", help="Refresh interval in seconds")
@@ -6736,6 +6771,15 @@ Examples:
     parser.add_argument("args", nargs="*", help="Command arguments")
 
     args = parser.parse_args()
+
+    # Machine-readable -p output: stdout carries only JSON. Everything else —
+    # banners, tool steps, warnings, anything a tool prints — goes to stderr.
+    # It all went to stdout, ahead of the JSON, so `aria-code -p … --json | jq`
+    # could not parse what it was given.
+    _machine_out = None
+    if args.prompt and (args.json or args.format in ("json", "jsonl")):
+        _machine_out = sys.stdout
+        sys.stdout = sys.stderr
 
     config = load_config()
 
@@ -6837,11 +6881,11 @@ Examples:
     if args.prompt:
         if watch_interval:
             await terminal.run_watch(
-                lambda _: terminal.run_prompt(args.prompt, json_output=args.json, fmt=fmt, output_file=output_file, quiet=quiet),
+                lambda _: terminal.run_prompt(args.prompt, json_output=args.json, fmt=fmt, output_file=output_file, quiet=quiet, machine_out=_machine_out),
                 watch_interval, ""
             )
         else:
-            await terminal.run_prompt(args.prompt, json_output=args.json, fmt=fmt, output_file=output_file, quiet=quiet)
+            await terminal.run_prompt(args.prompt, json_output=args.json, fmt=fmt, output_file=output_file, quiet=quiet, machine_out=_machine_out)
         return
 
     # Mode 2: Direct command
