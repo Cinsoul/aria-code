@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.89.0] — 2026-10-06
+
+- Merge pull request #109 from Cinsoul/fix/narrow-cjk-output
+
 ## [0.88.0] — 2026-10-06
 
 - Merge pull request #107 from Cinsoul/fix/file-links
