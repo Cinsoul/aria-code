@@ -82,6 +82,13 @@ pytest tests/test_aria_cli_core.py -v    # Core tests only
 pytest tests/ -k "not e2e"               # Skip end-to-end (requires running LLM)
 ```
 
+`tests/test_terminal_snapshots.py` compares what the terminal shows for key commands (`/help`, `/team`, `/portfolio`, `/compare`, `/peer`, a market snapshot) with the text in `tests/snapshots/`. If you change one of those outputs on purpose, regenerate the snapshots and review the diff like any other change:
+
+```bash
+ARIA_UPDATE_SNAPSHOTS=1 pytest tests/test_terminal_snapshots.py
+git diff tests/snapshots/
+```
+
 ---
 
 ## Commit Convention

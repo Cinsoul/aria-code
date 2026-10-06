@@ -287,6 +287,7 @@ class CoreCommandsMixin:
             print("\n" + T(f"更多：/help {topics} · all · <命令>", f"More: /help {topics} · all · <command>"))
             return
 
+        from rich.cells import cell_len, set_cell_size
         from rich.text import Text
 
         console = self.context.console
@@ -301,8 +302,14 @@ class CoreCommandsMixin:
         # indent 2, name, gap 2, description, gap 3, name, gap 2, description
         desc_width = max(12, (console.width - 2 - 2 * name_width - 2 - 3 - 2) // 2)
 
+        # Widths in terminal cells, not characters: a Chinese character takes
+        # two. Counted as one, the Chinese /help padded each left description
+        # to twice its room and the right column wrapped back to column 0.
         def cell(text: str) -> str:
-            return text if len(text) <= desc_width else text[:desc_width - 1] + "…"
+            return text if cell_len(text) <= desc_width else set_cell_size(text, desc_width - 1) + "…"
+
+        def pad(text: str, width: int) -> str:
+            return text + " " * max(0, width - cell_len(text))
 
         two_columns = console.width >= 96
         if not two_columns:
@@ -317,7 +324,7 @@ class CoreCommandsMixin:
             lines = Text()
             for left, right in pairs:
                 lines.append("  " + left[0].ljust(name_width + 2), style="bold #C08050")
-                lines.append(cell(left[1]).ljust(desc_width + 3) if right[0] else cell(left[1]), style="dim")
+                lines.append(pad(cell(left[1]), desc_width + 3) if right[0] else cell(left[1]), style="dim")
                 if right[0]:
                     lines.append(right[0].ljust(name_width + 2), style="bold #C08050")
                     lines.append(cell(right[1]), style="dim")

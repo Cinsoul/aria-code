@@ -1,0 +1,23 @@
+Describe what you want  Aria picks the tools
+  Add tests for utils.py and run them
+  How's NVDA this week?
+  Which SKUs in skus.csv need reordering?
+
+Commands
+  /help         Show commands and examples          /compact      Compress context
+  /model        Switch AI model (interactive pic…   /copy         Copy last response to clipboard
+  /review       AI code review                      /rewind       Restore code/chat
+  /plan         Draft plan                          /permissions  Tool permissions
+  /init         Generate ARIA.md for current pro…   /config       Show/set config
+  /status       Runtime: engine · model · tools …   /doctor       Diagnose install, models, API ke…
+  /sessions     List/search sessions                /login        Login
+  /clear        Clear conversation
+
+Start a task  code · financial analysis · logistics
+  /code         Generate & run code                 /report       Research report artifact
+  /ta           Technical indicators                /portfolio    Portfolio
+  /backtest     Backtest + HTML report              /inventory    3PL inventory policy: reorder po…
+  /team         Multi-agent research team           /carriers     3PL carrier scorecard by lane, c…
+
+More: /help code · market · quant · logistics · data · broker · session · config · all · <command>
+@ attaches context · ! runs a shell command · Esc interrupts
