@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.92.0] — 2026-10-06
+
+- Merge pull request #116 from Cinsoul/feat/os-sandbox
+
 ## [0.91.0] — 2026-10-06
 
 - Merge pull request #112 from Cinsoul/fix/agent-key-points
