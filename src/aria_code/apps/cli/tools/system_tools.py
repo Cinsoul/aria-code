@@ -221,192 +221,15 @@ def tool_run_command(
         stderr = full_stderr[-2000:] if len(full_stderr) > 2000 else full_stderr
         output_artifact = _persist_command_output(command, full_stdout, full_stderr, result.returncode)
 
-        # ── Auto-fix loop (up to 3 rounds for python3 scripts) ──────────────
-        MAX_AUTO_FIX_ROUNDS = 3
-        _cmd_tail = (
-            command.strip().split("python3 ", 1)[-1].strip().split()
-            if command.strip().startswith("python3 ") else []
-        )
-        if result.returncode != 0 and _cmd_tail:
-            script_path = _cmd_tail[0]
-            script_p = pathlib.Path(script_path).expanduser().resolve()
+        # A failed command is reported, not repaired here. This used to edit
+        # the script (inserting imports, rewriting DataFrame.append) and run
+        # `pip3 install <the module named in the error>`, then re-run with
+        # shell=True: file writes with no approval and no checkpoint, so /undo
+        # could not reverse them, and a package install that ignored network
+        # off and the sandbox. The model gets the error and a hint, and makes
+        # the change through edit_file or an approved run_command.
+        hint = _failure_hint(output + "\n" + stderr) if result.returncode != 0 else ""
 
-            for _fix_round in range(MAX_AUTO_FIX_ROUNDS):
-                combined_err = (output + " " + stderr).strip()
-                auto_fixed = False
-
-                if not (script_p.exists() and script_p.suffix == ".py"):
-                    break
-                script_content = script_p.read_text(errors="replace")
-
-                name_match = re.search(r"NameError: name ['\"](\w+)['\"] is not defined", combined_err)
-                if name_match and not auto_fixed:
-                    missing = name_match.group(1)
-                    import_map = {
-                        "os": "import os", "sys": "import sys", "re": "import re",
-                        "json": "import json", "math": "import math", "time": "import time",
-                        "np": "import numpy as np", "pd": "import pandas as pd",
-                        "yf": "import yfinance as yf", "plt": "import matplotlib.pyplot as plt",
-                        "mpf": "import mplfinance as mpf",
-                        "datetime": "from datetime import datetime, timedelta",
-                        "Path": "from pathlib import Path",
-                        "timedelta": "from datetime import datetime, timedelta",
-                        "go": "import plotly.graph_objects as go",
-                        "px": "import plotly.express as px",
-                        "ta": "import pandas_ta as ta", "warnings": "import warnings",
-                        "make_subplots": "from plotly.subplots import make_subplots",
-                        "bt": "import backtrader as bt", "vbt": "import vectorbt as vbt",
-                        "ccxt": "import ccxt", "requests": "import requests",
-                        "BeautifulSoup": "from bs4 import BeautifulSoup",
-                        "tqdm": "from tqdm import tqdm",
-                        "xgb": "import xgboost as xgb",
-                        "Prophet": "from prophet import Prophet",
-                        "arch": "from arch import arch_model",
-                        "statsmodels": "import statsmodels.api as sm",
-                        "sm": "import statsmodels.api as sm",
-                    }
-                    fix_import = import_map.get(missing)
-                    if fix_import and fix_import not in script_content:
-                        lines = script_content.split("\n")
-                        insert_at = 0
-                        for i, l in enumerate(lines):
-                            if l.strip().startswith("#!") or l.strip().startswith("# -*-"):
-                                insert_at = i + 1
-                            else:
-                                break
-                        lines.insert(insert_at, fix_import)
-                        if missing == "plt" and "matplotlib.use" not in script_content:
-                            lines.insert(insert_at, "import matplotlib; matplotlib.use('Agg')")
-                        script_p.write_text("\n".join(lines))
-                        auto_fixed = True
-                        _cprint(
-                            f"  [#C08050]Auto-fix[{_fix_round+1}/{MAX_AUTO_FIX_ROUNDS}]:"
-                            f"[/#C08050] [dim]added '{fix_import}'[/dim]",
-                            console=console, has_rich=has_rich,
-                        )
-
-                if not auto_fixed and (
-                    "cannot be resolved at runtime" in combined_err.lower()
-                    or ("matplotlib" in combined_err and "backend" in combined_err.lower())
-                ):
-                    if "matplotlib.use" not in script_content and "matplotlib.pyplot" in script_content:
-                        script_content = script_content.replace(
-                            "import matplotlib.pyplot as plt",
-                            "import matplotlib; matplotlib.use('Agg')\nimport matplotlib.pyplot as plt",
-                        )
-                        script_p.write_text(script_content)
-                        auto_fixed = True
-                        _cprint(
-                            f"  [#C08050]Auto-fix[{_fix_round+1}]:[/#C08050]"
-                            " [dim]added matplotlib.use('Agg')[/dim]",
-                            console=console, has_rich=has_rich,
-                        )
-
-                key_match = re.search(
-                    r"KeyError: ['\"]?(Close|Open|High|Low|Volume|Adj Close)", combined_err
-                )
-                if key_match and not auto_fixed and "yfinance" in script_content:
-                    if "columns.droplevel" not in script_content:
-                        fix_line = (
-                            "\n# Fix yfinance MultiIndex columns\n"
-                            "if isinstance(df.columns, pd.MultiIndex):\n"
-                            "    df.columns = df.columns.droplevel(1)\n"
-                        )
-                        dl_match = re.search(r"(.*=\s*yf\.download\([^)]+\))", script_content)
-                        if dl_match:
-                            script_content = script_content.replace(
-                                dl_match.group(0), dl_match.group(0) + fix_line
-                            )
-                            script_p.write_text(script_content)
-                            auto_fixed = True
-                            _cprint(
-                                f"  [#C08050]Auto-fix[{_fix_round+1}]:[/#C08050]"
-                                " [dim]MultiIndex column fix[/dim]",
-                                console=console, has_rich=has_rich,
-                            )
-
-                attr_match = re.search(
-                    r"AttributeError: '(\w+)' object has no attribute '(\w+)'", combined_err
-                )
-                if attr_match and not auto_fixed:
-                    obj_type, attr_name = attr_match.group(1), attr_match.group(2)
-                    if obj_type == "DataFrame" and attr_name == "append":
-                        script_content = re.sub(
-                            r"(\w+)\.append\(([^)]+)\)",
-                            r"pd.concat([\1, \2], ignore_index=True)",
-                            script_content,
-                        )
-                        script_p.write_text(script_content)
-                        auto_fixed = True
-                        _cprint(
-                            f"  [#C08050]Auto-fix[{_fix_round+1}]:[/#C08050]"
-                            " [dim]DataFrame.append→pd.concat[/dim]",
-                            console=console, has_rich=has_rich,
-                        )
-
-                if not auto_fixed and "TypeError" in combined_err:
-                    if "auto_adjust" in combined_err and "auto_adjust" in script_content:
-                        script_content = re.sub(
-                            r",\s*auto_adjust\s*=\s*(True|False)", "", script_content
-                        )
-                        script_p.write_text(script_content)
-                        auto_fixed = True
-                        _cprint(
-                            f"  [#C08050]Auto-fix[{_fix_round+1}]:[/#C08050]"
-                            " [dim]removed deprecated auto_adjust param[/dim]",
-                            console=console, has_rich=has_rich,
-                        )
-
-                mod_match = re.search(r"No module named ['\"]?(\w+)", combined_err)
-                if mod_match and not auto_fixed:
-                    missing_mod = mod_match.group(1)
-                    pip_map = {
-                        "mplfinance": "mplfinance", "plotly": "plotly",
-                        "pandas_ta": "pandas_ta", "ta": "ta",
-                        "sklearn": "scikit-learn", "cv2": "opencv-python",
-                        "bs4": "beautifulsoup4", "PIL": "Pillow",
-                        "backtrader": "backtrader", "vectorbt": "vectorbt",
-                        "ccxt": "ccxt", "prophet": "prophet",
-                        "arch": "arch", "xgboost": "xgboost",
-                        "lightgbm": "lightgbm", "statsmodels": "statsmodels",
-                        "akshare": "akshare", "tushare": "tushare",
-                        "empyrical": "empyrical", "pyfolio": "pyfolio",
-                        "seaborn": "seaborn", "openpyxl": "openpyxl",
-                    }
-                    pip_pkg = pip_map.get(missing_mod, missing_mod)
-                    _cprint(
-                        f"  [#C08050]Auto-fix[{_fix_round+1}]:[/#C08050]"
-                        f" [dim]pip3 install {pip_pkg}[/dim]",
-                        console=console, has_rich=has_rich,
-                    )
-                    pip_result = subprocess.run(
-                        f"pip3 install {pip_pkg}", shell=True, capture_output=True,
-                        text=True, timeout=60,
-                    )
-                    if pip_result.returncode == 0:
-                        auto_fixed = True
-
-                if auto_fixed:
-                    _cprint(
-                        f"  [dim]Re-running after auto-fix (round {_fix_round+1}/{MAX_AUTO_FIX_ROUNDS})...[/dim]",
-                        console=console, has_rich=has_rich,
-                    )
-                    result = subprocess.run(
-                        command, shell=True, capture_output=True, text=True,
-                        timeout=timeout, cwd=cwd,
-                    )
-                    full_stdout = result.stdout
-                    full_stderr = result.stderr
-                    output = full_stdout[-5000:] if len(full_stdout) > 5000 else full_stdout
-                    stderr = full_stderr[-2000:] if len(full_stderr) > 2000 else full_stderr
-                    output_artifact = _persist_command_output(
-                        command, full_stdout, full_stderr, result.returncode
-                    )
-                    if result.returncode == 0:
-                        break
-                else:
-                    break
-        # ── End auto-fix ─────────────────────────────────────────────────────
 
         if has_rich and console is not None:
             print_command_outcome(console, result.returncode, output, stderr,
@@ -420,6 +243,8 @@ def tool_run_command(
             "stderr_truncated": len(full_stderr) > 2000,
         }
         data.update(output_artifact)
+        if hint:
+            data["hint"] = hint
         return {"success": True, "data": data}
     except subprocess.TimeoutExpired:
         return {"success": False, "error": f"Command timed out ({timeout}s)"}
@@ -428,6 +253,28 @@ def tool_run_command(
         return {"success": False, "error": "Command interrupted by user (Ctrl+C)"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+_PIP_NAMES = {
+    "sklearn": "scikit-learn", "cv2": "opencv-python", "bs4": "beautifulsoup4",
+    "PIL": "Pillow", "yaml": "PyYAML",
+}
+
+
+def _failure_hint(text: str) -> str:
+    """What to do about a common failure, for the model to act on with approval."""
+    missing = re.search(r"No module named ['\"]?([\w.]+)", text)
+    if missing:
+        module = missing.group(1).split(".")[0]
+        package = _PIP_NAMES.get(module, module)
+        return (f"Module '{module}' is not installed. If it is the right dependency, install it with "
+                f"run_command (e.g. `python3 -m pip install {package}`; check the package name first).")
+    name = re.search(r"NameError: name ['\"](\w+)['\"] is not defined", text)
+    if name:
+        return f"'{name.group(1)}' is not defined: add the missing import or definition with edit_file."
+    if "DataFrame' object has no attribute 'append'" in text:
+        return "DataFrame.append was removed in pandas 2: use pd.concat with edit_file."
+    return ""
 
 
 def tool_web_fetch(params: dict) -> dict:

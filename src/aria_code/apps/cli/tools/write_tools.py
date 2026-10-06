@@ -662,11 +662,27 @@ def _relative_write_base() -> pathlib.Path:
     return cwd
 
 
+def _find_all(text: str, needle: str) -> list[int]:
+    found, at = [], text.find(needle)
+    while at >= 0:
+        found.append(at)
+        at = text.find(needle, at + len(needle))
+    return found
+
+
 def tool_edit_file(params: dict) -> dict:
-    """Edit a file by replacing old_string with new_string (first occurrence)."""
+    """Edit a file by replacing old_string with new_string.
+
+    old_string must match exactly one place unless replace_all is set. This
+    replaced the first match whatever the count, so an old_string that also
+    appeared earlier in the file (a repeated `return None`, a second
+    `except Exception:`) edited the wrong place and reported success.
+    multi_edit already refused that.
+    """
     path = params.get("path", "")
     old_str = params.get("old_string", params.get("old_str", ""))
     new_str = params.get("new_string", params.get("new_str", ""))
+    replace_all = bool(params.get("replace_all", False))
     stage_only = bool(params.get("stage_only", False))
 
     if not path:
@@ -690,8 +706,16 @@ def tool_edit_file(params: dict) -> dict:
                     f"The file starts with:\n{preview}\n\n"
                     f"HINT: Use read_file to see the actual content, then retry edit_file "
                     f"with the correct old_string. Or use write_file to overwrite the entire file."}
+        occurrences = content.count(old_str)
+        if occurrences > 1 and not replace_all:
+            lines = [content.count("\n", 0, i) + 1 for i in _find_all(content, old_str)][:10]
+            return {"success": False,
+                    "error": f"old_string matches {occurrences} places (lines {', '.join(map(str, lines))}). "
+                    f"No change made. Include more surrounding lines so it matches one place, "
+                    f"or pass replace_all=true to change every one."}
 
-        new_content = content.replace(old_str, new_str, 1)
+        replacements = occurrences if replace_all else 1
+        new_content = content.replace(old_str, new_str, -1 if replace_all else 1)
         store = _change_store()
         change = store.stage(p, new_content, source="edit_file")
         added = len(new_str.splitlines())
@@ -704,7 +728,7 @@ def tool_edit_file(params: dict) -> dict:
             else:
                 print(f"  Staged edit {p} (change {change.change_id})")
             return {"success": True, "data": {
-                "path": str(p), "replacements": 1,
+                "path": str(p), "replacements": replacements,
                 "lines": new_content.count("\n") + 1,
                 "change_id": change.change_id,
                 "before_hash": change.before_hash, "after_hash": change.after_hash,
@@ -739,7 +763,7 @@ def tool_edit_file(params: dict) -> dict:
             console.print("  [yellow]⚠ 语法检查未通过[/yellow]")
 
         _data = {
-            "path": str(p), "replacements": 1,
+            "path": str(p), "replacements": replacements,
             "lines": new_content.count("\n") + 1,
             "change_id": applied.change_id,
             "before_hash": applied.before_hash, "after_hash": applied.after_hash,

@@ -93,13 +93,14 @@ def build_local_tool_schemas(
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Edit a file by replacing old_string with new_string. Read the file first to get the exact text to replace.",
+            "description": "Edit a file by replacing old_string with new_string. Read the file first to get the exact text to replace. old_string must match exactly one place: include enough surrounding lines to make it unique, or set replace_all to change every match.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "File path to edit"},
                     "old_string": {"type": "string", "description": "Exact text to find and replace (must match exactly)"},
                     "new_string": {"type": "string", "description": "Replacement text"},
+                    "replace_all": {"type": "boolean", "description": "Replace every match instead of requiring exactly one (default false)"},
                 },
                 "required": ["path", "old_string", "new_string"],
             },
