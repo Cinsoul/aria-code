@@ -13,6 +13,7 @@ NameError，而这正是 requires-python = "<3.14,>=3.10" 声明支持的全部�
 全绿。已发布的 4.3.0 同样中招：pip install 后运行 aria-code 直接崩溃。
 """
 
+from aria_code.ui.render.output import file_uri as _file_uri
 from aria_code.apps.cli.i18n import ui_text
 from ._ui import print_error
 
@@ -2049,7 +2050,7 @@ class CoreCommandsMixin:
                     "command": f"/tv {symbol} --pine",
                 }
                 if self.context.has_rich:
-                    self.context.console.print(f"  [green]✓[/green] Pine strategy saved: [link={pine_path}]{pine_path}[/link]")
+                    self.context.console.print(f"  [green]✓[/green] Pine strategy saved: [link={_file_uri(pine_path)}]{pine_path}[/link]")
                     self.context.console.print("  [dim]Use: TradingView → Pine Editor → paste script → Save → Add to chart[/dim]")
                 else:
                     print(f"Pine strategy saved: {pine_path}")
@@ -2058,7 +2059,7 @@ class CoreCommandsMixin:
                     companion = _write_text_companion(str(pine_path))
                     if companion:
                         if self.context.has_rich:
-                            self.context.console.print(f"  [green]✓[/green] Text copy saved: [link={companion}]{companion}[/link]")
+                            self.context.console.print(f"  [green]✓[/green] Text copy saved: [link={_file_uri(companion)}]{companion}[/link]")
                         else:
                             print(f"Text copy saved: {companion}")
                 if copy_pine:
@@ -2208,7 +2209,7 @@ class CoreCommandsMixin:
                 from rich.markup import escape as _esc
 
                 self.context.console.print(f"  [green]✓[/green] {_T('图表已生成', 'chart generated')}  [dim]({elapsed_ms}ms)[/dim]")
-                self.context.console.print(f"    {_T('已保存', 'saved')}: [link={path}]{path_label}[/link]")
+                self.context.console.print(f"    {_T('已保存', 'saved')}: [link={_file_uri(path)}]{path_label}[/link]")
                 self.context.console.print(f"    [dim]{_esc(_summary)}[/dim]")
                 if issues:
                     self.context.console.print(f"  [yellow]⚠ {_issues_head}[/yellow]")
@@ -2266,7 +2267,7 @@ class CoreCommandsMixin:
             }
             if self.context.has_rich:
                 self.context.console.print(f"  [green]✓[/green] comparison chart generated  [dim]({elapsed_ms}ms)[/dim]")
-                self.context.console.print(f"    saved: [link={path}]{path_label}[/link]")
+                self.context.console.print(f"    saved: [link={_file_uri(path)}]{path_label}[/link]")
                 rows = result.get("metrics") or []
                 for row in rows[:6]:
                     self.context.console.print(
@@ -2537,9 +2538,9 @@ class CoreCommandsMixin:
                 self.context.console.print()
                 self.context.console.print(f"  [green]✓[/green] {T('技术图表已生成', 'Chart saved')}")
                 if html_path:
-                    self.context.console.print(f"  [dim]HTML:[/dim] [link={html_path}]{_display_path(html_path)}[/link]")
+                    self.context.console.print(f"  [dim]HTML:[/dim] [link={_file_uri(html_path)}]{_display_path(html_path)}[/link]")
                 if png_path:
-                    self.context.console.print(f"  [dim]PNG :[/dim] [link={png_path}]{_display_path(png_path)}[/link]")
+                    self.context.console.print(f"  [dim]PNG :[/dim] [link={_file_uri(png_path)}]{_display_path(png_path)}[/link]")
                 elif png_error:
                     self.context.console.print(f"  [yellow]{T('PNG 跳过', 'PNG skipped')}:[/yellow] {png_error[:90]}")
             else:

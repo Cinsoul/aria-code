@@ -179,6 +179,22 @@ def format_turn_footer(metadata, *, mode: str = "compact", copy_available: bool 
     return " · ".join(out)
 
 
+def file_uri(path: object) -> str:
+    """A terminal-hyperlink target for a local file: file:///Users/…/chart.html.
+
+    Saved files were linked as [link=/Users/…/chart.html]: OSC 8 hyperlinks
+    take a URI, so terminals that support them had nothing to open. A value
+    that already has a scheme (https://…) is returned unchanged.
+    """
+    text = str(path or "")
+    if not text or "://" in text:
+        return text
+    try:
+        return pathlib.Path(text).expanduser().resolve().as_uri()
+    except (OSError, ValueError):
+        return text
+
+
 def display_path(path: object, *, fallback: str = "file") -> str:
     """Return a path-safe display value for user-facing UI."""
     if not path:

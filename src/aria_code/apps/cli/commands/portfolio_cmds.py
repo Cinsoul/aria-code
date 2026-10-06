@@ -7,6 +7,8 @@ by _rebind_mixin_globals() called at module load time.
 
 from __future__ import annotations
 
+from aria_code.ui.render.output import file_uri as _file_uri
+
 from aria_code.apps.cli.i18n import ui_text
 
 from ._ui import Panel, print_error
@@ -470,7 +472,7 @@ class PortfolioCommandsMixin:
                             if self.context.has_rich:
                                 self.context.console.print(
                                     f"  [green]PDF 导出成功[/green]  "
-                                    f"[link={_pdf_out}]{_pdf_out.name}[/link]"
+                                    f"[link={_file_uri(_pdf_out)}]{_pdf_out.name}[/link]"
                                 )
                             else:
                                 print(f"  PDF: {_pdf_out}")
@@ -577,7 +579,7 @@ class PortfolioCommandsMixin:
             else:
                 self.context.console.print(
                     f"\n  [green]✅ 研报已保存[/green]"
-                    f"  [link={path}]{path_label}[/link]"
+                    f"  [link={_file_uri(path)}]{path_label}[/link]"
                     f"  [dim]({_file_kb}KB)[/dim]"
                 )
             self.context.console.print(f"  [dim]文件: {path_label}[/dim]")
@@ -608,7 +610,7 @@ class PortfolioCommandsMixin:
                     if self.context.has_rich:
                         self.context.console.print(
                             f"  [green]PDF 导出成功[/green]"
-                            f"  [link={_pdf_path}]{_pdf_path.name}[/link]"
+                            f"  [link={_file_uri(_pdf_path)}]{_pdf_path.name}[/link]"
                             f"  [dim]({_pdf_kb}KB)[/dim]"
                         )
                     else:
@@ -635,7 +637,7 @@ class PortfolioCommandsMixin:
             _idx = await update_report_index(out_f.parent)
             if _idx and self.context.has_rich:
                 self.context.console.print(
-                    f"  [dim]索引已更新: [link={_idx}]{_idx.name}[/link][/dim]"
+                    f"  [dim]索引已更新: [link={_file_uri(_idx)}]{_idx.name}[/link][/dim]"
                 )
         except Exception as _e:
             logger.debug("[report] index update error: %s", _e)
