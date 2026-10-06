@@ -524,9 +524,26 @@ def test_narrow_terminal_converts_markdown_table_to_stacked_records():
     adapted = adapt_markdown_for_width(source, 80)
 
     assert "| --- |" not in adapted
-    assert "- **维度**：趋势" in adapted
-    assert "  - **观察**：价格高于 MA20" in adapted
+    # One line a row; a column that names a dimension keeps its name.
+    assert adapted.strip() == "- **趋势**：观察：价格高于 MA20 · 结论：偏多"
     assert adapt_markdown_for_width(source, 120) == source
+
+
+def test_a_narrow_key_value_table_is_one_line_a_row():
+    """A ten-row snapshot table took about thirty lines as nested bullets."""
+    from ui.render.output import adapt_markdown_for_width
+
+    source = (
+        "| 技术指标 | 数值 | 含义 |\n|---|---|---|\n"
+        "| RSI(14) | 51.9，中性 | 中性 |\n| MA20 | USD 332.54 | 价格高于MA20 ↑ |\n| 支撑位 | USD 332.54 | |"
+    )
+    assert adapt_markdown_for_width(source, 80).splitlines() == [
+        "- **RSI(14)**：51.9，中性",
+        "- **MA20**：USD 332.54 · 价格高于MA20 ↑",
+        "- **支撑位**：USD 332.54",
+    ]
+    wide = "| Symbol | Price | Change |\n|---|---|---|\n| AAPL | USD 333 | +0.8% |"
+    assert adapt_markdown_for_width(wide, 80) == "- **AAPL**: Price: USD 333 · Change: +0.8%"
 
 
 def test_turn_footer_defaults_to_compact_without_token_noise():
