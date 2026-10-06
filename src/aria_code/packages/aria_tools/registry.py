@@ -20,6 +20,7 @@ _PERMISSION_BY_TOOL = {
     "edit_file": [PermissionLevel.WORKSPACE_WRITE],
     "notebook_edit": [PermissionLevel.WORKSPACE_WRITE],
     "run_command": [PermissionLevel.WORKSPACE_WRITE],
+    "process": [PermissionLevel.WORKSPACE_WRITE],
     "web_fetch": [PermissionLevel.NETWORK],
     "github": [PermissionLevel.NETWORK],
     "get_market_data": [PermissionLevel.NETWORK],
@@ -96,7 +97,7 @@ def _capabilities_for_tool(name: str) -> List[str]:
         return ["workspace.read"]
     if name in ("write_file", "edit_file", "notebook_edit"):
         return ["workspace.write"]
-    if name == "run_command":
+    if name in ("run_command", "process"):
         return ["shell"]
     if name in ("web_fetch", "github"):
         return ["network"]

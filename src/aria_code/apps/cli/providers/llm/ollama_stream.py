@@ -413,7 +413,7 @@ async def stream_ollama(ollama_url: str, message: str, history: list,
     _CU_TOOL_NAMES = {"browser_navigate", "browser_screenshot",
                       "computer_screenshot", "computer_action"}
     _CODE_TOOL_NAMES = {"read_file", "write_file", "edit_file", "list_files",
-                        "search_code", "run_command", "github",
+                        "search_code", "run_command", "process", "github",
                         "glob", "notebook_read", "notebook_edit"}
     _FINANCE_TOOL_NAMES = {
         "get_market_data", "get_market_history", "calculate_factors",

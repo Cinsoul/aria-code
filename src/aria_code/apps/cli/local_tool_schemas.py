@@ -204,13 +204,16 @@ def build_local_tool_schemas(
         "type": "function",
         "function": {
             "name": "run_command",
-            "description": "Run a shell command. Use for: git, pip, python, pytest, ls, etc.",
+            "description": "Run a shell command. Use for: git, pip, python, pytest, ls, etc. For a server, watcher or anything that keeps running, set background=true.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {"type": "string", "description": "Shell command to run"},
                     "cwd": {"type": "string", "description": "Working directory (optional)"},
                     "timeout": {"type": "integer", "description": "Timeout in seconds (max 300, default 120). Use 180+ for data-heavy scripts."},
+                    "background": {"type": "boolean", "description": "Start a long-running command (dev server, watcher, interactive program) and return at once with a process_id; use the process tool to read its output, send input or stop it"},
+                    "wait_seconds": {"type": "number", "description": "With background: how long to wait for first output (default 3, max 30)"},
+                    "until": {"type": "string", "description": "With background: return as soon as this regex appears in the output, e.g. 'Listening on'"},
                     "sandbox": {"type": "boolean", "description": "Set to true to securely execute the command inside an isolated Docker container instead of the host machine. Mandatory for running third-party or untested code."}
                 },
                 "required": ["command"],
@@ -534,4 +537,5 @@ def build_local_tool_schemas(
             }
         }
     },
+        __import__("aria_code.runtime.processes", fromlist=["PROCESS_SCHEMA"]).PROCESS_SCHEMA,
     ]

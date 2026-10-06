@@ -198,6 +198,9 @@ def tool_run_command(
                     argv = None
 
         sandbox = params.get("sandbox", False)
+        if params.get("background"):
+            return _start_background(params, command, argv, use_shell, cwd, mode, network,
+                                     docker=bool(sandbox), console=console, has_rich=has_rich)
         if sandbox:
             try:
                 from aria_code.apps.cli.sandbox import run_in_docker_sandbox
@@ -270,6 +273,32 @@ def tool_run_command(
         return {"success": False, "error": "Command interrupted by user (Ctrl+C)"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _start_background(params, command, argv, use_shell, cwd, mode, network, *, docker,
+                      console, has_rich) -> dict:
+    """Start a long-running command (server, watcher) and return its first output."""
+    if docker:
+        return {"success": False, "error": "background=true is not available with the Docker sandbox."}
+    from aria_code.runtime import processes
+    from aria_code.safety import sandbox as _os_sandbox
+
+    target = argv if (argv and not use_shell) else command
+    confined = _os_sandbox.wrap(target, use_shell=use_shell, mode=mode, network=network, cwd=cwd,
+                                setting=params.get("os_sandbox"))
+    result = processes.start(confined or target, shell=use_shell and not confined, cwd=cwd,
+                             label=command, wait=min(float(params.get("wait_seconds", 3) or 0), 30.0),
+                             until=params.get("until"))
+    if result.get("success"):
+        data = result["data"]
+        state = "running" if data["running"] else f"exited {data['exit_code']}"
+        _cprint(f"  [dim]⎿ background {data['process_id']} · {state}[/dim]",
+                console=console, has_rich=has_rich)
+        if confined and not data["running"]:
+            hint = _os_sandbox.denial_hint(data.get("output", ""), mode=mode, network=network)
+            if hint:
+                data["hint"] = hint
+    return result
 
 
 _PIP_NAMES = {
