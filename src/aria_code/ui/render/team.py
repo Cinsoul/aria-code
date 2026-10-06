@@ -95,9 +95,10 @@ def render_agent_synthesis_leaf(console, signal: str | None,
     """Print the synthesis leaf: ⎿ 综合: ▲ BUY (置信 68%)  耗时 4.2s"""
     sig = (signal or "").upper()
     color, icon = VERDICT_STYLE.get(sig, ("dim", "●"))
-    conf = (f"  [dim]置信 {confidence:.0%}[/dim]" if confidence else "")
-    el   = (f"  [dim]耗时 {elapsed:.1f}s[/dim]" if elapsed else "")
-    lab  = "综合" if lang == "zh" else "Synthesis"
+    zh = str(lang).lower().startswith("zh")
+    conf = (f"  [dim]{'置信' if zh else 'confidence'} {confidence:.0%}[/dim]" if confidence else "")
+    el   = (f"  [dim]{'耗时' if zh else 'took'} {elapsed:.1f}s[/dim]" if elapsed else "")
+    lab  = "综合" if zh else "Synthesis"
     console.print(
         f"  [dim]⎿[/dim] [bold]{lab}[/bold]  [{color}]{icon} {sig}[/{color}]{conf}{el}"
     )
