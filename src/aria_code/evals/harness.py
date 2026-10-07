@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import os
 import shlex
 import shutil
@@ -155,6 +156,26 @@ class TaskSpec:
         )
 
 
+_SECRET = re.compile(
+    r"(?i)\b(api[_-]?key|token|password|secret)(\s*[=:]\s*)\S+"
+    r"|\b(?:bearer)\s+\S+"
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|\bgh[pousr]_[A-Za-z0-9]{12,}|\bAIza[0-9A-Za-z_-]{20,}"
+    r"|\bya29\.[0-9A-Za-z_-]+"
+)
+
+
+def _mask(line: str) -> str:
+    def repl(match: re.Match) -> str:
+        return f"{match.group(1)}{match.group(2)}***" if match.group(1) else "***"
+    return _SECRET.sub(repl, line)
+
+
+def _log_tail(log: str, lines: int = 15) -> list:
+    """The last lines of a task's log, secret-shaped values masked."""
+    kept = [line.rstrip() for line in str(log or "").splitlines() if line.strip()]
+    return [_mask(line)[:300] for line in kept[-lines:]]
+
+
 @dataclass(frozen=True)
 class TaskResult:
     task_id: str
@@ -185,6 +206,9 @@ class TaskResult:
             "detail": self.detail,
             "tags": list(self.tags),
             "changed": list(self.changed),
+            # Why it did not pass. The first CI run's report said only "the
+            # agent did not complete (exit 1)"; the reason was in the job log.
+            "log_tail": _log_tail(self.log) if self.outcome != PASS else [],
         }
 
 
