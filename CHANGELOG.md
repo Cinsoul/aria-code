@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.105.0] — 2026-10-07
+
+- Merge pull request #137 from Cinsoul/ci/eval-trajectories
+
 ## [0.104.0] — 2026-10-07
 
 - Merge pull request #136 from Cinsoul/fix/agent-output-rules
