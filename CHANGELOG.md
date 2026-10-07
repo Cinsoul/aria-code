@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.99.0] — 2026-10-07
+
+- Merge pull request #126 from Cinsoul/fix/risk-earnings-ops
+
 ## [0.98.0] — 2026-10-07
 
 - Merge pull request #125 from Cinsoul/fix/backtest-summary
