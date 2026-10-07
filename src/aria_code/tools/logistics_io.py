@@ -22,6 +22,12 @@ def load_records(params: dict[str, Any], key: str) -> tuple[list[dict[str, Any]]
         raise ValueError(f"Provide either file_path or {key}, not both")
     if file_path:
         path = pathlib.Path(str(file_path)).expanduser().resolve()
+        if not path.is_file():
+            # The OSError read "[Errno 2] No such file or directory:
+            # '/private/var/…/shipments.csv'". Say which files are there.
+            here = sorted(p.name for p in path.parent.glob("*") if p.suffix.lower() in (".csv", ".json"))[:6]
+            hint = f" CSV/JSON files in {path.parent.name or path.parent}: {', '.join(here)}" if here else ""
+            raise ValueError(f"No such file: {file_path}.{hint}")
         suffix = path.suffix.lower()
         if suffix == ".json":
             content = json.loads(path.read_text(encoding="utf-8"))

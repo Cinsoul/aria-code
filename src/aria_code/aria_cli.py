@@ -3137,12 +3137,12 @@ def _print_finance_result(tool_name: str, result: dict) -> None:
                           bot_mode=_ARIA_BOT_MODE)
 
 
-def _render_macro_result(r: dict, title: str) -> None:
-    render_macro_result(r, title, console=console, has_rich=HAS_RICH)
+def _render_macro_result(r: dict, title: str, lang: str = "zh") -> None:
+    render_macro_result(r, title, console=console, has_rich=HAS_RICH, lang=lang)
 
 
-def _render_cb_rates(r: dict) -> None:
-    render_cb_rates(r, console=console, has_rich=HAS_RICH)
+def _render_cb_rates(r: dict, lang: str = "zh") -> None:
+    render_cb_rates(r, console=console, has_rich=HAS_RICH, lang=lang)
 
 
 def _render_econ_calendar(r: dict) -> None:
@@ -4894,7 +4894,7 @@ class ArtheraTerminal(_ChatTurn, _Chrome, _HeadlessMixin):
                 if _mem_fact:
                     self.commands.cmd_note(_mem_fact)
 
-                await self.send_message(user_input)
+                await self.send_message(user_input, route_text=True)
 
             except KeyboardInterrupt:
                 _esc_watcher.stop()

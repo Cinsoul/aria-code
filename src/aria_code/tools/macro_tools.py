@@ -143,6 +143,17 @@ _FRED_SERIES_MAP = {
 }
 
 
+_FRED_LABELS_EN = {
+    "gdp": "GDP (USD bn, quarterly)", "gdp_growth": "Real GDP growth (%)", "cpi": "CPI (urban consumers)",
+    "cpi_yoy": "CPI year on year (%)", "core_cpi_yoy": "Core CPI year on year (%)",
+    "core_cpi": "Core CPI (ex food and energy)", "pce": "PCE price index", "fed_rate": "Fed funds rate (%)",
+    "unemployment": "Unemployment rate (%)", "m2": "M2 money supply (USD bn)",
+    "10y_yield": "10-year Treasury yield (%)", "2y_yield": "2-year Treasury yield (%)", "vix": "VIX",
+    "retail_sales": "Retail sales (USD m, SA)", "industrial": "Industrial production index",
+    "housing": "Housing starts (thousands, SAAR)", "ppi": "PPI (producer prices)",
+}
+
+
 def get_us_macro(indicator: str = "all", periods: int = 12) -> dict:
     """
     获取美国宏观经济数据。
@@ -175,6 +186,7 @@ def get_us_macro(indicator: str = "all", periods: int = 12) -> dict:
                 change = round(latest["value"] - prev["value"], 3)
             results[key] = {
                 "label":  label,
+                "label_en": _FRED_LABELS_EN.get(key, label),
                 "unit":   unit,
                 "latest": latest,
                 "prev":   prev,
@@ -193,6 +205,7 @@ def get_us_macro(indicator: str = "all", periods: int = 12) -> dict:
         results["_yield_curve"] = {
             "spread_10y_2y": spread,
             "shape": "正常" if spread > 0.2 else "倒挂" if spread < 0 else "平坦",
+            "shape_en": "normal" if spread > 0.2 else "inverted" if spread < 0 else "flat",
         }
 
     return {"success": True, "country": "US", "indicator": indicator,
@@ -341,19 +354,39 @@ def _get_finnhub_key() -> str:
 # ── Central Bank Policy Rates ─────────────────────────────────────────────────
 
 def get_central_bank_rates() -> dict:
-    """主要央行政策利率快照。"""
-    CB_TICKERS = {
-        "美联储 (Fed Funds)": "FEDFUNDS",
-        "欧央行 (ECB Refi)":  "ECBDFR",
-        "英央行 (BoE Rate)":  "BOERUKM",
-        "日央行 (BoJ Rate)":  "IRSTCI01JPM156N",
-    }
+    """主要央行政策利率快照。
+
+    The Bank of England row read FRED's BOERUKM, which stopped in January 2017:
+    0.25% was shown as today's rate. The UK now uses SONIA, which tracks Bank
+    Rate. ECBDFR is the deposit facility rate, not the refi rate it was labelled,
+    and the Japan series is the call rate that tracks the BoJ's policy rate. Each
+    value carries its date; one older than 180 days is reported as stale and
+    left out of ``rates``.
+    """
+    from datetime import date as _date
+
+    CB_SERIES = (
+        ("fed", "FEDFUNDS", "美联储 (Fed Funds)", "Fed funds (US)"),
+        ("ecb", "ECBDFR", "欧央行 (存款便利利率)", "ECB deposit facility rate"),
+        ("uk", "IUDSOIA", "英国 SONIA (跟随英央行利率)", "UK SONIA (tracks Bank Rate)"),
+        ("jp", "IRSTCI01JPM156N", "日本隔夜拆借利率 (跟随日央行)", "Japan call rate (tracks BoJ policy)"),
+    )
     rates = {}
-    for name, series in CB_TICKERS.items():
+    details = []
+    for key, series, label_zh, label_en in CB_SERIES:
         data = _fred_series(series, limit=3)
-        if data:
-            latest = data[-1]
-            rates[name] = latest["value"]
+        if not data:
+            continue
+        latest = data[-1]
+        try:
+            age = (_date.today() - _date.fromisoformat(str(latest["date"])[:10])).days
+        except ValueError:
+            age = None
+        stale = age is not None and age > 180
+        details.append({"key": key, "series": series, "label_zh": label_zh, "label_en": label_en,
+                        "value": latest["value"], "date": str(latest["date"])[:10], "stale": stale})
+        if not stale:
+            rates[label_zh] = latest["value"]
 
     # PBOC LPR via akshare
     if _HAS_AK:
@@ -363,10 +396,17 @@ def get_central_bank_rates() -> dict:
                 row = df.iloc[-1]
                 rates["中国人民银行 LPR 1Y"] = float(row.get("1年期贷款市场报价利率", row.iloc[1]))
                 rates["中国人民银行 LPR 5Y"] = float(row.get("5年期贷款市场报价利率", row.iloc[2]))
+                when = str(row.iloc[0])[:10]
+                details.append({"key": "lpr1y", "series": "akshare", "label_zh": "中国人民银行 LPR 1Y",
+                                "label_en": "PBOC LPR 1-year", "value": rates["中国人民银行 LPR 1Y"],
+                                "date": when, "stale": False})
+                details.append({"key": "lpr5y", "series": "akshare", "label_zh": "中国人民银行 LPR 5Y",
+                                "label_en": "PBOC LPR 5-year", "value": rates["中国人民银行 LPR 5Y"],
+                                "date": when, "stale": False})
         except Exception:
             pass
 
     if not rates:
         return {"success": False, "error": "无法获取央行利率数据"}
 
-    return {"success": True, "rates": rates, "provider": "FRED+akshare"}
+    return {"success": True, "rates": rates, "details": details, "provider": "FRED+akshare"}

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from aria_code.apps.cli.i18n import ui_text
+
 
 import json
 import asyncio
@@ -42,7 +44,8 @@ class WarehouseCommandsMixin:
         as_json = "--json" in parts
         identifiers = [part for part in parts if not part.startswith("--")]
         if len(identifiers) != 1:
-            message = "用法: /warehouse <仓库编号> [--json]，例如 /warehouse WH-CN-01"
+            message = ui_text(self, "用法: /warehouse <仓库编号> [--json]，例如 /warehouse WH-CN-01",
+                              "Usage: /warehouse <warehouse_id> [--json], e.g. /warehouse WH-CN-01")
             self.context.console.print(f"[yellow]{message}[/yellow]") if self.context.has_rich else print(message)
             return
 

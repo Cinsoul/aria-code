@@ -387,7 +387,8 @@ class PortfolioCommandsMixin:
 
         # ── Markdown report mode (works fully offline) ────────────────────────
         if fmt in ("md", "markdown"):
-            self.context.console.print(f"\n  📄 生成 [bold]{symbol}[/bold] Markdown 投研报告 ({report_type})...") if self.context.has_rich else print(f"\n  Generating {symbol} Markdown report...")
+            _gen = ui_text(self, f"生成 {symbol} Markdown 投研报告 ({report_type})", f"Writing the {symbol} Markdown report ({report_type})")
+            self.context.console.print(f"\n  [dim]{_gen}…[/dim]") if self.context.has_rich else print(f"\n  {_gen}…")
 
             # Fetch real data through the service boundary so provenance and
             # quality metadata travel with the report prompt and artifact.
@@ -452,11 +453,15 @@ class PortfolioCommandsMixin:
                     created_at=_dt.now(),
                 )
                 out_f = saved.path
+                # A short, clickable path: the full temp-dir path wrapped over
+                # three lines, and the "预览: open …" line repeated it.
+                from aria_code.ui.render.output import display_path as _short_path
+                _saved = ui_text(self, "报告已保存", "Report saved")
                 if self.context.has_rich:
-                    self.context.console.print(f"\n  [green]✅ 报告已保存: {out_f}[/green]")
-                    self.context.console.print(f"  [dim]预览: open {out_f}[/dim]\n")
+                    self.context.console.print(f"\n  [green]✓[/green] {_saved}: "
+                                               f"[link={_file_uri(str(out_f))}]{_short_path(str(out_f))}[/link]\n")
                 else:
-                    print(f"\n  Saved: {out_f}")
+                    print(f"\n  {_saved}: {out_f}")
 
                 # ── Markdown 报告 → 排版 PDF（--pdf；中英文模板自动检测）──
                 if export_pdf_flag:

@@ -969,11 +969,21 @@ def render_finance_result(tool_name: str, result: dict, *, console=None, has_ric
             return
 
 
-def render_macro_result(r: dict, title: str, *, console=None, has_rich: bool = True) -> None:
+def render_macro_result(r: dict, title: str, *, console=None, has_rich: bool = True,
+                        lang: str = "zh") -> None:
     """Render US or CN macro result dict."""
+    zh = str(lang).lower().startswith("zh")
     if not r.get("success"):
-        if has_rich: console.print(f"  [red]{r.get('error','数据获取失败')}[/red]")
-        else: print(f"  {r.get('error','failed')}")
+        error = r.get("error", "数据获取失败" if zh else "data unavailable")
+        if "akshare" in str(error):
+            # China data is optional; a missing package is a note, not a red error.
+            error = ("中国宏观数据需要 akshare：pip install akshare" if zh
+                     else "China macro data needs akshare: pip install akshare")
+            if has_rich: console.print(f"  [dim]{error}[/dim]")
+            else: print(f"  {error}")
+            return
+        if has_rich: console.print(f"  [red]{error}[/red]")
+        else: print(f"  {error}")
         return
     data = r.get("data", {})
     if has_rich:
@@ -981,10 +991,10 @@ def render_macro_result(r: dict, title: str, *, console=None, has_rich: bool = T
         from rich.rule import Rule
         console.print(Rule(f"[bold]{title}[/bold]", style="dim"))
         t = Table(show_header=True, box=None, padding=(0, 1))
-        t.add_column("指标", style="dim", min_width=20)
-        t.add_column("最新值", justify="right", min_width=10)
-        t.add_column("环比变化", justify="right")
-        t.add_column("时间", style="dim")
+        t.add_column("指标" if zh else "Indicator", style="dim", min_width=20)
+        t.add_column("最新值" if zh else "Latest", justify="right", min_width=10)
+        t.add_column("环比变化" if zh else "Change", justify="right")
+        t.add_column("时间" if zh else "Date", style="dim")
         for key, item in data.items():
             if key.startswith("_"): continue
             if not isinstance(item, dict): continue
@@ -993,7 +1003,7 @@ def render_macro_result(r: dict, title: str, *, console=None, has_rich: bool = T
             date   = latest.get("date", "")
             change = item.get("change")
             unit   = item.get("unit", "")
-            label  = item.get("label", key)
+            label  = item.get("label", key) if zh else item.get("label_en", item.get("label", key))
             if val is None: continue
             val_str = f"{val:.2f}{unit}"
             if change is not None:
@@ -1006,40 +1016,55 @@ def render_macro_result(r: dict, title: str, *, console=None, has_rich: bool = T
         yc = data.get("_yield_curve", {})
         if yc:
             sp = yc.get("spread_10y_2y", 0)
-            shape = yc.get("shape", "")
+            shape = yc.get("shape", "") if zh else yc.get("shape_en", yc.get("shape", ""))
             color = "green" if sp > 0 else "red"
-            console.print(f"  收益率曲线: [{color}]{shape}[/{color}]  10Y-2Y利差: [{color}]{sp:+.3f}%[/{color}]")
+            if zh:
+                console.print(f"  收益率曲线: [{color}]{shape}[/{color}]  10Y-2Y利差: [{color}]{sp:+.3f}%[/{color}]")
+            else:
+                console.print(f"  Yield curve: [{color}]{shape}[/{color}]  10Y-2Y spread: [{color}]{sp:+.3f}%[/{color}]")
     else:
         print(f"\n{title}")
         for key, item in data.items():
             if not isinstance(item, dict) or key.startswith("_"): continue
             v = (item.get("latest") or {}).get("value")
             if v is not None:
-                print(f"  {item.get('label',key):<28} {v:.3g}")
+                print(f"  {(item.get('label', key) if zh else item.get('label_en', key)):<28} {v:.3g}")
 
 
-def render_cb_rates(r: dict, *, console=None, has_rich: bool = True) -> None:
-    """Render central bank rates."""
+def render_cb_rates(r: dict, *, console=None, has_rich: bool = True, lang: str = "zh") -> None:
+    """Render central bank rates, each with its date; a stale value is marked, not shown as current."""
+    zh = str(lang).lower().startswith("zh")
     if not r.get("success"):
         if has_rich: console.print(f"  [red]{r.get('error')}[/red]")
         return
-    rates = r.get("rates", {})
+    details = r.get("details") or [
+        {"label_zh": name, "label_en": name, "value": val, "date": "", "stale": False}
+        for name, val in (r.get("rates") or {}).items()
+    ]
+    title = "主要央行政策利率" if zh else "Central bank rates"
     if has_rich:
         from rich.rule import Rule
         from rich.table import Table
-        console.print(Rule("[bold]🏦 主要央行政策利率[/bold]", style="dim"))
+        console.print(Rule(f"[bold]{title}[/bold]", style="dim"))
         t = Table(show_header=False, box=None, padding=(0,1))
         t.add_column(style="dim", min_width=28)
         t.add_column(justify="right")
-        for name, val in rates.items():
-            if val is not None:
-                t.add_row(name, f"[bold]{val:.2f}%[/bold]")
+        t.add_column(style="dim")
+        for row in details:
+            if row.get("value") is None:
+                continue
+            label = row["label_zh"] if zh else row["label_en"]
+            if row.get("stale"):
+                note = (f"数据停在 {row['date']}，未显示" if zh else f"no data since {row['date']}, not shown")
+                t.add_row(label, "—", note)
+            else:
+                t.add_row(label, f"[bold]{row['value']:.2f}%[/bold]", row.get("date", ""))
         console.print(t)
     else:
-        print("\n央行利率")
-        for name, val in rates.items():
-            if val is not None:
-                print(f"  {name:<30} {val:.2f}%")
+        print("\n" + title)
+        for row in details:
+            if row.get("value") is not None and not row.get("stale"):
+                print(f"  {(row['label_zh'] if zh else row['label_en']):<30} {row['value']:.2f}%  {row.get('date', '')}")
 
 
 def render_econ_calendar(r: dict, *, console=None, has_rich: bool = True) -> None:
