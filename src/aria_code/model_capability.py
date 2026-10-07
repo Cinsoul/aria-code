@@ -202,6 +202,12 @@ _CAPABILITY_TABLE: Dict[str, ModelCapability] = {
     "gemini-1.5-pro":           ModelCapability(tool_calls=True, format="openai_native", context_window=2097152, temperature=0.2, size_class="large",  vision=True),
     "gemini-1.5-flash":         ModelCapability(tool_calls=True, format="openai_native", context_window=1048576, temperature=0.2, size_class="medium", vision=True),
     "gemini":                   ModelCapability(tool_calls=True, format="openai_native", context_window=1048576, temperature=0.2, size_class="large",  vision=True),
+    # Gemma served on Vertex AI (Model Garden, managed): "gemma-4-…-maas",
+    # "gemma-3-…". These used to match nothing and fell to the default — no
+    # tools, a 4K window — so a coding task on Gemma was refused as a
+    # tool-less route. Ollama's "gemma3:27b" ids keep their own entries above.
+    "gemma-4":                  ModelCapability(tool_calls=True, format="openai_native", context_window=131072,  temperature=0.2, size_class="medium", vision=True, notes="Gemma 4 on Vertex AI"),
+    "gemma-3":                  ModelCapability(tool_calls=True, format="openai_native", context_window=131072,  temperature=0.2, size_class="medium", vision=True, notes="Gemma 3 on Vertex AI"),
     # ── OpenAI (cloud, via providers/llm/openai_compat.py) ────────────────
     "gpt-5":                    ModelCapability(tool_calls=True, format="openai_native", context_window=400000, temperature=0.2, size_class="large",  vision=True, thinking=True),
     "gpt-4.1":                  ModelCapability(tool_calls=True, format="openai_native", context_window=1047576, temperature=0.2, size_class="large",  vision=True),

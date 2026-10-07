@@ -5,6 +5,8 @@ Extracted from aria_cli.py. Methods' __globals__ are rebound to aria_cli's names
 by _rebind_mixin_globals() called at module load time.
 """
 from __future__ import annotations
+
+from aria_code.apps.cli.i18n import ui_text
 from aria_code.packages.aria_core.paths import aria_home
 
 
@@ -194,11 +196,24 @@ class ModelCommandsMixin:
             _mod  = _mod.strip()
             _local_backends = {"ollama", "lmstudio", "vllm", "llamacpp", "jan", "custom"}
             if _prov not in _local_backends:
-                # Cloud provider — check API key
+                # Cloud provider — check API key. Google models also run on
+                # Vertex AI with Google Cloud credentials and no key; this
+                # refused every `/model google/…` without a Gemini API key,
+                # so a team running on Google Cloud could not pick Gemini 3
+                # or Gemma at all.
+                from aria_code.apps.cli.providers.base import google_cloud_available
                 _key = _get_provider_key(_prov)
-                if not _key:
-                    msg = (f"⚠ {_prov} API key 未配置。"
-                           f"运行: /apikey set {_prov} <key>")
+                _vertex_ok = _prov in ("google", "gemini", "vertexai") and google_cloud_available()
+                if not _key and not _vertex_ok:
+                    if _prov in ("google", "gemini", "vertexai"):
+                        msg = ui_text(self,
+                                      f"⚠ 需要 Google Cloud 凭据或 API key：运行 gcloud auth application-default login，"
+                                      f"或 /apikey set {_prov} <key>",
+                                      f"⚠ Needs Google Cloud credentials or an API key: run "
+                                      f"gcloud auth application-default login, or /apikey set {_prov} <key>")
+                    else:
+                        msg = (f"⚠ {_prov} API key 未配置。"
+                               f"运行: /apikey set {_prov} <key>")
                     self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
                     return
             self.terminal.config["local_provider"] = _prov

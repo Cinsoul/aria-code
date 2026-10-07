@@ -336,6 +336,13 @@ def _adc_available() -> bool:
     return os.path.isfile(os.path.join(folder, "application_default_credentials.json"))
 
 
+def google_cloud_available() -> bool:
+    """Credentials Vertex AI can use: application-default credentials or a gcloud CLI."""
+    import shutil
+
+    return _adc_available() or bool(shutil.which("gcloud"))
+
+
 def _google_api_key(config: dict) -> str:
     import os
 
@@ -408,6 +415,30 @@ def google_readiness(config: dict) -> str:
     return ""
 
 
+def is_vertex_open_model(model: str) -> bool:
+    """A model Vertex serves through its OpenAI-compatible endpoint, not generateContent.
+
+    Gemma ("gemma-4-26b-a4b-it-maas", "gemma-3-27b-it") and other Model Garden
+    managed models ("…-maas") are open models: the Gemini API does not serve
+    them, and the native SDK path 404'd.
+    """
+    name = str(model or "").lower().split("/")[-1]
+    return name.startswith("gemma") or name.endswith("-maas")
+
+
+def _adc_access_token() -> str:
+    """An access token from application-default credentials, or "" if there are none."""
+    try:
+        import google.auth
+        import google.auth.transport.requests
+
+        credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        credentials.refresh(google.auth.transport.requests.Request())
+        return str(credentials.token or "")
+    except Exception:
+        return ""
+
+
 def vertex_openai_endpoint(config: dict) -> dict:
     """Vertex AI's OpenAI-compatible endpoint and a token from the gcloud login.
 
@@ -423,16 +454,21 @@ def vertex_openai_endpoint(config: dict) -> dict:
     import os
     import shutil
 
-    if not shutil.which("gcloud"):
+    # Application-default credentials first (a CI runner signed in with
+    # Workload Identity Federation, a service account, `gcloud auth
+    # application-default login`), then the gcloud CLI's own login.
+    adc_token = _adc_access_token() if _adc_available() else ""
+    if not adc_token and not shutil.which("gcloud"):
         return {}
     try:
-        project = (os.getenv("GOOGLE_CLOUD_PROJECT") or str(config.get("gcp_project") or "")
-                   or _gcloud("config", "get-value", "project", timeout=10)).strip()
+        project = (os.getenv("GOOGLE_CLOUD_PROJECT") or str(config.get("gcp_project") or "")).strip()
+        if not project and shutil.which("gcloud"):
+            project = _gcloud("config", "get-value", "project", timeout=10).strip()
         if not project or project == "(unset)":
             return {"error": "vertex_needs_project: set GOOGLE_CLOUD_PROJECT, /config set gcp_project=<id>, "
                              "or `gcloud config set project <id>`"}
         location = (os.getenv("GOOGLE_CLOUD_LOCATION") or str(config.get("gcp_location") or "") or "global").strip()
-        token = _gcloud("auth", "print-access-token")
+        token = adc_token or _gcloud("auth", "print-access-token")
     except Exception as exc:          # timeout, permissions: report, never hang the chat
         return {"error": f"vertex_gcloud_failed: {type(exc).__name__}"}
     if not token:
@@ -515,6 +551,45 @@ class ConfiguredProvider:
         self.config["local_provider"] = self.backend
         self.system_override = system_override
 
+    async def _stream_vertex_open_model(self, prepared: list, tools: list, cancel_event):
+        """Gemma and other managed open models, through Vertex's OpenAI-compatible endpoint."""
+        from aria_code.local_llm_provider import LocalLLMProvider
+
+        vertex = await asyncio.to_thread(vertex_openai_endpoint, self.config)
+        if not vertex or vertex.get("error"):
+            yield LLMDone(response="", provider="vertexai", success=False,
+                          error=(vertex or {}).get("error") or
+                          "vertex_needs_credentials: run `gcloud auth application-default login` "
+                          "or set GOOGLE_APPLICATION_CREDENTIALS")
+            return
+        cfg = dict(self.config)
+        cfg.update({
+            "model": f"google/{self.model}",
+            "local_provider": "custom",
+            "custom_endpoint": vertex["base_url"],
+            "custom_model": f"google/{self.model}",
+            "local_api_key": vertex["token"],
+        })
+        provider = LocalLLMProvider.from_config(cfg)
+        async for event in provider.stream(prepared, tools=tools, cancel_event=cancel_event):
+            kind = event.get("type")
+            if kind == "token":
+                yield LLMToken(text=str(event.get("text", "")))
+            elif kind == "thinking":
+                yield LLMThinking(content=str(event.get("text", "")))
+            elif kind == "tool_call":
+                yield LLMToolCall(tool=str(event.get("name", "")), params=dict(event.get("arguments") or {}))
+            elif kind == "error":
+                yield LLMDone(response="", provider="vertexai", success=False,
+                              error=str(event.get("message") or "provider_error"))
+                return
+            elif kind == "done":
+                yield LLMDone(response=str(event.get("text") or ""), usage=dict(event.get("usage") or {}),
+                              provider="vertexai", success=True,
+                              cancelled=str(event.get("stop_reason") or "") == "cancelled")
+                return
+        yield LLMDone(response="", provider="vertexai", success=False, error="empty_response")
+
     def _messages(self, messages: list) -> list:
         prepared = [dict(message) for message in messages]
         if not self.system_override:
@@ -539,6 +614,11 @@ class ConfiguredProvider:
         native_vertex = self.backend in ("vertexai", "vertex-ai", "google-genai") or (
             self.backend in ("google", "gemini") and _opt_in(self.config, "use_vertexai")
         )
+        if self.backend in ("google", "gemini", "vertexai", "vertex-ai", "google-genai") \
+                and is_vertex_open_model(self.model):
+            async for evt in self._stream_vertex_open_model(prepared, tools, cancel_event):
+                yield evt
+            return
         if native_vertex and self.backend in ("google", "gemini") and _gcloud_login_only(self.config):
             # The SDK route accepts only application-default credentials. With
             # just a `gcloud auth login` it failed outright, so a logged-in

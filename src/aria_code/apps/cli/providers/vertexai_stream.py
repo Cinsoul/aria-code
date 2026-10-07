@@ -116,10 +116,14 @@ class VertexAIProvider(LLMProvider):
 
             if self._use_vertex():
                 project = os.getenv("GOOGLE_CLOUD_PROJECT") or self.config.get("gcp_project")
+                # global, not us-central1: the Gemini 3 previews
+                # (gemini-3-flash-preview, gemini-3.1-pro-preview) are served
+                # only from the global endpoint and 404 in a region, and the
+                # global endpoint serves 2.5 as well.
                 location = (
                     os.getenv("GOOGLE_CLOUD_LOCATION")
                     or self.config.get("gcp_location")
-                    or "us-central1"
+                    or "global"
                 )
                 kwargs = {"vertexai": True, "location": location}
                 if project:
