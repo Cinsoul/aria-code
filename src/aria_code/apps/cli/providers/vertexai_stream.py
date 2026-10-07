@@ -27,6 +27,36 @@ _MISSING_SDK_MESSAGE = (
 )
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+_EMPTY_ROUND_RETRIES = 2
+
+
+def _chunk_text(chunk) -> str:
+    """The text parts of a chunk, read without chunk.text.
+
+    chunk.text logs "there are non-text parts in the response: ['function_call']"
+    for every chunk that carries a call, which filled the eval logs.
+    """
+    out = []
+    for candidate in (getattr(chunk, "candidates", None) or [])[:1]:
+        content = getattr(candidate, "content", None)
+        for part in (getattr(content, "parts", None) or []):
+            text = getattr(part, "text", None)
+            if text and not getattr(part, "thought", False):
+                out.append(text)
+    if out:
+        return "".join(out)
+    if not getattr(chunk, "candidates", None):
+        try:
+            return chunk.text or ""
+        except Exception:
+            return ""
+    return ""
+
+
 class VertexAIProvider(LLMProvider):
     """Native Vertex AI provider using google-genai."""
     
@@ -265,41 +295,66 @@ class VertexAIProvider(LLMProvider):
         )
         
         try:
-            # We must use asyncio.to_thread because the google-genai async client might not be used here
-            # Or we can just use the sync stream generator wrapped in an async generator.
-            # google-genai provides AsyncClient as well:
-            # async_client = genai.Client(vertexai=True).aio
-            response_stream = await client.aio.models.generate_content_stream(
-                model=self.model,
-                contents=contents,
-                config=config,
-            )
-            
+            # Gemini sometimes ends a round with no text and no function call:
+            # finish_reason MALFORMED_FUNCTION_CALL (it wrote a call it could
+            # not emit), or an empty STOP after reading tool results. The round
+            # then came back empty, the turn ended as "empty_response", and
+            # `aria-code -p` exited 1 a few seconds in: three of nine eval tasks
+            # on the first Vertex runs, different ones each time. The same
+            # request usually succeeds when sent again, so it is, up to twice,
+            # and if it is still empty the finish reason goes into the error.
             full_response = ""
             usage = {}
             tool_calls = []
-            
-            async for chunk in response_stream:
-                if cancel_event and cancel_event.is_set():
-                    yield LLMDone(response=full_response, provider="vertexai", success=True, cancelled=True)
-                    return
-                    
-                if chunk.text:
-                    full_response += chunk.text
-                    yield LLMToken(text=chunk.text)
-                    
-                if chunk.function_calls:
-                    for fc in chunk.function_calls:
-                        args = {k: v for k, v in fc.args.items()} if fc.args else {}
-                        yield LLMToolCall(tool=fc.name, params=args)
-                        tool_calls.append({"tool": fc.name, "params": args})
-                        
-                if chunk.usage_metadata:
-                    usage = {
-                        "prompt_tokens": chunk.usage_metadata.prompt_token_count,
-                        "completion_tokens": chunk.usage_metadata.candidates_token_count,
-                    }
-                    
+            finish_reasons: list = []
+            for attempt in range(1 + _EMPTY_ROUND_RETRIES):
+                response_stream = await client.aio.models.generate_content_stream(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                )
+                async for chunk in response_stream:
+                    if cancel_event and cancel_event.is_set():
+                        yield LLMDone(response=full_response, provider="vertexai", success=True, cancelled=True)
+                        return
+
+                    text = _chunk_text(chunk)
+                    if text:
+                        full_response += text
+                        yield LLMToken(text=text)
+
+                    if chunk.function_calls:
+                        for fc in chunk.function_calls:
+                            args = {k: v for k, v in fc.args.items()} if fc.args else {}
+                            yield LLMToolCall(tool=fc.name, params=args)
+                            tool_calls.append({"tool": fc.name, "params": args})
+
+                    for candidate in (getattr(chunk, "candidates", None) or []):
+                        reason = getattr(candidate, "finish_reason", None)
+                        if reason:
+                            finish_reasons.append(str(getattr(reason, "name", reason)))
+
+                    if chunk.usage_metadata:
+                        usage = {
+                            "prompt_tokens": chunk.usage_metadata.prompt_token_count,
+                            "completion_tokens": chunk.usage_metadata.candidates_token_count,
+                        }
+                if full_response.strip() or tool_calls:
+                    break
+                logger.info("Vertex returned an empty round (finish_reason %s), attempt %d",
+                            finish_reasons[-1:] or "none", attempt + 1)
+                if attempt < _EMPTY_ROUND_RETRIES:
+                    finish_reasons = []
+
+            if not full_response.strip() and not tool_calls:
+                reason = finish_reasons[-1] if finish_reasons else "none"
+                yield LLMDone(
+                    response="", provider="vertexai", success=False,
+                    error=f"empty_response (Vertex finish_reason {reason} after "
+                          f"{1 + _EMPTY_ROUND_RETRIES} attempts)",
+                )
+                return
+
             yield LLMDone(
                 response=full_response,
                 tool_calls_pending=tool_calls,
@@ -308,7 +363,7 @@ class VertexAIProvider(LLMProvider):
                 success=True,
                 cancelled=False,
             )
-            
+
         except APIError as e:
             yield LLMDone(response="", provider="vertexai", success=False, error=f"Vertex AI API Error: {e.message}")
         except Exception as e:
