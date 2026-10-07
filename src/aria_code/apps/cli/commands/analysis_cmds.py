@@ -165,6 +165,7 @@ class AnalysisCommandsMixin:
             return
 
         loop = _asyncio.get_event_loop()
+        _lang = "zh" if str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh") else "en"
 
         if region in ("us", "all"):
             if self.context.has_rich:
@@ -172,7 +173,8 @@ class AnalysisCommandsMixin:
                     r = await loop.run_in_executor(None, lambda: get_us_macro(indicator if region == "us" else "all"))
             else:
                 r = get_us_macro(indicator if region == "us" else "all")
-            _render_macro_result(r, "🇺🇸 美国宏观")
+            # No flag emoji: they measure one cell short and broke the rule line.
+            _render_macro_result(r, ui_text(self, "美国宏观", "US macro"), lang=_lang)
 
         if region in ("cn", "all"):
             if self.context.has_rich:
@@ -180,7 +182,7 @@ class AnalysisCommandsMixin:
                     r_cn = await loop.run_in_executor(None, lambda: get_cn_macro(indicator if region == "cn" else "all"))
             else:
                 r_cn = get_cn_macro(indicator if region == "cn" else "all")
-            _render_macro_result(r_cn, "🇨🇳 中国宏观")
+            _render_macro_result(r_cn, ui_text(self, "中国宏观", "China macro"), lang=_lang)
 
         if region in ("rates", "all"):
             if self.context.has_rich:
@@ -188,7 +190,7 @@ class AnalysisCommandsMixin:
                     r_rates = await loop.run_in_executor(None, get_central_bank_rates)
             else:
                 r_rates = get_central_bank_rates()
-            _render_cb_rates(r_rates)
+            _render_cb_rates(r_rates, lang=_lang)
 
         if region == "calendar":
             if self.context.has_rich:

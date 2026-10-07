@@ -14,7 +14,7 @@ class ChatTurnMixin:
     """send_message for ArtheraTerminal."""
 
     async def send_message(self, message: str, system_override: Optional[str] = None,
-                           evidence_grounded: bool = False):
+                           evidence_grounded: bool = False, route_text: bool = False):
         """Send message to Aria AI with agentic tool loop, smart fallback, markdown."""
         if getattr(self, "_streaming", False):
             is_zh = str(self.config.get("ui_lang", "en")).lower().startswith("zh")
@@ -103,8 +103,12 @@ class ChatTurnMixin:
                 }
                 _show_market_choices(mention, candidates)
                 return
+        # Only what the person typed is routed to a command. A prompt a command
+        # built and sent here was routed too: /report's "为 MSFT 生成一份专业
+        # Markdown 投研报告" matched the report route and ran /report again.
         if (
-            not system_override
+            route_text
+            and not system_override
             and self._pending_image is None
             and not (self._file_session is not None and self._file_session.get_active() is not None)
             and self._project_session is None

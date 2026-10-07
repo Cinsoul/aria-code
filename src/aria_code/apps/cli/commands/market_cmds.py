@@ -1056,7 +1056,7 @@ class MarketCommandsMixin:
                         info = tickers.tickers[sym].fast_info
                         price     = getattr(info, "last_price", None) or 0
                         mktcap    = getattr(info, "market_cap", None) or 0
-                        pe        = getattr(info, "pe_ratio", None)
+                        pe        = None   # filled below: fast_info has no P/E
                         yr_return = getattr(info, "year_change", None)
                         rows.append({
                             "symbol": sym, "price": price,
@@ -1065,17 +1065,31 @@ class MarketCommandsMixin:
                         })
                     except Exception:
                         pass
+                # fast_info has no pe_ratio, so P/E was blank for every row and
+                # the "value" screen (P/E 5-20) never matched anything. info has
+                # trailingPE; fetched in parallel, one request per symbol.
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _pe(row):
+                    try:
+                        value = tickers.tickers[row["symbol"]].info.get("trailingPE")
+                        row["pe"] = float(value) if value else None
+                    except Exception:
+                        row["pe"] = None
+                with ThreadPoolExecutor(max_workers=10) as pool:
+                    list(pool.map(_pe, rows))
                 return rows
             except Exception as _e:
                 logger.debug("screen US fetch error: %s", _e)
                 return []
 
         if self.context.has_rich:
-            _status_msg = f"[dim]筛选 {len(_US_POOL)} 只美股 ({criteria or 'top market cap'})…[/dim]"
+            _status_msg = "[dim]" + ui_text(self, f"筛选 {len(_US_POOL)} 只美股 ({criteria or '按市值'})…",
+                                            f"Screening {len(_US_POOL)} US stocks ({criteria or 'by market cap'})…") + "[/dim]"
             with self.context.console.status(_status_msg, spinner="dots"):
                 rows = await _loop.run_in_executor(None, _fetch_pool)
         else:
-            print("  筛选美股中…")
+            print("  " + ui_text(self, "筛选美股中…", "Screening US stocks…"))
             rows = await _loop.run_in_executor(None, _fetch_pool)
 
         if not rows:
@@ -1098,19 +1112,21 @@ class MarketCommandsMixin:
         rows = rows[:15]
 
         if not rows:
-            msg = f"[yellow]当前条件 '{criteria}' 无匹配标的（池: {len(_US_POOL)} 只）[/yellow]"
+            msg = "[yellow]" + ui_text(self, f"当前条件 '{criteria}' 无匹配标的（池: {len(_US_POOL)} 只）",
+                                       f"Nothing matches '{criteria}' (pool: {len(_US_POOL)} stocks)") + "[/yellow]"
             self.context.console.print(msg) if self.context.has_rich else print(msg.replace("[yellow]","").replace("[/yellow]",""))
             return
 
         if self.context.has_rich:
             from rich.table import Table as _Tbl
-            t = _Tbl(title=f"美股筛选  {criteria or 'large-cap'}  共 {len(rows)} 只",
+            t = _Tbl(title=ui_text(self, f"美股筛选  {criteria or 'large-cap'}  共 {len(rows)} 只",
+                                   f"US screen  {criteria or 'large-cap'}  {len(rows)} stocks"),
                      show_header=True, box=None, padding=(0, 1))
-            t.add_column("代码",      style="bold", width=8)
-            t.add_column("价格",      justify="right")
-            t.add_column("市值(B$)",  justify="right", style="dim")
-            t.add_column("PE",        justify="right", style="dim")
-            t.add_column("年涨跌%",   justify="right")
+            t.add_column(ui_text(self, "代码", "Symbol"), style="bold", width=8)
+            t.add_column(ui_text(self, "价格", "Price"), justify="right")
+            t.add_column(ui_text(self, "市值(B$)", "Mkt cap ($B)"), justify="right", style="dim")
+            t.add_column(ui_text(self, "市盈率", "P/E (ttm)"), justify="right", style="dim")
+            t.add_column(ui_text(self, "年涨跌%", "1y %"), justify="right")
             for r in rows:
                 yr  = r.get("yr_return")
                 yr_s = f"{yr*100:+.1f}%" if yr is not None else "—"
@@ -1124,7 +1140,9 @@ class MarketCommandsMixin:
                     f"[{yr_color}]{yr_s}[/{yr_color}]",
                 )
             self.context.console.print(t)
-            self.context.console.print(f"  [dim]来源: yfinance · 池: {len(_US_POOL)} 只大市值美股[/dim]")
+            self.context.console.print("  [dim]" + ui_text(self, f"来源: yfinance · 池: {len(_US_POOL)} 只大市值美股",
+                                                          f"Source: yfinance · pool: {len(_US_POOL)} large-cap US stocks")
+                                       + "[/dim]")
         else:
             print(f"  美股筛选  {criteria}")
             for r in rows:
