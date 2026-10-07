@@ -170,7 +170,7 @@ def _mask(line: str) -> str:
     return _SECRET.sub(repl, line)
 
 
-def _log_tail(log: str, lines: int = 15) -> list:
+def _log_tail(log: str, lines: int = 23) -> list:
     """The last lines of a task's log, secret-shaped values masked."""
     kept = [line.rstrip() for line in str(log or "").splitlines() if line.strip()]
     return [_mask(line)[:300] for line in kept[-lines:]]
@@ -603,9 +603,21 @@ def run_task(
         detail = f"`{task.verify}` exited {after_code}"
         if not changed:
             detail += " — the agent changed nothing"
+        # The check's output says what is wrong; the agent's last words say
+        # what it thought it did. inventory-reorder failed twice on "reorder.json
+        # was not written" with nothing to show whether the agent computed the
+        # policy and only reported it, or never got that far.
+        agent_said = "\n".join(
+            part for part in (str(getattr(outcome, "stdout", "") or ""), str(getattr(outcome, "stderr", "") or ""))
+            if part.strip()
+        )
+        agent_tail = "\n".join([line for line in agent_said.splitlines() if line.strip()][-8:])
+        log = _trim(after_log)
+        if agent_tail:
+            log = f"{log}\n--- agent, last lines ---\n{agent_tail}"
         return _result(
             FAIL, exit_code=after_code, detail=detail,
-            log=_trim(after_log), changed=changed,
+            log=log, changed=changed,
         )
     finally:
         if not keep_workspace and scratch_root is None:
