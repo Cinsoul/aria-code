@@ -17,6 +17,7 @@ or a command's token have no place in a CI log.
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, TextIO
 
@@ -30,7 +31,52 @@ def json_safe(value: Any) -> Any:
     return json.loads(json.dumps(value, ensure_ascii=False, default=str))
 
 
+RESULT_CHARS = 20_000
+
+
+def _full() -> bool:
+    """ARIA_EVENTS_FULL=1: keep whole parameters and tool results (eval trajectories).
+
+    The default view is for logs and CI: short, file bodies by size. A
+    trajectory to learn from needs what was written and what came back.
+    """
+    import os
+
+    return os.environ.get("ARIA_EVENTS_FULL", "").strip() in ("1", "true", "yes")
+
+
+_SECRET = re.compile(
+    r"(?i)\b(api[_-]?key|token|password|passwd|secret)(\s*[=:]\s*)[^\s'\"]+"
+    r"|\b(bearer|basic)(\s+)[A-Za-z0-9._~+/=-]+"
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|\bgh[pousr]_[A-Za-z0-9]{12,}|\bAIza[0-9A-Za-z_-]{20,}"
+    r"|\bya29\.[0-9A-Za-z_-]+"
+)
+
+
+def _mask_text(text: str) -> str:
+    """Secret-shaped values masked; whitespace, indentation and newlines kept."""
+    def repl(match: "re.Match") -> str:
+        if match.group(1):
+            return f"{match.group(1)}{match.group(2)}***"
+        if match.group(3):
+            return f"{match.group(3)}{match.group(4)}***"
+        return "***"
+    return _SECRET.sub(repl, str(text))
+
+
+def _mask_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _mask_text(value)
+    if isinstance(value, dict):
+        return {k: _mask_value(v) for k, v in value.items() if not str(k).startswith("_")}
+    if isinstance(value, list):
+        return [_mask_value(v) for v in value]
+    return value
+
+
 def _param_view(params: dict) -> dict:
+    if _full():
+        return _mask_value(json_safe(dict(params or {})))
     view = {}
     for key, value in (params or {}).items():
         if str(key).startswith("_"):
@@ -77,6 +123,10 @@ class ExecEvents:
         for key in ("exit_code", "path", "process_id", "change_id"):
             if key in data:
                 fields[key] = data[key]
+        if _full():
+            masked = _mask_value(json_safe(result))
+            body = json.dumps(masked, ensure_ascii=False)
+            fields["result"] = masked if len(body) <= RESULT_CHARS else body[:RESULT_CHARS] + "…"
         self.emit("tool.completed", **fields)
 
 

@@ -14,6 +14,7 @@ catches it on the commit that caused it rather than a month later.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -47,6 +48,48 @@ class _TimedOut:
         self.stdout = ""
 
 
+class Trajectories:
+    """Each attempt's events as JSONL, closed with the outcome the check gave.
+
+    The material a model learns an agent's job from is the sequence, not the
+    final answer: which file it read, what it ran, what came back, what it
+    changed, and whether the check then passed. `-p --format jsonl` already
+    emits that; this keeps one file per task attempt and, once the suite is
+    scored, appends an `eval.outcome` line, so passing runs can be selected.
+    """
+
+    def __init__(self, root: Path, suite: str, model: str) -> None:
+        self.root = Path(root) / suite
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.model = model
+        self._files: dict[str, list[Path]] = {}
+
+    def record(self, task_id: str, prompt: str, stdout: str) -> Path:
+        attempt = len(self._files.get(task_id, [])) + 1
+        path = self.root / f"{task_id}-{attempt}.jsonl"
+        header = json.dumps({"type": "eval.task", "task_id": task_id, "attempt": attempt,
+                             "model": self.model, "prompt": prompt}, ensure_ascii=False)
+        body = "\n".join(line for line in str(stdout or "").splitlines() if line.startswith("{"))
+        path.write_text(header + "\n" + (body + "\n" if body else ""), encoding="utf-8")
+        self._files.setdefault(task_id, []).append(path)
+        return path
+
+    def close(self, results) -> None:
+        """Append each attempt's outcome, in the order the attempts ran."""
+        seen: dict[str, int] = {}
+        for result in results:
+            files = self._files.get(result.task_id, [])
+            index = seen.get(result.task_id, 0)
+            seen[result.task_id] = index + 1
+            if index >= len(files):
+                continue
+            line = json.dumps({"type": "eval.outcome", "outcome": result.outcome, "detail": result.detail,
+                               "changed": list(result.changed), "seconds": round(result.seconds, 2)},
+                              ensure_ascii=False)
+            with files[index].open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+
+
 def check_only_solver(prompt: str, workspace: Path) -> None:
     """A solver that does nothing, so only the pre-flight is exercised.
 
@@ -56,7 +99,8 @@ def check_only_solver(prompt: str, workspace: Path) -> None:
     return None
 
 
-def build_agent_solver(*, model: str = "", timeout: int = 900, local: bool = False):
+def build_agent_solver(*, model: str = "", timeout: int = 900, local: bool = False,
+                       trajectories: "Trajectories | None" = None):
     """Drive the real Aria agent over one task, in the task's own workspace.
 
     The agent is invoked as a subprocess in headless mode rather than in this
@@ -79,19 +123,31 @@ def build_agent_solver(*, model: str = "", timeout: int = 900, local: bool = Fal
             "--dangerously-skip-permissions",
             "--no-banner",
         ]
+        if trajectories is not None:
+            # One JSON event per tool call on stdout; the screen output stays
+            # on stderr, which is what a failed task's log tail shows.
+            command.extend(["--format", "jsonl"])
         if model:
             command.extend(["--model", model])
         if local:
             command.append("--local")
         try:
-            return subprocess.run(
+            env = None
+            if trajectories is not None:
+                import os
+                env = {**os.environ, "ARIA_EVENTS_FULL": "1"}
+            done = subprocess.run(
                 command,
                 cwd=str(workspace),
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 check=False,
+                env=env,
             )
+            if trajectories is not None:
+                trajectories.record(workspace.name, prompt, done.stdout)
+            return done
         except subprocess.TimeoutExpired:
             # A truncated run is not a measured failure.
             #
@@ -137,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="run the suite N times; pass@1 is then passes/attempts (default 1)")
     parser.add_argument("--report", default="", help="write the scoreboard to this JSON path")
     parser.add_argument("--keep", action="store_true", help="keep task workspaces for inspection")
+    parser.add_argument("--trajectories", default="",
+                        help="write each attempt's events (JSONL) and outcome under this folder")
     parser.add_argument("--scratch", default="", help="scratch root (implies --keep)")
     args = parser.parse_args(argv)
 
@@ -155,8 +213,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"suite {name} has no tasks", file=sys.stderr)
         return 2
 
+    trajectories = (Trajectories(Path(args.trajectories), name, args.model)
+                    if args.trajectories and not args.check else None)
     solver = check_only_solver if args.check else build_agent_solver(
-        model=args.model, timeout=args.solve_timeout, local=args.local,
+        model=args.model, timeout=args.solve_timeout, local=args.local, trajectories=trajectories,
     )
     mode = "pre-flight only" if args.check else f"agent{f' ({args.model})' if args.model else ''}"
     print(f"\n{name} — {len(tasks)} task(s), {mode}\n")
@@ -182,6 +242,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             suite.merge(run)
     assert suite is not None
+    if trajectories is not None:
+        trajectories.close(suite.results)
+        print(f"trajectories → {trajectories.root}")
 
     print(f"\n{suite.summary_line()}")
     if repeats > 1:

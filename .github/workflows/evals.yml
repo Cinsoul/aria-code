@@ -85,9 +85,9 @@ jobs:
         if: env.READY == 'true'
         run: |
           python -m aria_code.evals.runner evals/suites/core.yaml --model "$MODEL" \
-            --solve-timeout 600 --report evals-core.json || true
+            --solve-timeout 600 --report evals-core.json --trajectories trajectories || true
           python -m aria_code.evals.runner evals/suites/operations.yaml --model "$MODEL" \
-            --solve-timeout 600 --report evals-operations.json || true
+            --solve-timeout 600 --report evals-operations.json --trajectories trajectories || true
 
       - name: Scoreboard
         if: env.READY == 'true'
@@ -100,5 +100,7 @@ jobs:
         if: always() && env.READY == 'true'
         with:
           name: eval-reports
-          path: evals-*.json
+          path: |
+            evals-*.json
+            trajectories/
           if-no-files-found: warn
