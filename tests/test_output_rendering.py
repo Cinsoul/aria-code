@@ -385,7 +385,8 @@ def test_report_markdown_prompt_omits_na_placeholders(monkeypatch, tmp_path):
 
     class FakeTerminal:
         conversation = [{"role": "assistant", "content": "# Report\nok"}]
-        config = {}
+        # The report prompt follows ui_lang; this test checks the Chinese labels.
+        config = {"ui_lang": "zh"}
 
         async def send_message(self, prompt):
             prompts.append(prompt)

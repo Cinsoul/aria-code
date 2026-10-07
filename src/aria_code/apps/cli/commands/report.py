@@ -273,24 +273,29 @@ def metric_line(label: str, value: Any, digits: int = 2, suffix: str = "") -> st
     return f"- {label}: {rendered}" if rendered != "-" else ""
 
 
-def markdown_data_block(market_data: dict[str, Any]) -> str:
+def markdown_data_block(market_data: dict[str, Any], lang: str = "zh") -> str:
+    en = lang == "en"
     data_lines = [
-        metric_line("当前价", market_data.get("price")),
-        metric_line("涨跌", market_data.get("change_pct"), suffix="%"),
+        metric_line("Price" if en else "当前价", market_data.get("price")),
+        metric_line("Change" if en else "涨跌", market_data.get("change_pct"), suffix="%"),
         metric_line("RSI(14)", market_data.get("rsi")),
         metric_line("MACD", market_data.get("macd"), digits=4),
         metric_line("MA20", market_data.get("ma20")),
         metric_line("MA60", market_data.get("ma60")),
-        metric_line("布林上轨", market_data.get("bb_upper")),
-        metric_line("布林下轨", market_data.get("bb_lower")),
+        metric_line("Bollinger upper" if en else "布林上轨", market_data.get("bb_upper")),
+        metric_line("Bollinger lower" if en else "布林下轨", market_data.get("bb_lower")),
     ]
     data_block = "\n".join(line for line in data_lines if line)
     if data_block:
         return data_block
+    if en:
+        return ("- Live market data is unavailable; the report must state this limitation and must not "
+                "invent prices or indicators.")
     return "- 实时行情数据暂不可用；报告必须明确说明数据限制，不得编造价格或指标。"
 
 
-def markdown_provenance_block(data_quality: dict[str, Any], data_bundle: Any = None) -> str:
+def markdown_provenance_block(data_quality: dict[str, Any], data_bundle: Any = None, lang: str = "zh") -> str:
+    en = lang == "en"
     provider_chain = (
         data_quality.get("providers")
         or getattr(data_bundle, "provider_chain", [])
@@ -301,16 +306,26 @@ def markdown_provenance_block(data_quality: dict[str, Any], data_bundle: Any = N
         or data_quality.get("missing_fields")
         or []
     )
+    status = data_quality.get('status', getattr(data_bundle, 'status', 'unknown') if data_bundle else 'unknown')
+    labels = (("Data status", "Stale", "Provider chain", "Missing fields") if en
+              else ("数据状态", "是否过期", "数据源链", "缺失字段"))
     lines = [
-        f"- 数据状态: {data_quality.get('status', getattr(data_bundle, 'status', 'unknown') if data_bundle else 'unknown')}",
-        f"- 是否过期: {'yes' if data_quality.get('stale') else 'no'}",
-        f"- 数据源链: {', '.join(provider_chain) if provider_chain else 'unknown'}",
-        f"- 缺失字段: {', '.join(missing_fields) if missing_fields else 'none'}",
+        f"- {labels[0]}: {status}",
+        f"- {labels[1]}: {'yes' if data_quality.get('stale') else 'no'}",
+        f"- {labels[2]}: {', '.join(provider_chain) if provider_chain else 'unknown'}",
+        f"- {labels[3]}: {', '.join(missing_fields) if missing_fields else 'none'}",
     ]
     return "\n".join(lines)
 
 
-def report_depth_description(report_type: str) -> str:
+def report_depth_description(report_type: str, lang: str = "zh") -> str:
+    if lang == "en":
+        if report_type == "deep":
+            return ("deep edition (about 8 pages): valuation (DCF and relative), three years of P&L, "
+                    "management, and the competitive landscape")
+        if report_type == "brief":
+            return "brief edition: one page, the core view, key numbers and a one-sentence conclusion"
+        return "standard edition: cover, technical analysis, fundamentals overview, risk factors"
     if report_type == "deep":
         return "深度（8页）版本：包含估值模型（DCF + 相对估值）、财务分析（3年P&L）、管理层分析、行业竞争格局"
     if report_type == "brief":
@@ -326,11 +341,35 @@ def build_markdown_report_prompt(
     data_quality: dict[str, Any],
     data_bundle: Any = None,
     now: datetime | None = None,
+    lang: str = "zh",
 ) -> str:
+    """The prompt for a Markdown research report, in the session's language.
+
+    It was Chinese only, ending "用中文输出": an English session got a Chinese
+    report, and when the model was unavailable the fallback analysis followed
+    the prompt into Chinese too.
+    """
     report_date = (now or datetime.now()).strftime("%Y-%m-%d")
-    data_block = markdown_data_block(market_data)
-    provenance_block = markdown_provenance_block(data_quality, data_bundle)
-    depth = report_depth_description(report_type)
+    data_block = markdown_data_block(market_data, lang)
+    provenance_block = markdown_provenance_block(data_quality, data_bundle, lang)
+    depth = report_depth_description(report_type, lang)
+    if lang == "en":
+        return (
+            f"Write a professional Markdown research report on {symbol} ({depth}).\n\n"
+            f"**Live data (use only the fields below; do not fill in missing ones)**:\n"
+            f"{data_block}\n\n"
+            f"**Data quality (state it plainly in the report)**:\n"
+            f"{provenance_block}\n\n"
+            f"Report structure (Markdown):\n"
+            f"# {symbol} Research Report\n"
+            f"**Rating**: Buy/Neutral/Reduce  **Target price**: X.XX  **Date**: {report_date}\n\n"
+            f"## Key points\n"
+            f"## Technical analysis\n"
+            f"## Fundamentals\n"
+            f"## Risk factors\n"
+            f"## Recommendation\n\n"
+            f"Use the real data, no placeholders; where data is missing, say what is missing. Write in English."
+        )
     return (
         f"为 {symbol} 生成一份专业 Markdown 投研报告（{depth}）。\n\n"
         f"**实时数据（仅使用下列已返回字段；缺失字段不要补写）**：\n"
