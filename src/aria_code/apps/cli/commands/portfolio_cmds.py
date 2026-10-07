@@ -431,6 +431,7 @@ class PortfolioCommandsMixin:
                 data_quality=data_quality,
                 data_bundle=data_bundle,
                 now=_dt.now(),
+                lang=ui_text(self, "zh", "en"),
             )
 
             await self.terminal.send_message(ai_prompt)
