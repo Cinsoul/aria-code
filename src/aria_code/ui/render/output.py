@@ -281,17 +281,23 @@ def error_hint(error: str, context: str = "") -> str:
         "http://", "https://", "www.", ".com", ".org", ".net",
         "web_fetch", "web fetch", "forbidden",
     ))
-    if "401" in err_lower or "unauthorized" in err_lower:
+    def code(n: str) -> bool:
+        # A status code as a number of its own: "1500 bars" is not a 500.
+        return re.search(rf"(?<!\d){n}(?!\d)", err_lower) is not None
+
+    if code("401") or "unauthorized" in err_lower:
         if any(h in err_lower for h in ("finnhub", "alphavantage", "polygon", "api/v1", "api/v2/finance")):
             return "Hint: API key required — /apikey set finnhub <KEY>  (free at finnhub.io)"
         if _is_web:
             return "Hint: This site blocks automated access (paywall/anti-bot). Try another source."
         return "Hint: Authentication required. Run /login to sign in."
-    if "403" in err_lower or "forbidden" in err_lower:
+    if code("403") or "forbidden" in err_lower:
         if _is_web:
             return "Hint: This site blocks automated access (paywall/anti-bot). Try another source."
         return "Hint: Access denied. Check your API key or subscription."
-    if "429" in err_lower or "rate" in err_lower:
+    # "rate" alone matched strategy, generate and separate: "Unknown strategy"
+    # came with "Rate limited. Wait a moment and try again."
+    if code("429") or re.search(r"rate[\s_-]?limit|too many requests", err_lower):
         return "Hint: Rate limited. Wait a moment and try again."
     if ("ollama" in err_lower or "ollama http" in err_lower) and (
         "not found" in err_lower or "404" in err_lower
@@ -319,15 +325,15 @@ def error_hint(error: str, context: str = "") -> str:
     if "file not found" in err_lower or "no such file" in err_lower:
         return ("Hint: This file does not exist. Do NOT guess other filenames — "
                 "list the directory first, or this question may not need a file at all.")
-    if "404" in err_lower and context == "tool":
+    if code("404") and context == "tool":
         return "Hint: Tool not available. Check /tools for available tools."
     if "not found" in err_lower and context == "session":
         return "Hint: Session not found. Run /sessions to list available."
-    if "404" in err_lower or ("not found" in err_lower and context not in ("tool", "")):
+    if code("404") or ("not found" in err_lower and context not in ("tool", "")):
         return "Hint: Resource not found. Check the symbol or path."
     if "no data" in err_lower or "no result" in err_lower:
         return "Hint: No data returned. Verify the symbol spelling."
-    if "500" in err_lower or "internal" in err_lower:
+    if code("500") or "internal server" in err_lower:
         return "Hint: Server error. Try again in a moment or /health to check."
     if context == "login":
         return "Hint: Check email/password. Usage: /login email password"
@@ -353,6 +359,11 @@ def print_hanging(console, prefix: str, text: str, style: str = "") -> None:
     console.print(grid)
 
 
+# The contexts error_hint() understands; anything else given is a hint to show.
+ERROR_CONTEXTS = frozenset({"", "tool", "login", "session", "screenshot", "vision", "browser",
+                            "browser screenshot", "deep"})
+
+
 def print_error(
     msg: str,
     context: str = "",
@@ -362,7 +373,15 @@ def print_error(
     rich_box=None,
     use_panel: bool = False,
 ) -> None:
-    hint = error_hint(msg, context)
+    # The second argument is either where the error came from ("tool",
+    # "login"), from which a hint is guessed, or the hint itself. Most callers
+    # pass the hint: "请先用 /broker add 添加", "Usage: /compare SYMBOL …",
+    # "Install: pip install mss pillow". It was taken for a context and never
+    # shown, and a guess took its place.
+    if str(context or "").strip().lower() in ERROR_CONTEXTS:
+        hint = error_hint(msg, context)
+    else:
+        hint = str(context)
     if not use_panel:
         # Claude Code style: clean └ tree connector for inline error guidance
         if has_rich:
