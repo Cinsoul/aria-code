@@ -618,3 +618,28 @@ class RunResidueTests(HarnessBase):
             (workspace / "fixed.txt").write_text("x", encoding="utf-8")
 
         self.assertEqual(self._run(self._task(), solver).changed, ("fixed.txt",))
+
+
+class AgentTailTests(HarnessBase):
+    """A failed task's log ends with what the agent said, not only the check's output.
+
+    inventory-reorder failed twice on "reorder.json was not written", with
+    nothing showing whether the agent computed the policy and only reported it.
+    """
+
+    def test_a_failed_task_keeps_the_agents_last_lines(self):
+        from types import SimpleNamespace
+
+        _fixture(self.fixtures, "broken", {"check.py": _GUARD})
+        said = SimpleNamespace(returncode=0, stdout="Computed reorder points for 6 SKUs.\nA100: order 335",
+                               stderr="")
+        result = self._run(self._task(), lambda p, w: said)
+        self.assertEqual(result.outcome, FAIL)
+        self.assertIn("--- agent, last lines ---", result.log)
+        self.assertIn("A100: order 335", result.log)
+        self.assertIn("A100: order 335", result.to_dict()["log_tail"][-1])
+
+    def test_a_silent_agent_adds_nothing(self):
+        _fixture(self.fixtures, "broken", {"check.py": _GUARD})
+        result = self._run(self._task(), lambda p, w: None)
+        self.assertNotIn("--- agent", result.log)
