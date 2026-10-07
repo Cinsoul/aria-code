@@ -45,14 +45,34 @@ class BusinessWorkflowCommandsMixin:
         await self.cmd_team(f"{sym} --full")
 
     async def cmd_earnings_workflow(self, args: str):
+        """/earnings SYMBOL — the earnings themselves; --report writes the Markdown report."""
         parts = args.strip().split()
-        sym = parts[0].upper() if parts else "AAPL"
-        period = " ".join(parts[1:]) if len(parts) > 1 else "最近一个季度"
-        report_type = "deep" if any(k in period.lower() for k in ("deep", "深度", "全年", "年报", "10-k")) else "standard"
-        # Earnings review is a report workflow, not a code-generation prompt.
-        # The report command already fetches market data, records provenance,
-        # asks the model for the narrative, and saves the Markdown artifact.
-        await self.cmd_report(f"{sym} --format md --type {report_type}")
+        sym = next((t.upper() for t in parts if not t.startswith("--")), "AAPL")
+        if "--report" in parts:
+            period = " ".join(t for t in parts[1:] if not t.startswith("--")) or "最近一个季度"
+            report_type = "deep" if any(k in period.lower() for k in ("deep", "深度", "全年", "年报", "10-k")) else "standard"
+            await self.cmd_report(f"{sym} --format md --type {report_type}")
+            return
+        from aria_code.apps.cli.earnings_view import fetch_earnings, render_earnings
+
+        lang = "zh" if str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh") else "en"
+        status = ui_text(self, f"获取 {sym} 财报数据", f"Fetching {sym} earnings")
+        if self.context.has_rich:
+            with self.context.console.status(f"[dim]{status}…[/dim]", spinner="dots"):
+                data = await asyncio.get_event_loop().run_in_executor(None, fetch_earnings, sym)
+        else:
+            data = await asyncio.get_event_loop().run_in_executor(None, fetch_earnings, sym)
+        if not data.get("success"):
+            from ._ui import print_error
+            print_error(self.context, data.get("error", "No earnings data"),
+                        ui_text(self, f"可以试试 /report {sym}", f"Try /report {sym} instead"))
+            return
+        if self.context.has_rich:
+            render_earnings(data, self.context.console, lang)
+        else:
+            for row in data.get("history", []):
+                print(f"  {row['date']}  est {row.get('estimate')}  actual {row['reported']}  "
+                      f"surprise {row.get('surprise_pct')}")
 
     async def cmd_asset_diag(self, args: str):
         asset_id = args.strip()
@@ -84,18 +104,13 @@ class BusinessWorkflowCommandsMixin:
         except Exception:
             pass
         if not asset_info:
-            p(self.context, "[dim]提示: 未找到资产数据，以 ID 作为位置标识演示（结果仅供参考）[/dim]")
-            asset_info = {
-                "location": asset_id,
-                "area": 0, "vacancy_days": 0,
-                "expected_rent": 0, "allowed_business": [],
-                "property_state": "正常",
-            }
+            self._realty_needs(asset_id, "Usage: /asset-diag <asset_id>")
+            return
         await self._run_realty_agent("asset_diagnosis", asset_id, {"asset_info": asset_info})
 
     async def cmd_contract_draft(self, args: str):
         parts = args.split() if args else []
-        project_id = parts[0] if parts else "demo_project"
+        project_id = parts[0] if parts and not parts[0].startswith("--") else ""
         nego = {"guaranteed_amount": 0, "revenue_share_pct": 0}
         for i, p in enumerate(parts):
             if p == "--guaranteed" and i + 1 < len(parts):
@@ -108,6 +123,12 @@ class BusinessWorkflowCommandsMixin:
                     nego["revenue_share_pct"] = float(parts[i + 1])
                 except ValueError:
                     pass
+        if not project_id or not (nego["guaranteed_amount"] or nego["revenue_share_pct"]):
+            from ._ui import print_error
+            print_error(self.context,
+                        ui_text(self, "起草合同需要项目 ID 和至少一项条款。", "A draft needs a project ID and at least one term."),
+                        "Usage: /contract-draft <project_id> --guaranteed 30000 --share 10")
+            return
         await self._run_realty_agent("contract_rules", project_id, {
             "negotiation": nego,
             "asset_info": {"name": project_id},
@@ -139,19 +160,21 @@ class BusinessWorkflowCommandsMixin:
         except Exception:
             pass
         if not rules:
-            p(self.context, f"[dim]未找到 {project_id} 的合同规则，使用默认值演示[/dim]")
-            rules = {"guaranteed_monthly": 30000, "revenue_share_pct": 10,
-                     "revenue_share_base": 0, "platform_fee_pct": 5,
-                     "risk_reserve_pct": 3, "settlement_cycle": "monthly"}
+            self._realty_needs(project_id, "Usage: /revenue-calc <project_id> <gross> [refunds]")
+            return
         await self._run_realty_agent("revenue_share", project_id, {
             "contract_rules": rules,
             "transaction_data": {"gross_revenue": gross, "refunds": refunds},
         })
 
     async def cmd_realty_risk_scan(self, args: str):
-        project_id = args.strip() or "demo_project"
+        project_id = args.strip()
+        if not project_id:
+            self._realty_needs(None, "Usage: /risk-scan <project_id>")
+            return
         if self.context.has_rich:
-            self.context.console.print(f"\n  [bold]风险扫描[/bold]  项目: [cyan]{project_id}[/cyan]")
+            self.context.console.print(f"\n  [bold]{ui_text(self, '风险扫描', 'Risk scan')}[/bold]  "
+                                       f"{ui_text(self, '项目', 'project')}: [cyan]{project_id}[/cyan]")
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
         try:
             import aiohttp
@@ -166,10 +189,15 @@ class BusinessWorkflowCommandsMixin:
                         return
         except Exception:
             pass
-        await self._run_realty_team(["cashflow_verify", "energy_anomaly", "fulfillment_risk"], project_id, {})
+        # Running the team on {} produced findings about a project it knew
+        # nothing of.
+        self._realty_needs(project_id, "Usage: /risk-scan <project_id>")
 
     async def cmd_ops_report(self, args: str):
-        project_id = args.strip() or "demo_project"
+        project_id = args.strip()
+        if not project_id:
+            self._realty_needs(None, "Usage: /ops-report <project_id>")
+            return
         api_url = self.terminal.config.get("api_url", "http://localhost:8000")
         project_info = {"name": project_id, "area": 0, "business_type": "未知"}
         performance_data = {}
@@ -203,7 +231,8 @@ class BusinessWorkflowCommandsMixin:
         except Exception:
             pass
         if not performance_data:
-            p(self.context, "[dim]提示: 未找到运营数据，建议先录入分账记录后再运行此命令[/dim]")
+            self._realty_needs(project_id, "Usage: /ops-report <project_id>")
+            return
         await self._run_realty_agent("ops_optimize", project_id, {
             "project_info": project_info,
             "performance_data": performance_data,
@@ -213,7 +242,11 @@ class BusinessWorkflowCommandsMixin:
 
     async def cmd_exit_calc(self, args: str):
         parts = args.split() if args else []
-        project_id = parts[0] if parts else "demo_project"
+        project_id = parts[0] if parts and not parts[0].startswith("--") else ""
+        if not project_id:
+            self._realty_needs(None, "Usage: /exit-calc <project_id> [--reason …]")
+            return
+        contract_loaded = False
         reason = "到期终止"
         for i, p in enumerate(parts):
             if p == "--reason" and i + 1 < len(parts):
@@ -254,6 +287,7 @@ class BusinessWorkflowCommandsMixin:
                             "guaranteed_monthly": ctr.get("guaranteed_monthly", 0),
                             "exit_penalty_months": ctr.get("exit_penalty_months", 3),
                         })
+                        contract_loaded = True
                         p(self.context, f"已加载合同规则: 保底 {ctr.get('guaranteed_monthly',0):,}元/月", "ok")
                 async with sess.get(
                     f"{api_url}/api/realty/invoices?project_id={project_id}&status=unpaid",
@@ -268,12 +302,35 @@ class BusinessWorkflowCommandsMixin:
                             p(self.context, f"发现未结账单合计: {unpaid:,.2f}元", "ok")
         except Exception:
             pass
+        if not contract_loaded:
+            self._realty_needs(project_id, "Usage: /exit-calc <project_id> [--reason …]")
+            return
         await self._run_realty_agent("exit_settlement", project_id, {
             "project_info": project_info,
             "financials": financials,
             "asset_condition": {},
             "exit_reason": reason,
         })
+
+    def _realty_needs(self, project_id: str | None, usage: str) -> bool:
+        """Say what is missing and return True when a realty command has nothing to work on.
+
+        These commands ran their agents on "demo_project", zeros or a made-up
+        contract (30,000 a month, 10% share) when the Arthera realty backend
+        had nothing, and the agent then gave a verdict: /ops-report called a
+        project with no data "very high risk" with "member repurchase rate
+        is low".
+        """
+        if project_id:
+            msg = ui_text(self, f"没有找到 {project_id} 的数据：这项功能读取 Arthera 不动产后端里的项目数据，"
+                                f"没有数据就不做分析。",
+                          f"No data found for {project_id}: this reads project data from the Arthera realty "
+                          f"backend and does not analyse without it.")
+        else:
+            msg = ui_text(self, "需要项目 ID。", "A project ID is needed.")
+        from ._ui import print_error
+        print_error(self.context, msg, usage)
+        return True
 
     async def _run_realty_agent(self, agent_name: str, project_id: str, input_data: dict):
         if self.context.has_rich:
