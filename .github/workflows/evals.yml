@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "Model id for the agent"
+        description: "Model id for the agent, e.g. google/gemini-3.5-flash or a Gemma id from Model Garden"
         default: "google/gemini-2.5-flash"
         required: false
 
@@ -46,7 +46,8 @@ jobs:
       READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
       MODEL: ${{ github.event.inputs.model || 'google/gemini-2.5-flash' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
-      GOOGLE_CLOUD_LOCATION: us-central1
+      # global: the Gemini 3 previews are served only there, and 2.5 is too.
+      GOOGLE_CLOUD_LOCATION: global
       GOOGLE_GENAI_USE_VERTEXAI: "true"
       ARIA_OFFLINE: "1"
     steps:
