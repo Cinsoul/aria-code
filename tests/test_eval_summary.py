@@ -54,3 +54,22 @@ def test_the_workflow_signs_in_without_a_key():
     assert any(u.startswith("google-github-actions/auth@") for u in uses)
     assert "GEMINI_API_KEY" not in open(".github/workflows/evals.yml").read()
     assert job["env"]["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
+
+
+def test_the_reason_a_task_did_not_pass_reaches_the_summary():
+    """The first CI run said only "the agent did not complete (exit 1)"; the reason was in the job log."""
+    from aria_code.evals.harness import ERROR, PASS, TaskResult
+
+    errored = TaskResult(task_id="stripe-refund-validation", outcome=ERROR, exit_code=1,
+                         detail="the agent did not complete (exit 1); check still red",
+                         log="starting\nAuthorization: Bearer abc.def\nVertex 400: INVALID_ARGUMENT")
+    passed = TaskResult(task_id="off-by-one", outcome=PASS, log="12 passed")
+    assert errored.to_dict()["log_tail"] == ["starting", "Authorization: ***", "Vertex 400: INVALID_ARGUMENT"]
+    assert passed.to_dict()["log_tail"] == []
+
+    report = dict(REPORT, results=[errored.to_dict(), passed.to_dict()], errored=1)
+    text, code = summarise([report])
+    assert code == 1
+    assert "<details><summary>stripe-refund-validation: last lines of the log</summary>" in text
+    assert "Vertex 400: INVALID_ARGUMENT" in text and "abc.def" not in text
+    assert "off-by-one: last lines" not in text

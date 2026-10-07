@@ -36,6 +36,12 @@ def summarise(reports: list[dict], model: str = "") -> tuple[str, int]:
             detail = str(result.get("detail") or "").replace("|", "\\|")[:120]
             lines.append(f"| {result.get('task_id')} | {result.get('outcome')} | "
                          f"{result.get('seconds', 0):.0f} | {detail} |")
+        for result in report.get("results", []):
+            tail = result.get("log_tail") or []
+            if tail and str(result.get("outcome", "")).lower() != "pass":
+                body = "\n".join(tail).replace("```", "` ` `")
+                lines += ["", f"<details><summary>{result.get('task_id')}: last lines of the log</summary>",
+                          "", "```", body, "```", "</details>"]
         by_tag = report.get("by_tag") or {}
         if by_tag:
             tags = ", ".join(f"{tag} {s['passed']}/{s['scored']}" for tag, s in by_tag.items() if s.get("scored"))
