@@ -34,7 +34,17 @@ class ChromeMixin:
             self._ollama_alive = bool(self._installed_models)
         except Exception:
             pass
-        if self._installed_models and current_id not in self._installed_models:
+        # Only a model this session would run on Ollama is paired. The check
+        # below it looks for a provider prefix, so a bare cloud id such as
+        # "gemini-3.8-flash" (with local_provider=vertex, or backend_chat on)
+        # read as a missing local model: it was replaced by whatever Ollama
+        # had installed — a 1.5B model — and the change saved to the config.
+        try:
+            from aria_code.apps.cli.providers.chat_routing import first_round_route
+            _runs_on_ollama = first_round_route(current_id, self.config, self.api_url) == "ollama"
+        except Exception:
+            _runs_on_ollama = False
+        if _runs_on_ollama and self._installed_models and current_id not in self._installed_models:
             _resolved = _pick_best_installed_model(self._installed_models, current_id)
             if _resolved:
                 self._auto_healed_from = current_id
