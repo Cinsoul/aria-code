@@ -11,6 +11,33 @@ on whichever module loaded last.
 
 from __future__ import annotations
 
+def _headless_approval(config: dict, auto_approve, always_allow):
+    """Answer approvals with what the operator granted up front, and nothing more.
+
+    ``auto_approve`` and ``always_allow`` are read at call time from the module
+    that is actually running (aria_cli, aria_code.aria_cli or __main__ under
+    ``python -m``), which is where --dangerously-skip-permissions and
+    --allow-tools set them.
+    """
+    from aria_code.runtime.approval import ApprovalDecision
+
+    def decide(tool_name: str, params: dict):
+        if not (auto_approve() or tool_name in (always_allow() or ())):
+            return ApprovalDecision.deny("no one is here to approve it; pass --allow-tools or "
+                                         "--dangerously-skip-permissions")
+        if tool_name == "run_command":
+            return ApprovalDecision.allow(policy=config.get("command_policy", "safe"), user_approved=True)
+        return ApprovalDecision.allow()
+
+    return decide
+
+
+def _apply_approval_decision(params: dict, decision) -> dict:
+    from aria_code.runtime.approval import apply_approval_decision
+
+    return apply_approval_decision(params, decision)
+
+
 class HeadlessMixin:
     """run_prompt, _run_prompt_turn, _finish_prompt and run_watch for ArtheraTerminal."""
 
@@ -138,6 +165,8 @@ class HeadlessMixin:
                 # already handles provider selection and cloud→Ollama fallback,
                 # which is what the two branches here were open-coding.
                 from aria_code.apps.cli.providers.runtime_bridge import run_chat_via_runtime
+                # This method runs on aria_cli's names; these two live here.
+                from aria_code.apps.cli.headless import _apply_approval_decision, _headless_approval
 
                 _turn = await run_chat_via_runtime(
                     prompt=prompt, history=[],
@@ -147,14 +176,19 @@ class HeadlessMixin:
                     thinking_mode=thinking_mode, user_context=user_context,
                     auth_token=auth_token, project_context=_PROJECT_CONTEXT,
                     max_rounds=int(self.config.get("max_rounds", 30) or 30),
-                    # No approval UI exists in headless mode. Leaving the confirm
-                    # set populated would block every write on a prompt nobody is
-                    # there to answer; the operator opts in with
-                    # --dangerously-skip-permissions or --allow-tools.
-                    confirm_tools=(
-                        frozenset() if _auto_approve_session
-                        else frozenset(_CONFIRM_TOOLS) - _session_always_allow
-                    ),
+                    # No approval UI exists in headless mode; the operator opts in
+                    # with --dangerously-skip-permissions or --allow-tools. Those
+                    # used to take the tools out of the confirm set, so no
+                    # approval ever happened — and an approval is what lets
+                    # run_command past the default "safe" policy (the REPL's
+                    # "allow" upgrades it to balanced). Every `python3 script.py`
+                    # was blocked: the evals' agents wrote scripts they could not
+                    # run, then computed by hand or stopped. Now the confirm set
+                    # stays, and the pre-approval answers it the way the REPL would.
+                    confirm_tools=frozenset(_CONFIRM_TOOLS),
+                    approval_callback=_headless_approval(
+                        self.config, lambda: _auto_approve_session, lambda: _session_always_allow),
+                    approval_applier=_apply_approval_decision,
                     on_tool_call=events.tool_started,
                     on_tool_result=events.tool_completed,
                     return_result=True,
