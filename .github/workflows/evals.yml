@@ -1,0 +1,103 @@
+# Weekly coding and operations evals with a real model, on Vertex AI.
+#
+# CI only runs the suites with --check (every fixture still starts red); no
+# model ever attempted them, so nothing tracked whether Aria can fix code.
+# This runs evals/suites/core.yaml and operations.yaml through `aria-code -p`
+# with a Gemini model on Vertex AI and publishes the scoreboard as the job
+# summary and an artifact.
+#
+# No API key: the job signs in to Google Cloud with Workload Identity
+# Federation (GitHub's OIDC token, exchanged for short-lived credentials), and
+# Aria uses Vertex AI whenever GOOGLE_CLOUD_PROJECT and application-default
+# credentials are present. It calls Vertex directly rather than the Arthera
+# backend because the backend does not pass Aria's tools to the model, and
+# these tasks need them. Set three repository variables (not secrets; they are
+# identifiers):
+#   GCP_PROJECT                      e.g. arthera-prod
+#   GCP_WORKLOAD_IDENTITY_PROVIDER   projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>
+#   GCP_EVAL_SERVICE_ACCOUNT         a service account with roles/aiplatform.user
+# Without them the job says so and stops.
+#
+# A task the model gets wrong is a result, not a red build; the job fails only
+# when a task could not run or no longer measures anything.
+
+name: Evals
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"   # Mondays 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model id for the agent"
+        default: "google/gemini-2.5-flash"
+        required: false
+
+permissions:
+  contents: read
+  id-token: write   # for Workload Identity Federation
+
+jobs:
+  evals:
+    name: Coding and operations evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
+      MODEL: ${{ github.event.inputs.model || 'google/gemini-2.5-flash' }}
+      GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
+      GOOGLE_CLOUD_LOCATION: us-central1
+      GOOGLE_GENAI_USE_VERTEXAI: "true"
+      ARIA_OFFLINE: "1"
+    steps:
+      - name: Needs Google Cloud access
+        if: env.READY != 'true'
+        run: |
+          echo "::notice::Set the GCP_PROJECT, GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_EVAL_SERVICE_ACCOUNT repository variables to run the evals on Vertex AI."
+          echo "Skipped: Google Cloud variables not set." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+        if: env.READY == 'true'
+
+      - name: Sign in to Google Cloud
+        if: env.READY == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_EVAL_SERVICE_ACCOUNT }}
+
+      - name: Set up Python
+        if: env.READY == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        if: env.READY == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pyyaml google-genai
+
+      - name: Run the suites
+        if: env.READY == 'true'
+        run: |
+          python -m aria_code.evals.runner evals/suites/core.yaml --model "$MODEL" \
+            --solve-timeout 600 --report evals-core.json || true
+          python -m aria_code.evals.runner evals/suites/operations.yaml --model "$MODEL" \
+            --solve-timeout 600 --report evals-operations.json || true
+
+      - name: Scoreboard
+        if: env.READY == 'true'
+        shell: bash   # -eo pipefail, so tee keeps the summary's exit code
+        run: |
+          python -m aria_code.evals.summary --model "$MODEL" evals-core.json evals-operations.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && env.READY == 'true'
+        with:
+          name: eval-reports
+          path: evals-*.json
+          if-no-files-found: warn
