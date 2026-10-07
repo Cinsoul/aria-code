@@ -38,7 +38,8 @@ async def test_research_routes_to_full_team_workflow_without_prompt_recursion():
 async def test_earnings_routes_to_markdown_report_workflow_without_prompt_recursion():
     harness = _WorkflowHarness()
 
-    await harness.cmd_earnings_workflow("msft 最近一个季度")
+    # /earnings shows earnings data; --report writes the Markdown report.
+    await harness.cmd_earnings_workflow("msft 最近一个季度 --report")
 
     assert harness.report_calls == ["MSFT --format md --type standard"]
     assert harness.terminal.prompts == []
@@ -48,6 +49,6 @@ async def test_earnings_routes_to_markdown_report_workflow_without_prompt_recurs
 async def test_earnings_deep_period_selects_deep_report_type():
     harness = _WorkflowHarness()
 
-    await harness.cmd_earnings_workflow("nvda 年报")
+    await harness.cmd_earnings_workflow("nvda 年报 --report")
 
     assert harness.report_calls == ["NVDA --format md --type deep"]

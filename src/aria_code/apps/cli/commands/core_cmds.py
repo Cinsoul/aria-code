@@ -1372,41 +1372,70 @@ class CoreCommandsMixin:
             }, "portfolio risk")
             return
 
-        # Try remote tool; fall back to local get_risk_metrics if backend unavailable
+        # Backend first, the local calculation if it is unavailable. The local
+        # tool returns its numbers at the top level, not under "data", so this
+        # printed the heading and nothing else; the backend's were printed as
+        # raw keys and fractions.
         result = await execute_aria_tool(self.terminal.api_url, "get_risk_metrics", {"symbol": target})
-        if result.get("success"):
-            data = result.get("data", {})
-            if self.context.has_rich:
-                self.context.console.print()
-                for k, v in (data.items() if isinstance(data, dict) else {}.items()):
-                    val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
-                    color = "green" if isinstance(v, float) and v >= 0 else ("red" if isinstance(v, float) and v < 0 else "")
-                    self.context.console.print(f"  [dim]{k.replace('_',' ').title():<24s}[/dim] [{color}]{val_str}[/{color}]" if color
-                                  else f"  [dim]{k.replace('_',' ').title():<24s}[/dim] {val_str}")
-                self.context.console.print()
-        elif "get_risk_metrics" in LOCAL_TOOLS:
-            # Local fallback
+        source = "backend"
+        if not result.get("success") and "get_risk_metrics" in LOCAL_TOOLS:
             local_fn = LOCAL_TOOLS["get_risk_metrics"][0]
-            local_result = await asyncio.get_event_loop().run_in_executor(None, local_fn, {"symbol": target})
-            if local_result.get("success"):
-                data = local_result.get("data", {})
-                if self.context.has_rich:
-                    self.context.console.print()
-                    self.context.console.print(f"  [bold]{target} Risk Metrics[/bold]  [dim](local calculation)[/dim]")
-                    self.context.console.print()
-                    for k, v in (data.items() if isinstance(data, dict) else {}.items()):
-                        val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
-                        self.context.console.print(f"  [dim]{k.replace('_',' ').title():<24s}[/dim] {val_str}")
-                    self.context.console.print()
-                else:
-                    print(f"  {target} Risk Metrics (local):")
-                    for k, v in (data.items() if isinstance(data, dict) else {}.items()):
-                        print(f"  {k}: {v}")
-            else:
-                self.context.console.print(f"[dim]Risk metrics unavailable for {target}: {local_result.get('error','')}[/dim]") if self.context.has_rich else print(f"Risk unavailable: {local_result.get('error','')}")
-        else:
-            msg = f"⚠ 风险指标服务暂不可用 ({result.get('error','')[:60]})"
-            self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
+            result = await asyncio.get_event_loop().run_in_executor(None, local_fn, {"symbol": target})
+            source = "local"
+        if not result.get("success"):
+            print_error(self.context,
+                        ui_text(self, f"{target} 风险指标暂不可用", f"Risk metrics unavailable for {target}"),
+                        str(result.get("error") or "")[:200])
+            return
+        data = result.get("data") if isinstance(result.get("data"), dict) else result
+        self._print_risk_metrics(target, data, source)
+
+    def _print_risk_metrics(self, target: str, d: dict, source: str) -> None:
+        """One labelled line per metric, percentages as percentages."""
+        zh = str(self.terminal.config.get("ui_lang", "en")).lower().startswith("zh")
+        conf = d.get("confidence_level") or 0.95
+        signed = lambda v: f"{float(v) * 100:+.2f}%" if isinstance(v, (int, float)) else "—"  # noqa: E731
+        pct = lambda v: f"{abs(float(v)) * 100:.2f}%" if isinstance(v, (int, float)) else "—"  # noqa: E731
+        plain = lambda v: f"{float(v):.2f}" if isinstance(v, (int, float)) else "—"  # noqa: E731
+        rows = [
+            (f"VaR {conf:.0%} · 1 天" if zh else f"VaR {conf:.0%} · 1 day", d.get("var_daily"), pct,
+             f"最差的 {1 - conf:.0%} 交易日里的跌幅" if zh else f"loss on the worst {1 - conf:.0%} of days"),
+            (f"VaR {conf:.0%} · 1 个月" if zh else f"VaR {conf:.0%} · 1 month", d.get("var_monthly"), pct, ""),
+            ("CVaR · 1 天" if zh else "CVaR · 1 day", d.get("cvar_daily"), pct,
+             "超出 VaR 那些天的平均跌幅" if zh else "average loss on days beyond the VaR"),
+            ("最大回撤" if zh else "Max drawdown", d.get("max_drawdown"), signed, ""),
+            ("年化波动" if zh else "Annual volatility", d.get("annual_volatility"), pct, ""),
+            ("年化收益" if zh else "Annual return", d.get("annual_return"), signed, ""),
+            ("下行偏差" if zh else "Downside deviation", d.get("downside_deviation"), pct, ""),
+            ("Sharpe", d.get("sharpe_ratio"), plain, ""),
+            ("Calmar", d.get("calmar_ratio"), plain, ""),
+            ("偏度" if zh else "Skewness", d.get("skewness"), plain, ""),
+            ("峰度" if zh else "Kurtosis", d.get("kurtosis"), plain, ""),
+        ]
+        rows = [(label, fmt(value), note) for label, value, fmt, note in rows if value is not None]
+        title = f"{target} {'风险指标' if zh else 'risk metrics'}"
+        sub = ("本地计算 · 近一年日线" if zh else "local calculation · past year, daily") if source == "local" \
+            else ("后端计算" if zh else "from the backend")
+        if not self.context.has_rich:
+            print(f"  {title} ({sub})")
+            for label, value, note in rows:
+                print(f"  {label:<22} {value:>9}  {note}")
+            return
+        from rich.table import Table
+
+        table = Table.grid(padding=(0, 2))
+        table.add_column(style="dim")
+        table.add_column(justify="right")
+        table.add_column(style="dim")
+        for label, value, note in rows:
+            style = "red" if value.startswith("-") and value.endswith("%") else ""
+            table.add_row(label, f"[{style}]{value}[/{style}]" if style else value, note)
+        self.context.console.print()
+        self.context.console.print(f"  [bold]{title}[/bold]  [dim]{sub}[/dim]")
+        from rich.padding import Padding
+        self.context.console.print(Padding(table, (0, 0, 0, 2)))
+        self.context.console.print()
+
     async def cmd_market(self, args: str):
         """Market overview: /market [indices|sectors]"""
         from aria_code.apps.cli.tool_executor import execute_aria_tool
