@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.103.0] — 2026-10-07
+
+- Merge pull request #135 from Cinsoul/feat/vertex-models
+
 ## [0.102.0] — 2026-10-07
 
 - Merge pull request #134 from Cinsoul/fix/headless-command-approval
