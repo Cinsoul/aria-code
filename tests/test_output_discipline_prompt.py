@@ -1,0 +1,37 @@
+"""Every turn is told to write the files it is asked for and to compute numbers with code.
+
+In the Vertex evals the agent reported reorder.json's contents without writing
+it, and added up a shipper's stock by hand (500 for 560). Two of those prompts
+read as general chat and got the short general prompt, with no tool discipline.
+"""
+
+from __future__ import annotations
+
+from aria_code.apps.cli.prompts.coding import CODING_SYSTEM_PROMPT
+from aria_code.apps.cli.prompts.select import OUTPUT_DISCIPLINE, build_turn_system_prompt, select_base_prompt
+
+
+def test_every_intent_gets_the_output_rules():
+    for message in ("fix the failing test", "AAPL price", "hello there", "what is a reorder point"):
+        assert OUTPUT_DISCIPLINE in build_turn_system_prompt(message)
+
+
+def test_the_rules_say_what_the_evals_needed():
+    assert "confirm it exists" in OUTPUT_DISCIPLINE
+    assert "not by hand" in OUTPUT_DISCIPLINE
+
+
+def test_work_on_files_in_this_folder_gets_the_coding_prompt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "inventory.csv").write_text("owner_id,sku,on_hand\n")
+    message = "给货主 BETA 准备一份本周库存简报，写到 report_BETA.md。数据在 inventory.csv。"
+    assert select_base_prompt(message) == CODING_SYSTEM_PROMPT
+
+
+def test_a_general_question_keeps_the_general_prompt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert select_base_prompt("what is a reorder point?") != CODING_SYSTEM_PROMPT
+
+
+def test_an_override_is_left_alone():
+    assert build_turn_system_prompt("x", override="only this") == "only this"

@@ -52,6 +52,12 @@ def select_base_prompt(message: str, *, intent: Optional[str] = None) -> str:
     data by the caller that has it).
     """
     resolved = intent or _intent_of(message)
+    if resolved == "general" and intent is None and _needs_workspace(message):
+        # "Write a stock brief to report_BETA.md from inventory.csv" read as
+        # general chat and got the short general prompt, with no tool
+        # discipline; in the evals the agent then computed by hand. Work on
+        # files in this folder is done the way code is.
+        resolved = "coding"
 
     if resolved == "coding":
         from aria_code.apps.cli.prompts.coding import CODING_SYSTEM_PROMPT
@@ -75,6 +81,29 @@ def select_base_prompt(message: str, *, intent: Optional[str] = None) -> str:
             return ""
 
     return _general_prompt()
+
+
+def _needs_workspace(message: str) -> bool:
+    try:
+        from aria_code.apps.cli.workspace_route import needs_workspace
+
+        return needs_workspace(message or "")
+    except Exception:
+        return False
+
+
+# Appended to every turn's prompt, whatever the intent. Both rules come from
+# the evals: asked to write reorder.json or audit.json, the agent reported its
+# results and wrote nothing; asked for a shipper's total stock, it added eight
+# numbers by hand and got 500 for 560.
+OUTPUT_DISCIPLINE = (
+    "Output rules:\n"
+    "- When the request names a file to write (a report, a JSON result), write it with a tool. "
+    "Before you finish, confirm it exists by reading it back or listing the folder. Describing the "
+    "result in your reply does not create the file.\n"
+    "- Compute totals, counts, averages and other figures from the data with code (run a short "
+    "script), not by hand. Every number you report or write must come from a tool's output."
+)
 
 
 def _general_prompt() -> str:
@@ -120,7 +149,7 @@ def build_turn_system_prompt(
     if override and override.strip():
         return override
 
-    parts = [select_base_prompt(message, intent=intent)]
+    parts = [select_base_prompt(message, intent=intent), OUTPUT_DISCIPLINE]
     if project_context and project_context.strip():
         parts.append(project_context.strip())
 
