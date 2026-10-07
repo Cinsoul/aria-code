@@ -93,19 +93,36 @@ def _sma(values: Sequence[float], window: int) -> List[Optional[float]]:
     return out
 
 
+# Every name accepted, mapped to the strategy it runs.
+STRATEGY_ALIASES = {
+    "buy_hold": "buy_hold", "buyhold": "buy_hold", "hold": "buy_hold", "buy_and_hold": "buy_hold",
+    "sma_cross": "sma_cross", "ma_cross": "sma_cross", "moving_average": "sma_cross", "sma": "sma_cross",
+    "sma_crossover": "sma_cross", "ma_crossover": "sma_cross",
+    "momentum": "momentum", "mom": "momentum",
+}
+
+
+def normalize_strategy(name: str) -> Optional[str]:
+    """The strategy a name runs, or None if there is no such strategy."""
+    return STRATEGY_ALIASES.get((name or "momentum").lower().replace("-", "_").replace(" ", "_"))
+
+
 def _signals(strategy: str, closes: Sequence[float], fast: int, slow: int, momentum_period: int) -> List[int]:
-    strategy = (strategy or "momentum").lower().replace("-", "_").replace(" ", "_")
+    known = normalize_strategy(strategy)
+    if known is None:
+        # Any other name used to fall through to buy-and-hold and be reported
+        # under the name asked for: "/backtest sma AAPL" was buy-and-hold.
+        raise ValueError(f"Unknown strategy '{strategy}'. Available: momentum, sma_cross (sma), buy_hold")
+    strategy = known
     n = len(closes)
-    if strategy in ("buy_hold", "buyhold", "hold"):
+    if strategy == "buy_hold":
         return [1] * n
-    if strategy in ("sma_cross", "ma_cross", "moving_average"):
+    if strategy == "sma_cross":
         fast_ma = _sma(closes, max(2, fast))
         slow_ma = _sma(closes, max(max(3, slow), fast + 1))
         return [1 if f is not None and s is not None and f > s else 0 for f, s in zip(fast_ma, slow_ma)]
-    if strategy in ("momentum", "mom"):
-        period = max(2, momentum_period)
-        return [1 if i >= period and closes[i] > closes[i - period] else 0 for i in range(n)]
-    return [1] * n
+    period = max(2, momentum_period)
+    return [1 if i >= period and closes[i] > closes[i - period] else 0 for i in range(n)]
 
 
 def _max_drawdown(values: Sequence[float]) -> float:
@@ -142,7 +159,10 @@ def run_backtest_from_history(history: Sequence[Dict[str, Any]], config: Backtes
     closes = [float(r["close"]) for r in rows]
     volumes = [_as_float(r.get("volume")) for r in rows]
     valid_volumes = [v for v in volumes if v is not None and v >= 0]
-    signals = _signals(config.strategy, closes, config.fast_period, config.slow_period, config.momentum_period)
+    try:
+        signals = _signals(config.strategy, closes, config.fast_period, config.slow_period, config.momentum_period)
+    except ValueError as exc:
+        return {"success": False, "symbol": config.symbol, "strategy": config.strategy, "error": str(exc)}
 
     initial = float(config.initial_capital or 100000.0)
     equity = [initial]
@@ -151,12 +171,18 @@ def run_backtest_from_history(history: Sequence[Dict[str, Any]], config: Backtes
     daily_benchmark_returns = [0.0]
     trades = 0
     previous_position = 0
+    trade_results: List[float] = []   # return of each round trip
+    entry_equity = None
 
     for i in range(1, len(closes)):
         day_return = closes[i] / closes[i - 1] - 1.0
         position = signals[i - 1]  # shift one day to avoid look-ahead bias
         if position == 1 and previous_position == 0:
             trades += 1
+            entry_equity = equity[-1]
+        elif position == 0 and previous_position == 1 and entry_equity:
+            trade_results.append(equity[-1] / entry_equity - 1.0)
+            entry_equity = None
         previous_position = position
         strategy_return = day_return * position
         daily_strategy_returns.append(strategy_return)
@@ -171,8 +197,11 @@ def run_backtest_from_history(history: Sequence[Dict[str, Any]], config: Backtes
     annualized_return = (1.0 + total_return) ** (1.0 / years) - 1.0 if total_return > -1 else -1.0
     volatility = _stddev(daily_strategy_returns[1:]) * math.sqrt(252)
     sharpe = (sum(daily_strategy_returns[1:]) / max(len(daily_strategy_returns) - 1, 1)) / _stddev(daily_strategy_returns[1:]) * math.sqrt(252) if _stddev(daily_strategy_returns[1:]) > 0 else 0.0
-    active_returns = [r for r, s in zip(daily_strategy_returns[1:], signals[:-1]) if s == 1]
-    win_rate = sum(1 for r in active_returns if r > 0) / len(active_returns) if active_returns else 0.0
+    if entry_equity:
+        trade_results.append(equity[-1] / entry_equity - 1.0)   # still open: marked at the last close
+    # Winning trades over trades. This was the share of up days while holding,
+    # so one buy-and-hold "trade" showed a 52.5% win rate.
+    win_rate = sum(1 for r in trade_results if r > 0) / len(trade_results) if trade_results else 0.0
 
     curve = [
         {

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ._ui import has_rich, print_error
+from aria_code.apps.cli.i18n import ui_text
 
 
 def format_backtest_data_error(
@@ -278,11 +279,19 @@ class BacktestCommandsMixin:
         else:
             _resolved_start = None
 
-        _known_strategies = {"momentum", "mom", "sma_cross", "ma_cross", "moving_average",
-                              "buy_hold", "buyhold", "hold", "ml", "ml_signal", "agent"}
-        if len(parts) == 1 and parts[0].lower() not in _known_strategies:
+        from backtest_report import STRATEGY_ALIASES as _STRATEGY_ALIASES
+        _known_strategies = set(_STRATEGY_ALIASES) | {"ml", "ml_signal", "agent"}
+
+        def _is_strategy(token: str) -> bool:
+            return token.lower().replace("-", "_") in _known_strategies
+
+        if len(parts) == 1 and not _is_strategy(parts[0]):
             strategy = "momentum"
             symbol = parts[0].upper()
+        elif len(parts) > 1 and not _is_strategy(parts[0]) and _is_strategy(parts[1]):
+            # "/backtest AAPL sma": symbol first. It ran strategy "AAPL" on the
+            # ticker SMA, an unknown name that then fell through to buy-and-hold.
+            strategy, symbol = parts[1], parts[0].upper()
         else:
             strategy = parts[0] if len(parts) > 0 else "momentum"
             symbol = parts[1].upper() if len(parts) > 1 else "SPY"
@@ -305,6 +314,12 @@ class BacktestCommandsMixin:
                      or _resolved_start or "2023-01-01"
         end_date   = (_raw_end if _raw_end and _date_re.match(_raw_end) else None) \
                      or today.isoformat()
+
+        if not _is_strategy(strategy):
+            print_error(self.context,
+                        ui_text(self, f"未知策略：{strategy}", f"Unknown strategy: {strategy}"),
+                        "momentum · sma_cross (sma) · buy_hold · ml · agent — /backtest sma AAPL")
+            return
 
         # ── ML 信号组合回测 ──────────────────────────────────────────────────
         if strategy.lower() in ("ml", "ml_signal"):
@@ -353,14 +368,21 @@ class BacktestCommandsMixin:
                 logger.debug("local backtest failed, falling back to yfinance direct: %s", _e)
 
             # ── Direct yfinance backtest — works offline, no backend needed ──
+            # Bars found, for a precise error message. Set before the import:
+            # inside the try, a missing yfinance left it unset and the error
+            # path below raised UnboundLocalError instead of reporting.
+            _yf_bars = [0]
             try:
                 import yfinance as _yf
-                import numpy as _np
-                import statistics as _stats
 
-                _yf_bars = [0]   # records bars found, for a precise error message
 
                 def _run_yf_backtest():
+                    # Prices straight from yfinance, run through the same engine
+                    # as the main path. This had its own engine, which ran
+                    # momentum whatever strategy was asked for, counted buys and
+                    # sells as separate trades and called the share of up days
+                    # the win rate.
+                    from backtest_report import run_backtest_from_history
                     _ticker = _yf.Ticker(symbol)
                     _df = _ticker.history(start=start_date, end=end_date, auto_adjust=True)
                     if _df is None or _df.empty:
@@ -370,95 +392,24 @@ class BacktestCommandsMixin:
                             end_date=end_date,
                             bars=0,
                         ), "bars": 0}
-                    _close = _df["Close"].dropna()
-                    _yf_bars[0] = len(_close)
-                    if len(_close) < 5:
+                    _rows = [{"date": str(idx.date()), "close": float(row["Close"]),
+                              "volume": float(row["Volume"]) if "Volume" in row and row["Volume"] == row["Volume"] else None}
+                             for idx, row in _df.iterrows() if row["Close"] == row["Close"]]
+                    _yf_bars[0] = len(_rows)
+                    _res = run_backtest_from_history(_rows, local_config)
+                    if not _res.get("success"):
+                        if "Unknown strategy" in str(_res.get("error", "")):
+                            return _res
                         return {"success": False, "error": format_backtest_data_error(
                             symbol,
                             start_date=start_date,
                             end_date=end_date,
                             bars=_yf_bars[0],
                         ), "bars": _yf_bars[0]}
-                    _prices = list(_close)
-                    n = len(_prices)
-                    # Momentum strategy: buy when N-day momentum > 0
-                    _mp = int(_momentum_period)
-                    _signals = [0] * n
-                    for i in range(_mp, n):
-                        _signals[i] = 1 if _prices[i] > _prices[i - _mp] else -1
-                    # Simulate portfolio
-                    _cap = float(_initial_capital)
-                    _position = 0.0  # shares
-                    _cash = _cap
-                    _trades = 0
-                    _portfolio = []
-                    for i in range(1, n):
-                        _p = _prices[i]
-                        _sig = _signals[i - 1]
-                        if _sig == 1 and _position == 0 and _cash > 0:
-                            _shares = _cash / _p
-                            _position = _shares
-                            _cash = 0
-                            _trades += 1
-                        elif _sig == -1 and _position > 0:
-                            _cash = _position * _p
-                            _position = 0
-                            _trades += 1
-                        _portfolio.append(_cash + _position * _p)
-                    if not _portfolio:
-                        return None
-                    _final = _portfolio[-1]
-                    _total_return = (_final - _cap) / _cap
-                    _bh_return = (_prices[-1] - _prices[0]) / _prices[0]
-                    # Daily returns for Sharpe
-                    _rets = [(_portfolio[i] - _portfolio[i-1]) / _portfolio[i-1] for i in range(1, len(_portfolio)) if _portfolio[i-1] > 0]
-                    _ann_return = sum(_rets) / len(_rets) * 252 if _rets else 0
-                    _ann_vol = _stats.stdev(_rets) * (252 ** 0.5) if len(_rets) > 1 else 0
-                    _sharpe = _ann_return / _ann_vol if _ann_vol > 0 else 0
-                    # Max drawdown
-                    _peak = _portfolio[0]
-                    _max_dd = 0.0
-                    for v in _portfolio:
-                        if v > _peak:
-                            _peak = v
-                        _dd = (_peak - v) / _peak if _peak > 0 else 0
-                        if _dd > _max_dd:
-                            _max_dd = _dd
-                    # Equity curve (sampled monthly)
-                    _step = max(1, n // 24)
-                    _equity_curve = [
-                        {"date": str(_close.index[min(i + 1, n - 1)].date()), "strategy": round(_portfolio[min(i, len(_portfolio)-1)], 2)}
-                        for i in range(0, len(_portfolio), _step)
-                    ]
-                    _win_trades = sum(1 for i in range(1, len(_portfolio)) if _portfolio[i] > _portfolio[i-1])
-                    _vol = _df["Volume"].dropna() if "Volume" in _df else []
-                    _vol_count = len(_vol) if hasattr(_vol, "__len__") else 0
-                    return {
-                        "success": True,
-                        "symbol": symbol,
-                        "strategy": strategy,
-                        "total_return": round(_total_return, 4),
-                        "buy_hold_return": round(_bh_return, 4),
-                        "annualized_return": round(_ann_return, 4),
-                        "sharpe_ratio": round(_sharpe, 3),
-                        "max_drawdown": round(-_max_dd, 4),
-                        "win_rate": round(_win_trades / max(len(_portfolio) - 1, 1), 3),
-                        "num_trades": _trades,
-                        "equity_curve": _equity_curve,
-                        "data_provider": "yfinance",
-                        "provider_chain": ["yfinance"],
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "initial_capital": float(_initial_capital),
-                        "bars": n,
-                        "volume_summary": {
-                            "last": round(float(_vol.iloc[-1]), 2) if _vol_count else None,
-                            "average": round(float(_vol.mean()), 2) if _vol_count else None,
-                            "min": round(float(_vol.min()), 2) if _vol_count else None,
-                            "max": round(float(_vol.max()), 2) if _vol_count else None,
-                            "coverage": round(_vol_count / max(len(_df), 1), 4),
-                        },
-                    }
+                    _res.update({"data_provider": "yfinance", "provider_chain": ["yfinance"],
+                                 "num_trades": _res.get("total_trades", 0),
+                                 "start_date": start_date, "end_date": end_date})
+                    return _res
 
                 yf_result = await asyncio.get_event_loop().run_in_executor(None, _run_yf_backtest)
                 if yf_result and yf_result.get("success"):
@@ -546,8 +497,11 @@ class BacktestCommandsMixin:
                 for r in rows:
                     tbl.add_row(*r)
                 self.context.console.print(tbl)
-                self.context.console.print(
-                    f"  [bold]{self._bt_result_summary(d, lang=self.terminal.config.get('ui_lang', 'en') or 'en')}[/bold]")
+                # Wrapped lines stay beside "  ", not at column 0.
+                from aria_code.ui.render.output import print_hanging
+                print_hanging(self.context.console, "  ",
+                              self._bt_result_summary(d, lang=self.terminal.config.get('ui_lang', 'en') or 'en'),
+                              "bold")
 
                 actual_start = self._bt_value(d, "start", "start_date", default=start_date)
                 actual_end = self._bt_value(d, "end", "end_date", default=end_date)
@@ -561,12 +515,17 @@ class BacktestCommandsMixin:
                 from rich.table import Table
                 from rich.text import Text
                 from aria_code.ui.render.output import file_uri
+                from backtest_report import normalize_strategy as _normalize_strategy
 
                 facts: list[tuple[str, object]] = [
                     ("source", src),
                     ("period", f"{actual_start} → {actual_end} · {bars} bars"),
                     ("capital", initial),
-                    ("params", f"momentum={_momentum_period} fast={_fast_period} slow={_slow_period}"),
+                    # The parameters the strategy used: SMA showed momentum=20.
+                    ("params", {
+                        "momentum": f"momentum={_momentum_period}",
+                        "sma_cross": f"fast={_fast_period} slow={_slow_period}",
+                    }.get(_normalize_strategy(strategy) or "", "—")),
                 ]
                 if d.get("provider_chain"):
                     chain = " → ".join(str(x) for x in d.get("provider_chain") or [])
