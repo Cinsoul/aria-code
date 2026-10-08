@@ -517,6 +517,77 @@ class ProtectedFileTests(HarnessBase):
         self.assertEqual(result.outcome, FAIL)
 
 
+class HiddenGraderTests(HarnessBase):
+    """A grader the agent can read is an answer key."""
+
+    # Passes once answer.txt holds 42 — the expected value lives in the grader.
+    _GRADER = """
+        import pathlib
+        def test_answer():
+            assert (pathlib.Path(__file__).parent / "answer.txt").read_text().strip() == "42"
+    """
+
+    def _hidden_task(self, **kwargs):
+        base = dict(verify="{python} -m pytest -q --noconftest -p no:cacheprovider test_grade.py",
+                    hidden=("test_grade.py",), protect=("*.csv",))
+        base.update(kwargs)
+        return self._task(**base)
+
+    def test_the_agent_never_sees_the_grader_or_the_preflights_caches(self):
+        _fixture(self.fixtures, "broken", {"test_grade.py": self._GRADER, "data.csv": "x,1\n"})
+        seen = {}
+
+        def solver(prompt, workspace):
+            seen["files"] = sorted(str(p.relative_to(workspace)) for p in workspace.rglob("*"))
+            (workspace / "answer.txt").write_text("42", encoding="utf-8")
+
+        task = self._hidden_task(verify="{python} -m pytest -q --noconftest test_grade.py")
+        result = self._run(task, solver)
+        self.assertEqual(seen["files"], ["data.csv"])
+        self.assertEqual(result.outcome, PASS, result.log)
+
+    def test_the_grader_comes_back_for_the_score(self):
+        _fixture(self.fixtures, "broken", {"test_grade.py": self._GRADER})
+        result = self._run(self._hidden_task(), lambda p, w: (w / "answer.txt").write_text("41"))
+        self.assertEqual(result.outcome, FAIL)
+        self.assertIn("test_answer", result.log)
+
+    def test_a_grader_the_agent_writes_is_replaced_by_the_real_one(self):
+        _fixture(self.fixtures, "broken", {"test_grade.py": self._GRADER})
+
+        def forge(prompt, workspace):
+            (workspace / "test_grade.py").write_text("def test_answer():\n    pass\n")
+
+        self.assertEqual(self._run(self._hidden_task(), forge).outcome, FAIL)
+
+    def test_its_own_test_files_are_not_tampering(self):
+        _fixture(self.fixtures, "broken", {"test_grade.py": self._GRADER})
+
+        def solver(prompt, workspace):
+            (workspace / "test_mine.py").write_text("def test_mine():\n    pass\n")
+            (workspace / "answer.txt").write_text("42")
+
+        result = self._run(self._hidden_task(protect=("test_*.py",)), solver)
+        self.assertEqual(result.outcome, PASS, result.detail)
+
+    def test_the_preflight_still_sees_the_grader(self):
+        _fixture(self.fixtures, "broken", {"test_grade.py": self._GRADER, "answer.txt": "42"})
+        result = self._run(self._hidden_task(), lambda p, w: None)
+        self.assertEqual(result.outcome, INVALID)
+
+    def test_the_suite_file_declares_it(self):
+        (self.root / "suite.yaml").write_text(textwrap.dedent("""
+            suite: s
+            tasks:
+              - id: a
+                prompt: p
+                verify: v
+                hidden: ["test_*.py"]
+        """), encoding="utf-8")
+        _, tasks = load_suite(self.root / "suite.yaml")
+        self.assertEqual(tasks[0].hidden, ("test_*.py",))
+
+
 class SolverTimeoutTests(HarnessBase):
     """Being cut off is not the same as getting it wrong."""
 
