@@ -44,3 +44,90 @@ tasks:
     verify: "{python} -m pytest -q"
     requires: [pytest]
     tags: [payments, finance]
+
+  - id: cross-file-cause
+    prompt: "金牌客户的发票金额变成了负数。找出根因修好，不要改测试。"
+    fixture: cross_file_cause
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python, payments]
+
+  - id: naive-fix-regresses
+    prompt: "LRUCache 淘汰的不是最久没用的那个键。修好 cache.py，让 test_cache.py 全部通过，不要改测试。"
+    fixture: naive_fix_regresses
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: silent-data-corruption
+    prompt: "按线路汇总的保险敞口数字看着对，但排名不对。查清 exposure.py 的问题并修好，不要改测试和数据。"
+    fixture: silent_data_corruption
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, finance, numeracy]
+
+  - id: csv-quoted-fields
+    prompt: "商城导出的订单 CSV 导入后字段错位：客户名里的逗号、商品名里的引号、多行备注都会出错。修好 orders.py，不要改测试。"
+    fixture: csv_quoted_fields
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: shared-default-state
+    prompt: "打包台上前一个包裹单的包裹会出现在下一个包裹单里。修好 shipment.py，不要改测试。"
+    fixture: shared_default_state
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python, logistics]
+
+  - id: retry-transient-only
+    prompt: "with_retries() 连参数错误也会重试，最后还把真正的错误吞掉换成 RuntimeError。按 docstring 和测试修好 fetch.py。"
+    fixture: retry_transient_only
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: allocate-cents
+    prompt: "allocate() 按比例分摊结算金额，分出来的各份加起来经常不等于总额。按 docstring 和测试修好 allocate.py。"
+    fixture: allocate_cents
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [payments, finance, numeracy]
+
+  - id: drawdown-running-peak
+    prompt: "月报里的最大回撤和年化收益算得不对。修好 perf.py，不要改测试。"
+    fixture: drawdown_running_peak
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [finance, numeracy]
+
+  - id: fifo-cost-basis
+    prompt: "税务包要求按先进先出（FIFO）计算已实现盈亏，lots.py 算出来的数不对。修好它，不要改测试和交易数据。"
+    fixture: fifo_cost_basis
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [finance, tax, numeracy]
+
+  - id: dim-weight-billing
+    prompt: "我们的报价和快递公司账单对不上，大约一半包裹报低了。按承运商的计费规则修好 rating.py，不要改测试。"
+    fixture: dim_weight_billing
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [logistics, billing, numeracy]
+
+  - id: eta-business-days
+    prompt: "结账页承诺的送达日期没考虑截单时间、周末和节假日。按 docstring 修好 eta.py，不要改测试和节假日表。"
+    fixture: eta_business_days
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, dates]
+
+  - id: sla-timezones
+    prompt: "跨时区的运单准时判断不对：有的晚到被算成了准时。修好 sla.py，不要改测试。"
+    fixture: sla_timezones
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [logistics, dates]
