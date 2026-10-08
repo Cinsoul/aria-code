@@ -102,7 +102,12 @@ OUTPUT_DISCIPLINE = (
     "Before you finish, confirm it exists by reading it back or listing the folder. Describing the "
     "result in your reply does not create the file.\n"
     "- Compute totals, counts, averages and other figures from the data with code (run a short "
-    "script), not by hand. Every number you report or write must come from a tool's output."
+    "script), not by hand. Every number you report or write must come from a tool's output.\n"
+    "- Something written for one client, customer or shipper contains only their data. Data "
+    "files often hold several clients: filter to theirs, and leave out every other client's "
+    "name, IDs, SKUs and totals, including any that appear inside this client's own rows "
+    "(notes, comments, references). Copy free-text fields into a client document only after "
+    "checking them for that."
 )
 
 

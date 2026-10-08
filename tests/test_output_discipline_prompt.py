@@ -1,4 +1,5 @@
-"""Every turn is told to write the files it is asked for and to compute numbers with code.
+"""Every turn is told to write the files it is asked for, compute numbers with code,
+and keep a client's document to that client's data.
 
 In the Vertex evals the agent reported reorder.json's contents without writing
 it, and added up a shipper's stock by hand (500 for 560). Two of those prompts
@@ -19,6 +20,13 @@ def test_every_intent_gets_the_output_rules():
 def test_the_rules_say_what_the_evals_needed():
     assert "confirm it exists" in OUTPUT_DISCIPLINE
     assert "not by hand" in OUTPUT_DISCIPLINE
+
+
+def test_a_client_document_holds_only_that_clients_data():
+    # gemini-3.5-flash, operations suite: report_BETA.md named Acme and
+    # Gamma and their SKUs — copied from notes on Beta's own rows.
+    assert "only their data" in OUTPUT_DISCIPLINE
+    assert "inside this client's own rows" in OUTPUT_DISCIPLINE
 
 
 def test_work_on_files_in_this_folder_gets_the_coding_prompt(tmp_path, monkeypatch):
