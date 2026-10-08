@@ -53,3 +53,36 @@ tasks:
     requires: [pytest]
     protect: ["test_*.py", "*.csv"]
     tags: [finance, point-in-time, software]
+
+  - id: ar-aging
+    prompt: >-
+      做一份截至 2026-09-30 的应收账款账龄表，数据在 invoices.csv 和 payments.csv。
+      按到期日算逾期天数，分 current（未逾期）、1-30、31-60、61-90、90+ 五档，金额是扣掉已收款后的未收余额。
+      九月已经关账：只算 9 月 30 日（含）之前开出的发票和收到的款。
+      结果写到 aging.json：以客户为键，每个客户一个对象，包含这五档的金额。
+    fixture: ar_aging
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [finance, receivables, numeracy]
+
+  - id: carrier-on-time
+    prompt: >-
+      算一下九月各承运商的准时交付率，数据在 deliveries.csv，统计截至 2026-09-30。
+      在承诺日期当天或之前送达算准时。结果写到 kpi.json：
+      {"承运商": {"shipments": 计入统计的运单数, "on_time_rate": 准时率(0-1 的小数)}}。
+    fixture: carrier_on_time
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, carriers, numeracy]
+
+  - id: split-adjusted-returns
+    prompt: >-
+      算一下组合里每只股票本季度（2026-06-30 收盘到 2026-09-30 收盘）的价格收益率，
+      价格在 prices.csv，期间的拆股/合股在 splits.csv。结果写到 returns.json：{"代码": 收益率}，用小数（0.12 表示 12%）。
+    fixture: split_adjusted_returns
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [finance, corporate-actions, numeracy]
