@@ -85,7 +85,8 @@ jobs:
 
   publish-npm:
     name: Publish to npmjs.com
-    timeout-minutes: 75
+    # The wait below (150 min) plus the publish itself.
+    timeout-minutes: 165
     needs: verify-version
     runs-on: ubuntu-latest
     permissions:
@@ -137,9 +138,16 @@ jobs:
           while IFS= read -r pkg; do PACKAGES+=("$pkg"); done <<< "$PACKAGE_LINES"
           # Builds, ten large uploads and registry visibility share this budget.
           # v0.76.0 Linux uploads succeeded, but npm exposed their versions
-          # after the old 30-minute gate expired. Keep checking the real
-          # versions for up to an hour; never publish an incomplete dispatcher.
-          DEADLINE=$(( $(date +%s) + 3600 ))
+          # after the old 30-minute gate expired. Never publish an incomplete
+          # dispatcher.
+          #
+          # This budget must outlast the platform job, which this job does not
+          # depend on: five builds, then ten uploads, then up to 45 minutes of
+          # its own visibility wait. v0.105.0: this wait started at 08:52, the
+          # platform job only began publishing at 09:01 (builds) and finished at
+          # 09:55 — two minutes after the old one-hour gate gave up. All ten
+          # platform packages shipped; the dispatcher never did.
+          DEADLINE=$(( $(date +%s) + 9000 ))
           PAUSE=20
           while :; do
             MISSING=()
@@ -391,19 +399,33 @@ jobs:
           npm:@artheras/aria-code@$VERSION
           $(sed 's/^/npm:/' <<< "$PACKAGE_LINES")"
 
+          # npm is asked directly, past every cache, the way publish-npm's wait
+          # asks. `npm view` reads through the runner's npm cache and the
+          # registry CDN, which can keep answering "no such version" for a
+          # dispatcher published seconds earlier: v0.103.0's was on npm at
+          # 08:12:45, this step began at 08:12:57 and failed it five minutes
+          # later.
+          npm_has() {
+            local name="${1%@*}" version="${1##*@}"
+            local encoded="${name/\//%2F}"
+            [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' \
+                "https://registry.npmjs.org/${encoded}/${version}?nocache=${RANDOM}$(date +%s)")" = "200" ] && return 0
+            curl -sf -H 'Accept: application/vnd.npm.install-v1+json' -H 'Cache-Control: no-cache' \
+              "https://registry.npmjs.org/${encoded}?nocache=${RANDOM}$(date +%s)" | grep -qF "\"${version}\""
+          }
           seen() {
             case "$1" in
-              pypi:*) curl -sf "https://pypi.org/pypi/aria-code/$VERSION/json" >/dev/null ;;
-              npm:*)  npm view "${1#npm:}" version >/dev/null 2>&1 ;;
+              pypi:*) curl -sf -H 'Cache-Control: no-cache' "https://pypi.org/pypi/aria-code/$VERSION/json" >/dev/null ;;
+              npm:*)  npm_has "${1#npm:}" ;;
             esac
           }
 
           # Both registries are eventually consistent. v0.58.0 was published
           # completely and this step still failed it: npm answered "no such
           # version" for a dispatcher written moments earlier. So something
-          # absent is re-asked for up to five minutes before it counts as
+          # absent is re-asked for up to fifteen minutes before it counts as
           # missing, and only what is still absent is re-asked.
-          for attempt in 1 2 3 4 5 6 7 8 9 10 11; do
+          for attempt in $(seq 1 31); do
             STILL=""
             while IFS= read -r item; do
               item="$(echo "$item" | xargs)"
@@ -416,7 +438,7 @@ jobs:
             done <<< "$PENDING"
             PENDING="$STILL"
             [ -z "$PENDING" ] && break
-            [ "$attempt" -lt 11 ] && { echo "  not visible yet, re-checking in 30 s:"; echo -n "$PENDING" | sed 's/^/    /'; sleep 30; }
+            [ "$attempt" -lt 31 ] && { echo "  not visible yet, re-checking in 30 s:"; echo -n "$PENDING" | sed 's/^/    /'; sleep 30; }
           done
 
           while IFS= read -r item; do

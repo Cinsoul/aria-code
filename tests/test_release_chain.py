@@ -13,6 +13,7 @@ that fails by doing nothing.
 from __future__ import annotations
 
 import os
+import re
 import pathlib
 import subprocess
 import tempfile
@@ -169,8 +170,8 @@ class NpmDispatcherGate(unittest.TestCase):
                       if step.get("name") == "Wait for this version's platform packages")
         # Keep the real shell logic, but expire its wait immediately in the
         # missing-package case instead of making the test sleep an hour.
-        self.assertIn("+ 3600", script)
-        script = script.replace("+ 3600", "+ 0", 1)
+        self.assertIn("+ 9000", script)
+        script = script.replace("+ 9000", "+ 0", 1)
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = pathlib.Path(tmp)
             node = bin_dir / "node"
@@ -215,6 +216,26 @@ class NpmDispatcherGate(unittest.TestCase):
         """A 404 on the version path alone is not proof it is missing."""
         listed = self._run_wait(True, status="404")
         self.assertEqual(listed.returncode, 0, listed.stdout + listed.stderr)
+
+    def test_the_wait_outlasts_the_platform_job(self):
+        """v0.105.0: the platform job finished two minutes after this gave up.
+
+        This job does not depend on the platform job, so its clock starts
+        while the five builds are still running. Its budget has to cover the
+        builds, the uploads and the platform job's own visibility wait, and
+        the job's time limit has to cover the budget.
+        """
+
+        job = _load("publish")["jobs"]["publish-npm"]
+        wait = next(step["run"] for step in job["steps"]
+                    if step.get("name") == "Wait for this version's platform packages")
+        budget = int(re.search(r"DEADLINE=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)", wait).group(1))
+        platform = next(step["run"] for step in _load("build-native-binaries")["jobs"]["publish-platform-packages"]["steps"]
+                        if step.get("name") == "Publish each platform package")
+        platform_wait = int(re.search(r"DEADLINE=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)", platform).group(1))
+        # Observed: builds ~30 min, ten uploads up to ~25 min before the wait.
+        self.assertGreaterEqual(budget, platform_wait + 55 * 60)
+        self.assertGreater(job["timeout-minutes"] * 60, budget + 5 * 60)
 
     def test_throttling_is_reported_as_throttling(self):
         throttled = self._run_wait(False, status="429")
