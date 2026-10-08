@@ -41,7 +41,8 @@ jobs:
   evals:
     name: Coding and operations evals
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 24 tasks x the 10-minute per-task limit; a job killed at its limit uploads nothing.
+    timeout-minutes: 240
     env:
       READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
       MODEL: ${{ github.event.inputs.model || 'google/gemini-2.5-flash' }}
