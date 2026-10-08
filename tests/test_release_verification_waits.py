@@ -6,9 +6,13 @@ such version" for a dispatcher written moments before. A release that fails
 when nothing is wrong teaches everyone to ignore the check that exists to
 catch v0.45.0-style tags pointing at nothing.
 
-This runs the step's real script under GitHub's shell flags, with npm, curl
-and sleep replaced by stubs that report a package as absent for its first N
-queries.
+v0.103.0 failed the same way after npm's answer started coming from `npm
+view`, whose cache and CDN can keep saying "no such version" for minutes. The
+step now asks the registry directly, past every cache, as publish-npm does.
+
+This runs the step's real script under GitHub's shell flags, with curl, node
+and sleep replaced by stubs: curl answers for both registries and reports a
+package as absent for its first N queries.
 """
 
 from __future__ import annotations
@@ -35,6 +39,33 @@ def _script() -> str:
     raise AssertionError("verification step not found")
 
 
+# Answers like the two registries. npm: the version path gets a status code,
+# the package document a version list (only once the version path would say
+# 200 — the stub keeps them consistent). PyPI: curl -f's exit status.
+_CURL = r"""#!/bin/bash
+url="${@: -1}"
+present() {  # key -> succeeds once the key has been asked for more than N times
+  f="$STATE/$1"; n=$(cat "$f.count" 2>/dev/null || echo 0)
+  [ "${2:-count}" = count ] && echo $((n+1)) > "$f.count"
+  want=$(cat "$f.absent" 2>/dev/null || echo 0)
+  [ "$want" != never ] && [ "$n" -ge "$want" ]
+}
+case "$url" in
+  *pypi.org*) present pypi && exit 0; exit 22 ;;
+  *registry.npmjs.org/*)
+    path="${url#https://registry.npmjs.org/}"; path="${path%%\?*}"
+    name="${path%%/*}"; name="${name//%2F//}"
+    if [ "$path" != "${path#*/}" ] && [[ "$*" == *http_code* ]]; then
+      key="$(echo "$name@${path#*/}" | tr "/@" "__")"
+      present "$key" && printf 200 || printf 404
+      exit 0
+    fi
+    echo '{"versions":{}}'; exit 0 ;;
+esac
+exit 22
+"""
+
+
 class VerificationWaitsForTheRegistries(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp())
@@ -50,13 +81,11 @@ class VerificationWaitsForTheRegistries(unittest.TestCase):
         # absent-for: how many queries each spec misses before it appears;
         # "never" means it never does.
         for name, body in {
-            "npm": '#!/bin/bash\nspec="$2"; f="$STATE/$(echo "$spec" | tr "/@" "__")"\n'
-                   'n=$(cat "$f.count" 2>/dev/null || echo 0); echo $((n+1)) > "$f.count"\n'
-                   'want=$(cat "$f.absent" 2>/dev/null || echo 0)\n'
-                   '[ "$want" = never ] && exit 1\n[ "$n" -ge "$want" ] && { echo 9.9.9; exit 0; }\nexit 1\n',
-            "curl": '#!/bin/bash\nwant=$(cat "$STATE/pypi.absent" 2>/dev/null || echo 0)\n'
-                    'n=$(cat "$STATE/pypi.count" 2>/dev/null || echo 0); echo $((n+1)) > "$STATE/pypi.count"\n'
-                    '[ "$want" = never ] && exit 22\n[ "$n" -ge "$want" ] && exit 0\nexit 22\n',
+            "curl": _CURL,
+            # The pins the step reads from npm/package.json.
+            "node": '#!/bin/bash\necho @artheras/aria-code-linux-x64@9.9.9\n'
+                    'echo @artheras/aria-code-mcp-linux-x64@9.9.9\n',
+            "npm": '#!/bin/bash\necho "npm must not be asked: its cache lags the registry" >&2\nexit 99\n',
             "sleep": '#!/bin/bash\necho slept >> "$STATE/sleeps"\n',
         }.items():
             path = self.bin / name
@@ -68,8 +97,7 @@ class VerificationWaitsForTheRegistries(unittest.TestCase):
         (self.state / f"{key}.absent").write_text(str(times))
 
     def run_step(self) -> subprocess.CompletedProcess[str]:
-        node = shutil.which("node")
-        env = {"PATH": f"{self.bin}:{os.path.dirname(node) if node else ''}:/usr/bin:/bin",
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin",
                "STATE": str(self.state), "INPUT_TAG": "v9.9.9", "GITHUB_REF_NAME": "v9.9.9",
                "NPM_RESULT": "success", "PYPI_RESULT": "success",
                "GITHUB_STEP_SUMMARY": str(self.tmp / "summary")}
@@ -80,19 +108,13 @@ class VerificationWaitsForTheRegistries(unittest.TestCase):
         f = self.state / "sleeps"
         return len(f.read_text().splitlines()) if f.exists() else 0
 
-    def setUpNode(self) -> None:
-        if not shutil.which("node"):
-            self.skipTest("node is needed to read the dispatcher's pins")
-
     def test_everything_present_passes_without_waiting(self) -> None:
-        self.setUpNode()
         proc = self.run_step()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertEqual(self.sleeps(), 0)
 
     def test_a_dispatcher_that_appears_late_passes(self) -> None:
         """The v0.58.0 case."""
-        self.setUpNode()
         self.absent("@artheras/aria-code@9.9.9", 2)
         self.absent("pypi", 1)
         proc = self.run_step()
@@ -100,16 +122,20 @@ class VerificationWaitsForTheRegistries(unittest.TestCase):
         self.assertEqual(self.sleeps(), 2)
 
     def test_a_package_that_never_appears_fails_and_is_named(self) -> None:
-        self.setUpNode()
         self.absent("@artheras/aria-code-mcp-linux-x64@9.9.9", "never")
         proc = self.run_step()
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("no @artheras/aria-code-mcp-linux-x64@9.9.9", proc.stdout)
         self.assertNotIn("no @artheras/aria-code-linux-x64@9.9.9", proc.stdout)
-        self.assertEqual(self.sleeps(), 10, "should give up after the retry budget")
+        self.assertEqual(self.sleeps(), 30, "should give up after the retry budget")
+
+    def test_npm_is_asked_past_its_cache(self) -> None:
+        """The v0.103.0 case: npm view's cache said "absent" for five minutes."""
+        proc = self.run_step()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("npm must not be asked", proc.stderr)
 
     def test_present_packages_are_not_asked_again(self) -> None:
-        self.setUpNode()
         self.absent("@artheras/aria-code-mcp-linux-x64@9.9.9", 3)
         self.assertEqual(self.run_step().returncode, 0)
         count = self.state / "_artheras_aria-code-linux-x64_9.9.9.count"
