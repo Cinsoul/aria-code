@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.108.0] — 2026-10-08
+
+- fix: local workspace execution with Google models and verified outcomes (#140)
+
 ## [0.107.0] — 2026-10-08
 
 - Merge pull request #139 from Cinsoul/fix/release-npm-timing
