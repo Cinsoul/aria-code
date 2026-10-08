@@ -179,7 +179,8 @@ class TheSuiteFile(unittest.TestCase):
         tasks = yaml.safe_load(SUITE.read_text(encoding="utf-8"))["tasks"]
         self.assertEqual({t["fixture"] for t in tasks},
                          {"inventory_reorder", "shipper_isolation", "freight_audit", "backtest_lookahead",
-                          "ar_aging", "carrier_on_time", "split_adjusted_returns"})
+                          "ar_aging", "carrier_on_time", "split_adjusted_returns",
+                          "fx_invoice_totals", "customs_de_minimis", "cycle_count_variance"})
         for task in tasks:
             with self.subTest(task=task["id"]):
                 self.assertIn("*.csv", task["protect"], "an agent could edit the data until it passes")

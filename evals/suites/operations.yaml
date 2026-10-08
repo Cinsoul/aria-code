@@ -86,3 +86,37 @@ tasks:
     requires: [pytest]
     protect: ["test_*.py", "*.csv"]
     tags: [finance, corporate-actions, numeracy]
+
+  - id: fx-invoice-totals
+    prompt: >-
+      把 invoices.csv 里九月的供应商发票都换算成欧元，汇率在 rates.csv（EURxxx 表示 1 欧元兑多少该货币）。
+      每张发票用它开票当天的汇率；当天没有汇率的（比如周末），用那天之前最近一次公布的汇率。
+      结果写到 eur_totals.json：{"invoices": {"发票号": 欧元金额}, "total_eur": 合计}，金额保留两位小数。
+    fixture: fx_invoice_totals
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [finance, fx, numeracy]
+
+  - id: customs-de-minimis
+    prompt: >-
+      算一下这批进口货每票要交的关税（欧元），明细在 lines.csv，税率在 duty_rates.csv（按 HS 编码前缀），汇率在 fx.csv。
+      规则：一票货换算成欧元后的总货值不超过 150 欧元免税；超过的话每一行都按税率交税。
+      一个 HS 编码匹配多个前缀时，用最长的那个。
+      结果写到 duties.json：{"运单号": 关税欧元金额}，每票保留两位小数。
+    fixture: customs_de_minimis
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, customs, numeracy]
+
+  - id: cycle-count-variance
+    prompt: >-
+      对一下这轮循环盘点的结果。系统库存在 system.csv（单位是个），盘点结果在 counts.csv，
+      盘点员有时按箱或按捆记，换算关系在 uom.csv。只看这轮盘到的库位，把盘点数和系统数不一致的列出来。
+      结果写到 variances.json：一个列表，每项是 {"location", "sku", "system", "counted", "variance"}，数量都按个计，variance = counted − system。
+    fixture: cycle_count_variance
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, warehouse, numeracy]

@@ -131,3 +131,97 @@ tasks:
     verify: "{python} -m pytest -q"
     requires: [pytest]
     tags: [logistics, dates]
+
+  - id: pagination-cursor
+    prompt: "从承运商 API 拉全量运单时，有的运单重复了，API 出问题时还会一直翻页停不下来。按 docstring 修好 client.py，不要改测试。"
+    fixture: pagination_cursor
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python, logistics]
+
+  - id: config-deep-merge
+    prompt: "一个仓改了承运商超时，结果其他仓的配置也跟着变了。按 docstring 修好 merge.py，不要改测试。"
+    fixture: config_deep_merge
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: sliding-window-limiter
+    prompt: "限流器在时间窗交界处会放过两倍的请求，承运商返回 429。按 docstring 把 limiter.py 改成真正的滑动窗口，不要改测试。"
+    fixture: sliding_window_limiter
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: unique-slugs
+    prompt: "商品 URL 的 slug 有问题：中文标题变成空的、重音字母被拆开、重名时会撞车。按 docstring 修好 slug.py，不要改测试。"
+    fixture: unique_slugs
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python]
+
+  - id: sql-like-escape
+    prompt: "仓库物料查询遇到带引号的品名会报错，搜 50% 或下划线时结果也不对。修好 inventory_db.py，不要改测试。"
+    fixture: sql_like_escape
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [software, python, security]
+
+  - id: loan-amortization
+    prompt: "设备贷款的还款计划表算错了，最后余额也不是 0。按 docstring 修好 loan.py，不要改测试。"
+    fixture: loan_amortization
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [finance, numeracy]
+
+  - id: sharpe-ratio
+    prompt: "基金月报上的夏普比率和审计复核的对不上。按 docstring 修好 risk.py，不要改测试。"
+    fixture: sharpe_ratio
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [finance, numeracy]
+
+  - id: xirr-dated
+    prompt: "私募基金资本账户的内部收益率算得不对，日期不规则的现金流尤其离谱。按 docstring 修好 cashflows.py，不要改测试。"
+    fixture: xirr_dated
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [finance, numeracy]
+
+  - id: session-vwap
+    prompt: "交易台的 VWAP 基准算错了：几天的数据混成一个数，有一天没成交还会直接报错。按 docstring 修好 vwap.py，不要改测试。"
+    fixture: session_vwap
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [finance, trading, numeracy]
+
+  - id: fefo-picking
+    prompt: "冷链拣货单不对：没按先到期先出，还会拣到当天到期或被冻结的批次。按 docstring 修好 picking.py，不要改测试和批次数据。"
+    fixture: fefo_picking
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, warehouse]
+
+  - id: depot-distance
+    prompt: "按距离分配网点的结果不对，天津的单子被分到了很远的网点。修好 distance.py，不要改测试和网点数据。"
+    fixture: depot_distance
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, geo, numeracy]
+
+  - id: dock-windows
+    prompt: "月台可用时间窗合并错了，连续的两个时段没有接起来，夜班跨零点的也不对。按 docstring 修好 windows.py，不要改测试。"
+    fixture: dock_windows
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    tags: [logistics, dates]
+
+  - id: postcode-zones
+    prompt: "有些邮编被分到了错误的配送区，从表格导出的邮编尤其明显。按 docstring 修好 zones.py，不要改测试和分区表。"
+    fixture: postcode_zones
+    verify: "{python} -m pytest -q"
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv"]
+    tags: [logistics, data-quality]
