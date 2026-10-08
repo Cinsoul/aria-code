@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.107.0] — 2026-10-08
+
+- Merge pull request #139 from Cinsoul/fix/release-npm-timing
+
 ## [0.106.0] — 2026-10-08
 
 - Merge pull request #138 from Cinsoul/evals/batch-1
