@@ -1055,6 +1055,20 @@ class TheBank(unittest.TestCase):
                     self.assertIn("*.csv", task.get("protect", []),
                                   "an agent could edit the data until it passes")
 
+    def test_answer_keys_are_hidden(self) -> None:
+        """An operations grader holds the expected numbers; in view it is the answer."""
+        tasks = yaml.safe_load((SUITES / "operations.yaml").read_text(encoding="utf-8"))["tasks"]
+        for task in tasks:
+            with self.subTest(task=task["id"]):
+                hidden = task.get("hidden") or []
+                self.assertTrue(hidden, "grader is visible to the agent")
+                for name in hidden:
+                    self.assertTrue((FIXTURES / task["fixture"] / name).is_file(), name)
+                    # Named, so the agent's own test files are not scored with it.
+                    self.assertIn(name, task["verify"])
+                self.assertIn("--noconftest", task["verify"],
+                              "a conftest.py the agent writes could skip the grader")
+
     def test_the_bank_covers_all_three_areas(self) -> None:
         tasks = self._tasks()
         self.assertGreaterEqual(len(tasks), 40)

@@ -132,6 +132,13 @@ class TaskSpec:
     # point is that the agent must not *break* it. Opting out is explicit so
     # that it is a decision someone made, not a fixture that quietly rotted.
     allow_green_start: bool = False
+    # Files the agent never sees: present for the pre-flight, removed (with
+    # the pre-flight's caches) for the agent's turn, put back from the fixture
+    # for the score. A grader that holds the expected answers — EXPECTED =
+    # {"F-201": 5000.00, ...} — or spells out the trap in its docstrings is
+    # an answer key when it sits in the workspace. gemini-3.5-flash passed 23
+    # of the first 24 tasks with every grader in view.
+    hidden: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, data: dict) -> "TaskSpec":
@@ -153,6 +160,7 @@ class TaskSpec:
                 if "protect" in data else cls.protect
             ),
             allow_green_start=bool(data.get("allow_green_start", False)),
+            hidden=tuple(str(g) for g in (data.get("hidden") or ())),
         )
 
 
@@ -366,18 +374,47 @@ def _missing_modules(names: Iterable[str]) -> list[str]:
     return missing
 
 
-def _violates_protection(changed: Iterable[str], patterns: Iterable[str]) -> tuple[str, ...]:
-    """Protected files the agent modified."""
+def _matches(rel: str, globs: Iterable[str]) -> bool:
     import fnmatch
 
+    name = rel.replace("\\", "/")
+    base = name.rsplit("/", 1)[-1]
+    return any(fnmatch.fnmatch(name, g) or fnmatch.fnmatch(base, g) for g in globs)
+
+
+def _violates_protection(changed: Iterable[str], patterns: Iterable[str]) -> tuple[str, ...]:
+    """Protected files the agent modified."""
     globs = tuple(patterns)
-    hits: list[str] = []
-    for rel in changed:
-        name = rel.replace("\\", "/")
-        base = name.rsplit("/", 1)[-1]
-        if any(fnmatch.fnmatch(name, g) or fnmatch.fnmatch(base, g) for g in globs):
-            hits.append(rel)
-    return tuple(hits)
+    return tuple(rel for rel in changed if _matches(rel, globs))
+
+
+def _hide(workspace: Path, globs: Sequence[str]) -> tuple[str, ...]:
+    """Remove the hidden files, and every cache the pre-flight left, from *workspace*.
+
+    The caches matter as much as the files: .pytest_cache records the failing
+    tests by name and __pycache__ holds the grader compiled, docstrings and
+    expected values included.
+    """
+    if not globs:
+        return ()
+    hidden = tuple(
+        str(path.relative_to(workspace)) for path in sorted(workspace.rglob("*"))
+        if path.is_file() and _matches(str(path.relative_to(workspace)), globs)
+    )
+    for rel in hidden:
+        (workspace / rel).unlink()
+    for cache in sorted(workspace.rglob("*"), reverse=True):
+        if cache.is_dir() and cache.name in ("__pycache__", ".pytest_cache"):
+            shutil.rmtree(cache, ignore_errors=True)
+    return hidden
+
+
+def _restore(hidden: Sequence[str], source: Path, workspace: Path) -> None:
+    """Put the hidden files back from the fixture, over anything the agent wrote there."""
+    for rel in hidden:
+        target = workspace / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / rel, target)
 
 
 def _snapshot(root: Path) -> dict[str, str]:
@@ -551,6 +588,7 @@ def run_task(
             )
 
         # ── the agent's turn ──────────────────────────────────────────────
+        hidden = _hide(workspace, task.hidden)
         before = _snapshot(workspace)
         try:
             outcome = solver(task.prompt, workspace)
@@ -565,12 +603,18 @@ def run_task(
         # edited the file correctly and then exited 1 on an empty final message
         # is a PASS: the work is on disk and the tests are green.
         changed = _changed_paths(before, _snapshot(workspace))
+        if hidden:
+            _restore(hidden, fixtures / task.fixture, workspace)
 
         # Checked before the verdict, and it overrides a green check. Observed
         # in a real run: an agent edited test_settlement.py rather than the
         # module under test. The suite would have called that a PASS and the
         # number would have been a lie.
-        tampered = _violates_protection(changed, task.protect)
+        #
+        # Only files that were there for the agent to tamper with: a test file
+        # it writes for itself is ordinary work, and with hidden graders the
+        # tests it is told not to edit are not there at all.
+        tampered = _violates_protection([rel for rel in changed if rel in before], task.protect)
         if tampered:
             return _result(
                 FAIL,
