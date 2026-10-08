@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.110.0] — 2026-10-08
+
+- fix: npm update checks no longer fail with HTTP 406 (#144)
+
 ## [0.109.0] — 2026-10-08
 
 - Merge pull request #143 from Cinsoul/evals/hidden-graders
