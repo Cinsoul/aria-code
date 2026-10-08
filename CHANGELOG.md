@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.109.0] — 2026-10-08
+
+- Merge pull request #143 from Cinsoul/evals/hidden-graders
+
 ## [0.108.0] — 2026-10-08
 
 - fix: local workspace execution with Google models and verified outcomes (#140)
