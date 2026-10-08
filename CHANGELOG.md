@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.106.0] — 2026-10-08
+
+- Merge pull request #138 from Cinsoul/evals/batch-1
+
 ## [0.105.0] — 2026-10-07
 
 - Merge pull request #137 from Cinsoul/ci/eval-trajectories
