@@ -118,6 +118,19 @@ def _print_lsp_diags(diags: list, console, has_rich: bool, limit: int = 6) -> No
         console.print(f"  [dim]… +{extra} more[/dim]") if has_rich else print(f"  ... +{extra} more")
 
 
+def _client_isolation_error(p: pathlib.Path, content: str) -> str | None:
+    """Why a client's document must not be written as it stands (aria_code.safety.client_isolation).
+
+    A failure inside the check never blocks a write: it is a guard on top of
+    the write path, not a new way for writing to break.
+    """
+    try:
+        from aria_code.safety.client_isolation import check_write
+        return check_write(p, content, [pathlib.Path.cwd()])
+    except Exception:
+        return None
+
+
 def _is_safe(p: pathlib.Path, params: dict | None = None) -> bool:
     if params and params.get("_workspace"):
         from aria_code.workspace.files import WorkspaceSecurity
@@ -463,6 +476,9 @@ def tool_write_file(params: dict) -> dict:
         p = raw_path.resolve()
         if not _is_safe(p, params):
             return {"success": False, "error": f"Access denied: path '{p}' is outside allowed directories"}
+        leak = _client_isolation_error(p, content)
+        if leak:
+            return {"success": False, "error": leak, "data": {"client_isolation": True}}
 
         existed = p.exists()
         desktop = pathlib.Path.home() / "Desktop"
@@ -719,6 +735,9 @@ def tool_edit_file(params: dict) -> dict:
 
         replacements = occurrences if replace_all else 1
         new_content = content.replace(old_str, new_str, -1 if replace_all else 1)
+        leak = _client_isolation_error(p, new_content)
+        if leak:
+            return {"success": False, "error": leak, "data": {"client_isolation": True}}
         store = _change_store()
         change = store.stage(p, new_content, source="edit_file")
         added = len(new_str.splitlines())
@@ -855,6 +874,9 @@ def tool_multi_edit(params: dict) -> dict:
 
         # ── Phase 2: stage + apply once ───────────────────────────────────────
         store = _change_store()
+        leak = _client_isolation_error(p, working)
+        if leak:
+            return {"success": False, "error": leak, "data": {"client_isolation": True}}
         change = store.stage(p, working, source="multi_edit")
         console, has_rich = _ui()
 
