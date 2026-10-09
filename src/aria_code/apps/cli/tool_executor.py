@@ -362,6 +362,39 @@ def _apply_tool_approval(params: dict, decision: ApprovalDecision) -> dict:
     if decision.command_prefix:
         _session_command_prefixes.add(tuple(decision.command_prefix))
     return apply_approval_decision(params, decision)
+def _assess_for_approval(tool_name: str, params: dict):
+    """(assessment, requirement) for an approval; ("ask") if assessment fails."""
+    try:
+        import os as _os
+        from aria_code.safety.risk import approval_requirement, assess_tool
+
+        assessment = assess_tool(tool_name, params, root=_os.getcwd())
+        mode = _g("_ACTIVE_APPROVAL_MODE")[0]
+        level = _g("_ACTIVE_AUTO_APPROVE_LEVEL")[0]
+        return assessment, approval_requirement(assessment, mode=mode, auto_level=level)
+    except Exception:
+        return None, "ask"
+
+
+def _show_risk_card(assessment) -> None:
+    if assessment is None or _g("_ARIA_BOT_MODE"):
+        return
+    from aria_code.ui.render.output import print_risk_card
+
+    print_risk_card(_g("console") if _g("HAS_RICH") else None, assessment)
+
+
+def _note_auto_approval(tool_name: str, assessment) -> None:
+    """One dim line, so an approval that did not ask is still visible."""
+    if assessment is None or _g("_ARIA_BOT_MODE"):
+        return
+    text = f"auto-approved · L{assessment.level} {assessment.name} · {assessment.summary or tool_name}"
+    if _g("HAS_RICH"):
+        _g("console").print(f"  [dim]✓ {text}[/dim]", highlight=False)
+    else:
+        print(f"  ✓ {text}")
+
+
 def _confirm_tool_execution_decision(tool_name: str, params: dict,
                                      config_policy: str = None) -> ApprovalDecision:
     """Ask user to confirm before executing a destructive tool.
@@ -385,20 +418,28 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
         else:
             print(f"  ✗ '{tool_name}' blocked by tool policy")
         return ApprovalDecision.deny("blocked by tool policy (deny list)")
-    if _policy_verdict == "allow":
+
+    # ── Risk: what the call touches decides how it is approved ───────────────
+    # L4 is asked about every time — a standing "always allow" was given for
+    # something milder. Under approval_mode=risk, calls at or below the
+    # auto-approve level run without a prompt (see safety.risk).
+    _assessment, _requirement = _assess_for_approval(tool_name, params)
+    _standing_ok = _requirement != "always"
+
+    if _standing_ok and _policy_verdict == "allow":
         if tool_name == "run_command":
             return ApprovalDecision.allow(policy=config_policy, user_approved=True)
         return ApprovalDecision.allow()
 
-    if _auto_approve_session:
+    if _standing_ok and _auto_approve_session:
         # Still inject policy so run_command doesn't re-block
         if tool_name == "run_command":
             return ApprovalDecision.allow(policy=config_policy, user_approved=True)
         return ApprovalDecision.allow()
-    if tool_name == "run_command" and _command_matches_session_prefix(params.get("command", "")):
+    if _standing_ok and tool_name == "run_command" and _command_matches_session_prefix(params.get("command", "")):
         return ApprovalDecision.allow(policy="balanced", user_approved=True)
     # Per-tool session allow — user previously chose "Always allow [tool] this session"
-    if tool_name in _session_always_allow:
+    if _standing_ok and tool_name in _session_always_allow:
         if tool_name == "run_command":
             return ApprovalDecision.allow(policy=config_policy, user_approved=True)
         return ApprovalDecision.allow()
@@ -426,6 +467,12 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
         if not _allowed:
             return ApprovalDecision.deny("Blocked by PreToolUse hook")
 
+    if _requirement == "auto":
+        _note_auto_approval(tool_name, _assessment)
+        if tool_name == "run_command":
+            return ApprovalDecision.allow(policy="balanced", user_approved=True)
+        return ApprovalDecision.allow()
+
     # ── Pre-flight for run_command ────────────────────────────────────────────
     from aria_code.apps.cli.tools.write_tools import _ui_zh
     zh = _ui_zh()
@@ -438,6 +485,8 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
             cmd = _shlex_tmp.join(str(c) for c in cmd)
             params["command"] = cmd
         risk = classify_command_risk(cmd)
+        if risk != "high":
+            _show_risk_card(_assessment)
 
         if risk == "high":
             # Always block high-risk regardless of user approval
@@ -502,6 +551,8 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
     elif tool_name == "run_command":
         # Header already printed by on_tool_call — just pass through policy
         pass
+    if tool_name != "run_command":
+        _show_risk_card(_assessment)
 
     _tool_label = ({"write_file": "写文件", "edit_file": "编辑文件", "multi_edit": "批量编辑", "run_command": "运行命令"}
                    if zh else {"write_file": "file writes", "edit_file": "file edits", "multi_edit": "multi-edits",
@@ -835,4 +886,4 @@ def _format_tool_summary_raw(tool_name: str, result: dict) -> str:
     # Remote tools — JSON summary
     return json.dumps(data, ensure_ascii=False)[:2000]
 
-__all__ = ['_g', '_tool_analyze_file', '_tool_read_file', '_strip_markdown_fences', '_auto_fix_python', '_write_policy_confirm', '_tool_write_file', '_tool_edit_file', '_tool_multi_edit', '_tool_update_todos', '_tool_list_files', '_tool_search_code', '_tool_run_command', '_tool_web_fetch', '_tool_github', '_tool_glob', '_tool_notebook_read', '_tool_notebook_edit', '_tool_broker_query', '_tool_broker_order', '_tool_get_market_data', '_tool_get_market_history', '_todo_schema', '_wrap_bare_schemas', '_dedup_tool_schemas', '_show_edit_preview', '_show_multi_edit_preview', '_show_write_preview', '_apply_tool_approval', '_confirm_tool_execution_decision', 'execute_aria_tool', '_format_tool_summary', '_format_tool_summary_raw', 'truncate_tool_summary', 'DEFAULT_TOOL_RESULT_CHAR_LIMIT', 'MIN_TOOL_RESULT_CHAR_LIMIT']
+__all__ = ['_g', '_tool_analyze_file', '_tool_read_file', '_strip_markdown_fences', '_auto_fix_python', '_write_policy_confirm', '_tool_write_file', '_tool_edit_file', '_tool_multi_edit', '_tool_update_todos', '_tool_list_files', '_tool_search_code', '_tool_run_command', '_tool_web_fetch', '_tool_github', '_tool_glob', '_tool_notebook_read', '_tool_notebook_edit', '_tool_broker_query', '_tool_broker_order', '_tool_get_market_data', '_tool_get_market_history', '_todo_schema', '_wrap_bare_schemas', '_dedup_tool_schemas', '_show_edit_preview', '_show_multi_edit_preview', '_show_write_preview', '_apply_tool_approval', '_assess_for_approval', '_show_risk_card', '_note_auto_approval', '_confirm_tool_execution_decision', 'execute_aria_tool', '_format_tool_summary', '_format_tool_summary_raw', 'truncate_tool_summary', 'DEFAULT_TOOL_RESULT_CHAR_LIMIT', 'MIN_TOOL_RESULT_CHAR_LIMIT']
