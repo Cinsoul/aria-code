@@ -276,7 +276,6 @@ include = ["aria_code*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.json", "*.md", "*.txt", "*.sh"]
-"aria_code.ui" = ["assets/*.png"]
 
 # ── Ruff linting ───────────────────────────────────────────────────────────────
 [tool.ruff]

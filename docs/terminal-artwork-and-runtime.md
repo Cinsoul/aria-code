@@ -1,18 +1,13 @@
 # Terminal artwork and project verification
 
-The startup robot uses the original `aria-robot.png` reference. The wheel and
-native binaries both include that file. In iTerm2, Kitty and Ghostty, a real
-terminal can display the cropped PNG without resampling its pixels. Other
-colour terminals use a 20 × 18 pixel sample rendered with half-block cells.
-That is a terminal approximation, not the full-resolution image. Apple
-Terminal supports this fallback rather than inline PNG graphics.
+The startup robot is drawn the way Claude Code draws its mascot: 9 columns ×
+4 rows of Unicode quadrant blocks in a few flat colours, beside the four
+summary lines. Its grid and colours come from the reference artwork,
+[`docs/assets/aria-robot.png`](assets/aria-robot.png), which is not shipped
+with the CLI. Light terminals get a deeper body and greys so the robot stays
+visible on white.
 
-![Standard terminal fallback](robot-terminal-preview.svg)
-
-`ARIA_ROBOT_RENDER` accepts `auto` (default), `image`, `pixels`, `compact` and
-`off`. Narrow terminals, redirected output and no-colour consoles retain the
-compact silhouette. In tmux and screen, Aria falls back to cells. The image
-occupies reserved rows; update notices and the prompt appear underneath it.
+`ARIA_ROBOT_RENDER=off` hides the robot.
 
 ## Background commands
 

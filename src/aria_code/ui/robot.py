@@ -10,8 +10,10 @@ screen, base, feet), each unit one sub-pixel across and half a sub-pixel down
 — which, with terminal cells twice as tall as wide, keeps the units square.
 The eye is two quadrants (a square), the dash a lower-quarter block (2:1),
 the cap corners ▛ ▜, the ears ▌ ▐, the four feet ▀. Colours are sampled from
-the artwork; only the body is deepened on light terminals, where the
-artwork's cream would vanish against a white background.
+the artwork (docs/assets/aria-robot.png) on this grid; only the light-theme
+greys and body are deepened, where the artwork's would vanish against a
+white background. The orange seam between body and base is left out: at
+this size it would share a cell with two other colours, and a cell has two.
 
 Runtime state is shown by the compact status dot, not by the mascot.
 """
@@ -88,22 +90,22 @@ _STATUS = {
 # resolves to a Rich style ("<fg> on <bg>").
 _COLOURS = {
     "dark": {
-        "body":   "#F3EEE9",   # cream shell
-        "screen": "#0B0A09",   # black screen
-        "eye":    "#F1EDE9",   # square eye
-        "dash":   "#EDBC7F",   # orange dash
-        "ear":    "#989088",   # grey ear nub
-        "base":   "#CDAD8F",   # tan underside with the orange seam
-        "leg":    "#B4AEA6",   # grey feet
+        "body":   "#F4EBE4",   # cream shell
+        "screen": "#0E0E0E",   # black screen
+        "eye":    "#FFFDF5",   # square eye, brighter than the shell
+        "dash":   "#F9B467",   # orange dash
+        "ear":    "#B6ADA4",   # grey ear nub
+        "base":   "#B6ADA4",   # grey underside
+        "leg":    "#D5CCC3",   # light grey feet
     },
     "light": {
         "body":   "#E6DDD0",   # deeper cream: the artwork's would vanish on white
-        "screen": "#0B0A09",
-        "eye":    "#F6F2EA",
-        "dash":   "#EDBC7F",
-        "ear":    "#8C847B",
-        "base":   "#C9A57F",
-        "leg":    "#A39C93",
+        "screen": "#0E0E0E",
+        "eye":    "#FFFDF5",
+        "dash":   "#F9B467",
+        "ear":    "#9C948B",
+        "base":   "#9C948B",
+        "leg":    "#B8AFA6",
     },
 }
 
