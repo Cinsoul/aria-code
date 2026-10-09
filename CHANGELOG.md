@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.112.0] — 2026-10-09
+
+- Merge pull request #147 from Cinsoul/fix/vertex-429-retry
+
 ## [0.111.0] — 2026-10-09
 
 - fix: verified update recovery and explicit model diagnostics (#146)
