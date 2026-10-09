@@ -624,57 +624,64 @@ class ChatTurnMixin:
         # 空响应自动重试:云端模型偶发空补全时,同 provider 重放本轮一次,
         # 而不是把"请重试"推给用户(60s 的工具结果/思考不该因一次抽风作废)。
         # 仅对 empty_response 重试;其他错误(配额/鉴权等)走原有 rescue 链。
-        for _rt_attempt in range(2):
-            try:
-                _rt_turn = await run_chat_via_runtime(
-                    prompt=current_message, history=self.conversation[:-1],
-                    local_tools=LOCAL_TOOLS, tool_schemas=LOCAL_TOOL_SCHEMAS,
-                    model=model, config=_runtime_config, api_url=self.api_url,
-                    ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
-                    cancel_event=self.cancel_event,
-                    on_token=on_token, on_thinking=on_thinking,
-                    on_tool_call=on_tool_call,
-                    on_tool_result=on_tool_result, on_status=on_status,
-                    thinking_mode=thinking_mode, user_context=user_context,
-                    auth_token=auth_token, project_context=_PROJECT_CONTEXT,
-                    system_override=_rt_sys_ov,
-                    max_rounds=hard_max_rounds,
-                    confirm_tools=_CONFIRM_TOOLS,
-                    approval_callback=_approval_callback,
-                    approval_applier=_approval_applier,
-                    requires_evidence=_requires_financial_evidence,
-                    grounding_tools=grounding_tool_names(LOCAL_TOOL_SCHEMAS),
-                    evidence_already_grounded=bool(
-                        evidence_grounded
-                        or (_det_wants_analysis and deterministic.get("success"))
-                    ),
-                    execution_context=lambda: {
-                        "_run_id": self._active_run_id,
-                        "_session_id": self.session_id,
-                    },
-                    return_result=True,
+        _ACTION_VIEW_ACTIVE[0] = _action_view is not None
+        try:
+            for _rt_attempt in range(2):
+                try:
+                    _rt_turn = await run_chat_via_runtime(
+                        prompt=current_message, history=self.conversation[:-1],
+                        local_tools=LOCAL_TOOLS, tool_schemas=LOCAL_TOOL_SCHEMAS,
+                        model=model, config=_runtime_config, api_url=self.api_url,
+                        ollama_url=self.config.get("ollama_url", "http://localhost:11434"),
+                        cancel_event=self.cancel_event,
+                        on_token=on_token, on_thinking=on_thinking,
+                        on_tool_call=on_tool_call,
+                        on_tool_result=on_tool_result, on_status=on_status,
+                        thinking_mode=thinking_mode, user_context=user_context,
+                        auth_token=auth_token, project_context=_PROJECT_CONTEXT,
+                        system_override=_rt_sys_ov,
+                        max_rounds=hard_max_rounds,
+                        confirm_tools=_CONFIRM_TOOLS,
+                        approval_callback=_approval_callback,
+                        approval_applier=_approval_applier,
+                        requires_evidence=_requires_financial_evidence,
+                        grounding_tools=grounding_tool_names(LOCAL_TOOL_SCHEMAS),
+                        evidence_already_grounded=bool(
+                            evidence_grounded
+                            or (_det_wants_analysis and deterministic.get("success"))
+                        ),
+                        execution_context=lambda: {
+                            "_run_id": self._active_run_id,
+                            "_session_id": self.session_id,
+                        },
+                        return_result=True,
+                    )
+                except Exception as _rt_err:
+                    logger.error("Runtime turn failed: %s", _rt_err)
+                    _rt_turn = None
+
+                _rt_probe_text = getattr(_rt_turn, "text", "") if _rt_turn is not None else ""
+                _rt_probe_cancelled = bool(getattr(_rt_turn, "cancelled", False)) or bool(
+                    self.cancel_event is not None and self.cancel_event.is_set()
                 )
-            except Exception as _rt_err:
-                logger.error("Runtime turn failed: %s", _rt_err)
-                _rt_turn = None
-
-            _rt_probe_text = getattr(_rt_turn, "text", "") if _rt_turn is not None else ""
-            _rt_probe_cancelled = bool(getattr(_rt_turn, "cancelled", False)) or bool(
-                self.cancel_event is not None and self.cancel_event.is_set()
-            )
-            if _rt_probe_cancelled or (_rt_probe_text or "").strip():
+                if _rt_probe_cancelled or (_rt_probe_text or "").strip():
+                    break
+                _rt_probe_err = (
+                    getattr(_rt_turn, "error", None) if _rt_turn is not None else None
+                ) or "empty_response"
+                if _rt_attempt == 0 and "empty_response" in str(_rt_probe_err) and "ARIA-4223" not in str(_rt_probe_err):
+                    if HAS_RICH:
+                        console.print("  [dim yellow]⚠ Empty response from model; auto-retrying once...[/dim yellow]")
+                    else:
+                        print("  ⚠ Empty response from model; auto-retrying once...")
+                    continue
                 break
-            _rt_probe_err = (
-                getattr(_rt_turn, "error", None) if _rt_turn is not None else None
-            ) or "empty_response"
-            if _rt_attempt == 0 and "empty_response" in str(_rt_probe_err) and "ARIA-4223" not in str(_rt_probe_err):
-                if HAS_RICH:
-                    console.print("  [dim yellow]⚠ Empty response from model; auto-retrying once...[/dim yellow]")
-                else:
-                    print("  ⚠ Empty response from model; auto-retrying once...")
-                continue
-            break
 
+        finally:
+            # Reset whatever ends the turn: /run after it must print its output.
+            _ACTION_VIEW_ACTIVE[0] = False
+        if _action_view is not None:
+            self._action_details = list(_action_view.details)
         response_text = stream_consumer.response_text
         token_count = stream_consumer.token_count
         thinking_tokens = stream_consumer.thinking_tokens
