@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.119.0] — 2026-10-09
+
+- Merge pull request #159 from Cinsoul/fix/compact-robot
+
 ## [0.118.0] — 2026-10-09
 
 - Merge pull request #157 from Cinsoul/fix/crisp-robot-mascot
