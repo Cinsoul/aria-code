@@ -207,21 +207,27 @@ def _robot_text():
     return face
 
 
-@lru_cache(maxsize=1)
-def _artwork_pixels():
-    """Rich half-blocks sampled from the reference, without importing Pillow."""
-    import base64
-    import zlib
+@lru_cache(maxsize=2)
+def _artwork_pixels(theme: str = "dark"):
+    """The robot's pixel map as Rich half-blocks: two flat pixels per cell."""
     from rich.text import Text
-    from .robot_pixels import HEIGHT, PIXELS, WIDTH
+    from .robot_pixels import GRID, HEIGHT, PALETTES, SEAM_ROW, WIDTH
 
-    rgb = zlib.decompress(base64.b85decode(PIXELS))
+    colours = PALETTES[theme]
     face = Text()
     for y in range(0, HEIGHT, 2):
         for x in range(WIDTH):
-            top = rgb[(y * WIDTH + x) * 3:(y * WIDTH + x) * 3 + 3].hex()
-            bottom = rgb[((y + 1) * WIDTH + x) * 3:((y + 1) * WIDTH + x) * 3 + 3].hex()
-            face.append("▀", style=f"#{top} on #{bottom}")
+            top, bottom = GRID[y][x], GRID[y + 1][x]
+            if top == bottom == ".":
+                face.append(" ")
+            elif bottom == ".":
+                face.append("▀", style=colours[top])
+            elif top == ".":
+                face.append("▄", style=colours[bottom])
+            elif y + 1 == SEAM_ROW and top == bottom == "B":
+                face.append("▁", style=f"{colours['seam']} on {colours['B']}")
+            else:
+                face.append("▀", style=f"{colours[top]} on {colours[bottom]}")
         if y + 2 < HEIGHT:
             face.append("\n")
     return face
@@ -234,7 +240,7 @@ def _mascot(console, width: int):
     escapes, so the PNG is written separately after reserving its cells.
     """
     from rich.text import Text
-    from .robot_pixels import BOUNDS, HEIGHT, WIDTH
+    from .robot_pixels import BOUNDS, HEIGHT, IMAGE_COLUMNS, IMAGE_ROWS, WIDTH
     mode = os.getenv("ARIA_ROBOT_RENDER", "auto").strip().lower()
     tty = bool(console.is_terminal and getattr(console.file, "isatty", lambda: False)())
     if mode == "off":
@@ -248,12 +254,14 @@ def _mascot(console, width: int):
         from .image_render import best_method, render_image
         method = best_method()
         if method in ("iterm", "kitty"):
-            rows = (HEIGHT + 1) // 2 + 1  # aspect-preserving image may occupy a fraction more
             asset = Path(__file__).parent / "assets" / "aria-robot.png"
-            sequence = render_image(str(asset), WIDTH, method, crop=BOUNDS, cells_high=rows)
+            sequence = render_image(str(asset), IMAGE_COLUMNS, method, crop=BOUNDS,
+                                    cells_high=IMAGE_ROWS)
             if sequence and sequence.startswith(("\x1b]1337;", "\x1b_G")):
-                return Text("\n".join([" " * WIDTH] * rows)), WIDTH, rows, sequence
-    return _artwork_pixels().copy(), WIDTH, HEIGHT // 2, None
+                blank = Text("\n".join([" " * IMAGE_COLUMNS] * IMAGE_ROWS))
+                return blank, IMAGE_COLUMNS, IMAGE_ROWS, sequence
+    theme = "light" if _is_light_theme() else "dark"
+    return _artwork_pixels(theme).copy(), WIDTH, HEIGHT // 2, None
 
 
 def _summary_lines(view: StartupDashboardViewModel) -> list[str]:
