@@ -82,6 +82,7 @@ async def run_turn(
     grounding_tools=(),
     evidence_already_grounded: bool = False,
     acceptance=None,
+    contract=None,
 ) -> TurnResult:
     """Drive one ``run_agent`` turn; return its text + lifecycle as a TurnResult.
 
@@ -94,6 +95,9 @@ async def run_turn(
     Passing one makes "done" conditional on the inferred checks going green for
     every adapter at once — CLI, headless, daemon and API — which is the point
     of having a single gateway. Omitting it keeps the previous behaviour.
+
+    ``contract`` takes a :class:`~aria_code.runtime.contract.ChangeContract`,
+    enforced on every tool call the same way for every adapter.
     """
     schemas = list(tool_schemas or [])
     acc: List[str] = []
@@ -121,6 +125,7 @@ async def run_turn(
             grounding_tools=frozenset(grounding_tools or ()),
             evidence_already_grounded=bool(evidence_already_grounded),
             acceptance=acceptance,
+            contract=contract,
         ),
         on_token=_on_token,         # streamed live (run_agent emits no token events)
         on_thinking=on_thinking,    # streamed live (no thinking events either)

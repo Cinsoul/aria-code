@@ -33,6 +33,7 @@ from .agent_loop import (
     run_serial_tool,
     split_tool_calls,
 )
+from .contract import ChangeContract, ContractError, ContractVerdict
 from .acceptance import (
     AcceptanceGate,
     AcceptanceReport,
@@ -90,6 +91,9 @@ __all__ = [
     "Symbol",
     "extract_symbols",
     "AcceptanceGate",
+    "ChangeContract",
+    "ContractError",
+    "ContractVerdict",
     "AcceptanceReport",
     "CheckResult",
     "DEFAULT_MUTATING_TOOLS",
