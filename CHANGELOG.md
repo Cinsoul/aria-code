@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.115.0] — 2026-10-09
+
+- Merge pull request #153 from Cinsoul/evals/holdout-support
+
 ## [0.114.0] — 2026-10-09
 
 - Merge pull request #152 from Cinsoul/ci/evals-repeat
