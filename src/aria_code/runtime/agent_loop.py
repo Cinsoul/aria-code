@@ -1012,6 +1012,14 @@ async def execute_tool_turn(
             decision = await _maybe_await(approval_callback(tool_name, tool_params))
             if decision is None:
                 decision = ApprovalDecision.deny("approval unavailable")
+            if not decision.approved and decision.feedback:
+                # "No, do this instead": the call is skipped and the turn goes
+                # on with the user's words as its result, as Codex does.
+                declined = decision.as_declined_result()
+                tool_batch.add_result(tool_name, declined, formatter)
+                activities.append(ToolExecutionActivity(
+                    tool=tool_name, result=declined, elapsed=0.0, params=tool_params))
+                continue
             if not decision.approved:
                 tool_batch.cancel()
                 break

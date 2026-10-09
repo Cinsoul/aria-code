@@ -362,6 +362,32 @@ def _apply_tool_approval(params: dict, decision: ApprovalDecision) -> dict:
     if decision.command_prefix:
         _session_command_prefixes.add(tuple(decision.command_prefix))
     return apply_approval_decision(params, decision)
+_DENY_LABEL = "No, tell Aria what to do instead"
+
+
+def _deny_help(zh: bool) -> str:
+    return "拒绝；可以说明想怎么做，Enter 直接停止" if zh else "decline; say what to do, or Enter to stop"
+
+
+def _deny_with_feedback(chosen: bool) -> ApprovalDecision:
+    """A denial, carrying what the user wants instead when they say it.
+
+    With feedback the turn continues — the model reads it in place of the
+    call's result; with none (Enter, or Esc on the menu) it stops, as before.
+    """
+    if not chosen:
+        return ApprovalDecision.deny("user denied")
+    from aria_code.apps.cli.tools.write_tools import _ui_zh
+
+    prompt = ("  告诉 Aria 该怎么做（Enter 直接停止）: " if _ui_zh()
+              else "  Tell Aria what to do instead (Enter to stop): ")
+    try:
+        feedback = (_g("console").input(prompt) if _g("HAS_RICH") else input(prompt)).strip()
+    except (EOFError, KeyboardInterrupt, OSError):
+        feedback = ""
+    return ApprovalDecision.deny("user denied", feedback=feedback)
+
+
 def _assess_for_approval(tool_name: str, params: dict):
     """(assessment, requirement) for an approval; ("ask") if assessment fails."""
     try:
@@ -519,12 +545,13 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
                 ("Allow once", "仅此次允许（不改变策略）" if zh else "this time only; the policy stays safe"),
                 ("Allow similar this session", f"{'本会话允许前缀' if zh else 'this session, for'}: {_prefix_label}"),
                 ("Allow & set balanced", "允许并升级策略（本会话有效）" if zh else "and use balanced for this session"),
-                ("No", "拒绝执行" if zh else "do not run it"),
+                (_DENY_LABEL, _deny_help(zh)),
             ]
             # Imported here: aria_cli rebinds this function to its own globals.
             from aria_code.apps.cli.runtime_consumer import approval_subject as _subject
             choice = _arrow_select(options, selected=0, title="",
-                                   collapse_to=_subject(tool_name, params))
+                                   collapse_to=_subject(tool_name, params),
+                                   shortcuts={"y": 0, "a": 1, "b": 2, "n": 3}, numbered=True)
             if choice == 0:
                 return ApprovalDecision.allow(policy="balanced", user_approved=True)
             if choice == 1:
@@ -539,7 +566,7 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
                     user_approved=True,
                     upgrade_policy=True,
                 )
-            return ApprovalDecision.deny("user denied")   # No
+            return _deny_with_feedback(choice == 3)
 
     # ── Default confirmation for write_file / edit_file / low-risk run ────────
     if tool_name == "edit_file":
@@ -570,12 +597,13 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
         ("Yes",                              ""),
         (_scope_label,                       _scope_help),
         ("Yes, allow all tools",             "本会话内所有工具自动允许" if zh else "every tool, this session"),
-        ("No",                               ""),
+        (_DENY_LABEL,                        _deny_help(zh)),
     ]
     # Imported here: aria_cli rebinds this function to its own globals.
     from aria_code.apps.cli.runtime_consumer import approval_subject as _subject
     choice = _arrow_select(options, selected=0, title="",
-                           collapse_to=_subject(tool_name, params))
+                           collapse_to=_subject(tool_name, params),
+                           shortcuts={"y": 0, "a": 1, "n": 3}, numbered=True)
 
     if choice == 0:
         if tool_name == "run_command":
@@ -596,7 +624,7 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
                 auto_approve_session=True,
             )
         return ApprovalDecision.allow(auto_approve_session=True)
-    return ApprovalDecision.deny("user denied")
+    return _deny_with_feedback(choice == 3)
 async def execute_aria_tool(base_url: str, tool_name: str, params: dict,
                            timeout: int = 30, auth_token: str = None,
                            max_retries: int = 2) -> dict:
@@ -886,4 +914,4 @@ def _format_tool_summary_raw(tool_name: str, result: dict) -> str:
     # Remote tools — JSON summary
     return json.dumps(data, ensure_ascii=False)[:2000]
 
-__all__ = ['_g', '_tool_analyze_file', '_tool_read_file', '_strip_markdown_fences', '_auto_fix_python', '_write_policy_confirm', '_tool_write_file', '_tool_edit_file', '_tool_multi_edit', '_tool_update_todos', '_tool_list_files', '_tool_search_code', '_tool_run_command', '_tool_web_fetch', '_tool_github', '_tool_glob', '_tool_notebook_read', '_tool_notebook_edit', '_tool_broker_query', '_tool_broker_order', '_tool_get_market_data', '_tool_get_market_history', '_todo_schema', '_wrap_bare_schemas', '_dedup_tool_schemas', '_show_edit_preview', '_show_multi_edit_preview', '_show_write_preview', '_apply_tool_approval', '_assess_for_approval', '_show_risk_card', '_note_auto_approval', '_confirm_tool_execution_decision', 'execute_aria_tool', '_format_tool_summary', '_format_tool_summary_raw', 'truncate_tool_summary', 'DEFAULT_TOOL_RESULT_CHAR_LIMIT', 'MIN_TOOL_RESULT_CHAR_LIMIT']
+__all__ = ['_g', '_tool_analyze_file', '_tool_read_file', '_strip_markdown_fences', '_auto_fix_python', '_write_policy_confirm', '_tool_write_file', '_tool_edit_file', '_tool_multi_edit', '_tool_update_todos', '_tool_list_files', '_tool_search_code', '_tool_run_command', '_tool_web_fetch', '_tool_github', '_tool_glob', '_tool_notebook_read', '_tool_notebook_edit', '_tool_broker_query', '_tool_broker_order', '_tool_get_market_data', '_tool_get_market_history', '_todo_schema', '_wrap_bare_schemas', '_dedup_tool_schemas', '_show_edit_preview', '_show_multi_edit_preview', '_show_write_preview', '_apply_tool_approval', '_DENY_LABEL', '_deny_help', '_deny_with_feedback', '_assess_for_approval', '_show_risk_card', '_note_auto_approval', '_confirm_tool_execution_decision', 'execute_aria_tool', '_format_tool_summary', '_format_tool_summary_raw', 'truncate_tool_summary', 'DEFAULT_TOOL_RESULT_CHAR_LIMIT', 'MIN_TOOL_RESULT_CHAR_LIMIT']

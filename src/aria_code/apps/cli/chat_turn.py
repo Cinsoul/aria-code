@@ -531,6 +531,13 @@ class ChatTurnMixin:
         from apps.cli.providers.runtime_bridge import run_chat_via_runtime
 
         response_text = ""
+        # Explored / Ran / Edit cells instead of a ⏺ and a ✓ per call;
+        # tool_display=classic keeps the per-call lines.
+        from ui.render.actions import ActionView
+        _action_view = (
+            None if _ARIA_BOT_MODE or self.config.get("tool_display", "actions") == "classic"
+            else ActionView()
+        )
         stream_consumer = TerminalRuntimeEventConsumer(
             terminal=self,
             console=console,
@@ -545,6 +552,7 @@ class ChatTurnMixin:
             fallback_from=self._last_provider or "local",
             ui_lang=self.config.get("ui_lang", "en") or "en",
             on_response_start=_print_response_header,
+            action_view=_action_view,
         )
         _start_spinner = stream_consumer.start_spinner
         _stop_spinner = stream_consumer.stop_spinner
