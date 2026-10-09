@@ -16,27 +16,43 @@ MODELS = {
     # ════════════════════════════════════════════════════════════════════
     # ── Google Gemini 平台核心默认模型（Google Cloud）───────────────────────
     # ════════════════════════════════════════════════════════════════════
-    "gemini-pro": {
-        "id": "google/gemini-2.5-pro",
-        "name": "Gemini Pro",
-        "version": "2.5",
+    # Gemini 2.5 retires in October 2026 (model_retirement.py). The default is
+    # a stable model; the newest Flash is offered beside it, but its line is
+    # replaced every few months.
+    "gemini-flash": {
+        "id": "google/gemini-3.5-flash",
+        "name": "Gemini Flash",
+        "version": "3.5",
         "tag": "Platform",
         "speed": "★★★★★",
         "intelligence": "★★★★★",
-        "description": "平台内置：Google Cloud 旗舰多模态、百万级上下文、量化核心",
+        "description": "平台默认：稳定版（至少到 2027 年 5 月）、百万级上下文、代码与金融分析",
         "capabilities": ["multimodal", "1M context", "tool calls", "quant", "code"],
         "thinking": True, "tools": True,
         "max_tokens": 8192, "num_ctx": 1048576, "temperature": 0.2,
         "badge": "Default",
     },
-    "gemini-flash": {
-        "id": "google/gemini-2.5-flash",
-        "name": "Gemini Flash",
-        "version": "2.5",
+    "gemini-pro": {
+        "id": "google/gemini-3.8-flash",
+        "name": "Gemini Flash (latest)",
+        "version": "3.8",
+        "tag": "Platform",
+        "speed": "★★★★★",
+        "intelligence": "★★★★★",
+        "description": "最新最强：推理与工具调用最好；迭代快，Google 几个月内会推出替代版",
+        "capabilities": ["multimodal", "1M context", "tool calls", "quant", "code"],
+        "thinking": True, "tools": True,
+        "max_tokens": 8192, "num_ctx": 1048576, "temperature": 0.2,
+        "badge": "Latest",
+    },
+    "gemini-lite": {
+        "id": "google/gemini-3.5-flash-lite",
+        "name": "Gemini Flash-Lite",
+        "version": "3.5",
         "tag": "Platform",
         "speed": "★★★★★",
         "intelligence": "★★★★",
-        "description": "极速默认：超低延迟、毫秒级响应、代码与实时行情",
+        "description": "极速低价：低延迟、适合批量与实时行情",
         "capabilities": ["fast inference", "1M context", "tool calls", "low latency"],
         "thinking": False, "tools": True,
         "max_tokens": 8192, "num_ctx": 1048576, "temperature": 0.2,
@@ -341,8 +357,10 @@ MODELS = {
 # Model aliases: short names / Ollama IDs → MODELS key
 MODEL_ALIASES = {
     # ── Google Gemini ─────────────────────────────────────────────────
-    "gemini": "gemini-pro", "gemini-pro": "gemini-pro", "gemini2.5": "gemini-pro", "gpro": "gemini-pro",
+    "gemini": "gemini-flash", "gemini-pro": "gemini-pro", "gemini2.5": "gemini-flash", "gpro": "gemini-pro",
+    "gemini-latest": "gemini-pro", "glatest": "gemini-pro",
     "gemini-flash": "gemini-flash", "gflash": "gemini-flash", "flash": "gemini-flash",
+    "gemini-lite": "gemini-lite", "glite": "gemini-lite",
     # ── Qwen 2.5 ──────────────────────────────────────────────────────
     "qwen7b": "qwen7b",   "q7": "qwen7b",   "sonata": "qwen7b",   "s": "qwen7b",
     "qwen14b": "qwen14b", "q14": "qwen14b",
@@ -464,7 +482,7 @@ _MODEL_ID_INDEX: dict[str, str] | None = None
 def _model_id_index() -> dict[str, str]:
     """Lazily build a lowercase {model id -> MODELS key} index.
 
-    The config stores the provider-qualified *id* ("google/gemini-2.5-pro")
+    The config stores the provider-qualified *id* ("google/gemini-3.5-flash")
     while MODELS is keyed by short name ("gemini-pro"), so without this lookup
     a registered model resolves to "_community_" and its own registry entry is
     never used.

@@ -30,7 +30,7 @@ on:
     inputs:
       model:
         description: "Model id for the agent, e.g. google/gemini-3.5-flash or a Gemma id from Model Garden"
-        default: "google/gemini-2.5-flash"
+        default: "google/gemini-3.5-flash"
         required: false
 
 permissions:
@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 240
     env:
       READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
-      MODEL: ${{ github.event.inputs.model || 'google/gemini-2.5-flash' }}
+      MODEL: ${{ github.event.inputs.model || 'google/gemini-3.5-flash' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
       # global: the Gemini 3 previews are served only there, and 2.5 is too.
       GOOGLE_CLOUD_LOCATION: global

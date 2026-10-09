@@ -508,7 +508,7 @@ _PROVIDER_DESC: Dict[str, str] = {
     "anthropic":   "Claude Sonnet 4 / Opus 4  长文档·代码·分析",
     "groq":        "Llama3/Qwen  超高速推理 (免费额度)",
     "together":    "开源模型聚合  Llama/Qwen/DeepSeek 等 100+ 模型",
-    "google":      "Gemini 2.5 Pro / 2.0 Flash  多模态·超长上下文",
+    "google":      "Gemini 3.8 Flash / 3.5 Flash / 3.5 Flash-Lite  多模态·超长上下文",
     "xai":         "Grok-3 / Grok-3-Fast  实时网络数据·Twitter整合",
     "mistral":     "Mistral Large / Codestral  欧洲顶级·代码生成强",
     "cohere":      "Command R+  RAG检索增强·企业文档处理",
@@ -660,17 +660,17 @@ _PROVIDER_GUIDE: Dict[str, str] = {
         "1. 打开 aistudio.google.com/app/apikey\n"
         "2. 用 Google 账号登录 → 「Create API key」\n"
         "3. 复制 AIzaSy... 格式的密钥\n\n"
-        "解锁: Gemini 2.5 Pro · Gemini 2.0 Flash · 多模态视觉\n"
-        "用法: /model google/gemini-2.0-flash-exp\n"
-        "免费额度: Flash 每分钟 15次，每天 1500次"
+        "解锁: Gemini 3.8 Flash · Gemini 3.5 Flash · 多模态视觉\n"
+        "用法: /model google/gemini-3.5-flash\n"
+        "免费额度以 Google AI Studio 当前公布为准"
     ),
     "gemini": (
         "同 google provider，填入 Google AI Studio 的 API Key\n\n"
         "推荐模型:\n"
-        "  gemini-2.5-pro        — 最强推理，128K 上下文\n"
-        "  gemini-2.0-flash-exp  — 超快，每分钟 15 次免费\n"
-        "  gemini-1.5-flash      — 稳定版，适合生产\n\n"
-        "用法: /model gemini/gemini-2.5-pro"
+        "  gemini-3.5-flash       — 稳定版，适合生产（默认）\n"
+        "  gemini-3.8-flash       — 最新最强，迭代较快\n"
+        "  gemini-3.5-flash-lite  — 更快更省\n\n"
+        "用法: /model gemini/gemini-3.5-flash"
     ),
     "xai": (
         "1. 打开 console.x.ai → 注册/登录\n"
