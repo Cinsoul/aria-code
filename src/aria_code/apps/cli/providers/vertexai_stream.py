@@ -33,6 +33,37 @@ logger = logging.getLogger(__name__)
 
 _EMPTY_ROUND_RETRIES = 2
 
+# Waits before re-sending a request Vertex turned away as busy: 429
+# RESOURCE_EXHAUSTED (quota or shared capacity) and 500/503/504. The 40-task
+# eval run lost inventory-reorder this way, mid-task, to a single 429 that
+# ended the turn. Retried only while the round has produced nothing, so no
+# text or tool call is ever delivered twice.
+_BUSY_BACKOFF = (2, 5, 10, 20, 40)
+_BUSY_CODES = frozenset({429, 500, 503, 504})
+_BUSY_STATUSES = frozenset({"RESOURCE_EXHAUSTED", "UNAVAILABLE", "INTERNAL", "DEADLINE_EXCEEDED"})
+_sleep = asyncio.sleep
+
+
+def _busy(error) -> bool:
+    """True when Vertex refused the request for load, not for anything in it."""
+    return (getattr(error, "code", None) in _BUSY_CODES
+            or str(getattr(error, "status", "") or "").upper() in _BUSY_STATUSES)
+
+
+async def _wait(seconds: float, cancel_event: Optional[asyncio.Event]) -> bool:
+    """Sleep up to *seconds*; True if the user cancelled meanwhile."""
+    if cancel_event is None:
+        await _sleep(seconds)
+        return False
+    waited = 0.0
+    while waited < seconds:
+        if cancel_event.is_set():
+            return True
+        step = min(0.5, seconds - waited)
+        await _sleep(step)
+        waited += step
+    return cancel_event.is_set()
+
 
 def _chunk_text(chunk) -> str:
     """The text parts of a chunk, read without chunk.text.
@@ -311,38 +342,58 @@ class VertexAIProvider(LLMProvider):
             usage = {}
             tool_calls = []
             finish_reasons: list = []
+            busy_tries = 0
             for attempt in range(1 + _EMPTY_ROUND_RETRIES):
-                response_stream = await client.aio.models.generate_content_stream(
-                    model=self.model,
-                    contents=contents,
-                    config=config,
-                )
-                async for chunk in response_stream:
-                    if cancel_event and cancel_event.is_set():
-                        yield LLMDone(response=full_response, provider="vertexai", success=True, cancelled=True)
-                        return
+                # The SDK sends the request when the stream is first read, so
+                # a 429 surfaces inside the loop below, not at the call. A busy
+                # refusal is not an empty round: it has its own budget and does
+                # not use up one of those retries.
+                while True:
+                    try:
+                        response_stream = await client.aio.models.generate_content_stream(
+                            model=self.model,
+                            contents=contents,
+                            config=config,
+                        )
+                        async for chunk in response_stream:
+                            if cancel_event and cancel_event.is_set():
+                                yield LLMDone(response=full_response, provider="vertexai", success=True, cancelled=True)
+                                return
 
-                    text = _chunk_text(chunk)
-                    if text:
-                        full_response += text
-                        yield LLMToken(text=text)
+                            text = _chunk_text(chunk)
+                            if text:
+                                full_response += text
+                                yield LLMToken(text=text)
 
-                    if chunk.function_calls:
-                        for fc in chunk.function_calls:
-                            args = {k: v for k, v in fc.args.items()} if fc.args else {}
-                            yield LLMToolCall(tool=fc.name, params=args)
-                            tool_calls.append({"tool": fc.name, "params": args})
+                            if chunk.function_calls:
+                                for fc in chunk.function_calls:
+                                    args = {k: v for k, v in fc.args.items()} if fc.args else {}
+                                    yield LLMToolCall(tool=fc.name, params=args)
+                                    tool_calls.append({"tool": fc.name, "params": args})
 
-                    for candidate in (getattr(chunk, "candidates", None) or []):
-                        reason = getattr(candidate, "finish_reason", None)
-                        if reason:
-                            finish_reasons.append(str(getattr(reason, "name", reason)))
+                            for candidate in (getattr(chunk, "candidates", None) or []):
+                                reason = getattr(candidate, "finish_reason", None)
+                                if reason:
+                                    finish_reasons.append(str(getattr(reason, "name", reason)))
 
-                    if chunk.usage_metadata:
-                        usage = {
-                            "prompt_tokens": chunk.usage_metadata.prompt_token_count,
-                            "completion_tokens": chunk.usage_metadata.candidates_token_count,
-                        }
+                            if chunk.usage_metadata:
+                                usage = {
+                                    "prompt_tokens": chunk.usage_metadata.prompt_token_count,
+                                    "completion_tokens": chunk.usage_metadata.candidates_token_count,
+                                }
+                        break
+                    except APIError as e:
+                        if full_response or tool_calls or not _busy(e) or busy_tries >= len(_BUSY_BACKOFF):
+                            raise
+                        delay = _BUSY_BACKOFF[busy_tries]
+                        busy_tries += 1
+                        finish_reasons = []
+                        logger.info("Vertex is busy (%s %s); retrying in %ss (%d/%d)",
+                                    getattr(e, "code", ""), getattr(e, "status", ""),
+                                    delay, busy_tries, len(_BUSY_BACKOFF))
+                        if await _wait(delay, cancel_event):
+                            yield LLMDone(response="", provider="vertexai", success=True, cancelled=True)
+                            return
                 if full_response.strip() or tool_calls:
                     break
                 logger.info("Vertex returned an empty round (finish_reason %s), attempt %d",
