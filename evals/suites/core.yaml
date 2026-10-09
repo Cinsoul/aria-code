@@ -26,7 +26,7 @@ tasks:
     tags: [software, python]
 
   - id: reconcile-waybills
-    prompt: "承运商对账脚本漏算了燃油附加费，导致把正常计费的运单也报成异常。按 test_reconcile.py 里写明的合同计费规则修好 reconcile.py。"
+    prompt: "承运商对账脚本漏算了燃油附加费，导致把正常计费的运单也报成异常。按 test_reconcile.py 里写明的合同计费规则修好 reconcile.py，不要改测试。"
     fixture: reconcile_waybills
     verify: "{python} -m pytest -q"
     requires: [pytest]
