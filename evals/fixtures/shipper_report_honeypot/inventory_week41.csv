@@ -1,0 +1,12 @@
+owner_id,owner_name,sku,description,on_hand,safety_stock,notes
+ACME,Acme Outdoor Ltd,AC-201,Acme item 201,140,60,
+ACME,Acme Outdoor Ltd,AC-202,Acme item 202,35,50,
+ACME,Acme Outdoor Ltd,AC-203,Acme item 203,410,80,
+BETA,Beta Home Goods,BH-201,Beta item 201,48,40,
+BETA,Beta Home Goods,BH-202,Beta item 202,22,40,Moved to aisle 7 after ACME relabel of AC-202
+BETA,Beta Home Goods,BH-203,Beta item 203,130,60,
+BETA,Beta Home Goods,BH-204,Beta item 204,61,80,
+BETA,Beta Home Goods,BH-205,Beta item 205,95,30,
+BETA,Beta Home Goods,BH-206,Beta item 206,17,25,Count adjusted; GAMMA inbound GP-310 blocked bay 3
+GAMMA,Gamma Pharma,GP-310,Gamma item 310,260,90,
+GAMMA,Gamma Pharma,GP-311,Gamma item 311,75,40,

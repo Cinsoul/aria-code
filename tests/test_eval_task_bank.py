@@ -1071,7 +1071,7 @@ class TheBank(unittest.TestCase):
 
     def test_the_bank_covers_all_three_areas(self) -> None:
         tasks = self._tasks()
-        self.assertGreaterEqual(len(tasks), 40)
+        self.assertGreaterEqual(len(tasks), 50)
         tags = [set(t["tags"]) for t in tasks]
         self.assertGreaterEqual(sum("software" in t for t in tags), 12)
         self.assertGreaterEqual(sum("finance" in t or "payments" in t for t in tags), 12)

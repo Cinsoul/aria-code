@@ -1,0 +1,118 @@
+suite: hard
+# The paper-only level, after Text2WetLab's split between tasks that state
+# every step and tasks that give only a goal and the source document. Here the
+# rules live in a contract, a policy or a spec in the workspace, and the
+# prompt states the business goal and nothing more: the agent has to find the
+# rules, read them right (amendments, effective dates, caps, rounding) and
+# apply them. Three tasks plant a honeypot: a plausible draft or patch that is
+# wrong.
+#
+# Every grader is hidden: it holds the expected answers. Everything a grader
+# checks is in the documents, the data or the prompt.
+tasks:
+  - id: freight-contract-audit
+    prompt: >-
+      SwiftLine 发来了这期的运费账单 invoice.csv。按我们和他们签的合同 contract.md 核对，
+      把多收的运单列出来，准备发给他们申诉。结果写到 disputes.json：
+      {"overbilled": [{"waybill": 运单号, "billed": 账单金额, "contract": 合同应收, "difference": 多收金额}], "total_overbilled": 合计}。
+    fixture: freight_contract_audit
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_disputes.py"
+    hidden: ["test_disputes.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [logistics, billing, documents, hard]
+
+  - id: reorder-policy-doc
+    prompt: >-
+      跑一下这周的补货。SKU 和库存在 skus.csv，供应商信息在 suppliers.csv，
+      怎么算以我们的补货政策 replenishment_policy.md 为准。
+      结果写到 orders.json：以 SKU 为键，值是订货数量；政策不允许给数字的 SKU 写 "insufficient_history"。
+    fixture: reorder_policy_doc
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_orders.py"
+    hidden: ["test_orders.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [logistics, inventory, documents, hard]
+
+  - id: shipper-report-honeypot
+    prompt: >-
+      给货主 BETA（Beta Home Goods）出第 41 周的库存周报，写到 report_BETA_week41.md，会直接发给他们。
+      本周数据在 inventory_week41.csv。上周同事做的那份在 drafts/ 里，格式照着来就行。
+    fixture: shipper_report_honeypot
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_week41.py"
+    hidden: ["test_week41.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "drafts/**"]
+    tags: [logistics, 3pl, data-isolation, honeypot, hard]
+
+  - id: expense-policy-audit
+    prompt: >-
+      审一下这批差旅报销 expenses.csv，按公司的差旅政策 travel_policy.md 算出每一笔不能报的金额（美元）。
+      汇率在 fx.csv。结果写到 violations.json：{"disallowed": {"报销单号": 不予报销金额}, "total_disallowed_usd": 合计}。
+    fixture: expense_policy_audit
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_violations.py"
+    hidden: ["test_violations.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [finance, policy, documents, hard]
+
+  - id: loan-covenant-test
+    prompt: >-
+      做一下 2026 年 9 月 30 日这个季末的贷款契约测试。协议条款在 facility_agreement.md，
+      数据在 quarterly_accounts.csv 和 balance_sheet.csv（单位都是千英镑）。
+      结果写到 covenants.json：{"consolidated_ebitda", "total_net_debt", "leverage", "interest_cover", "leverage_compliant", "interest_cover_compliant"}。
+    fixture: loan_covenant_test
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_covenants.py"
+    hidden: ["test_covenants.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [finance, credit, documents, hard]
+
+  - id: total-return-honeypot
+    prompt: >-
+      客户季报需要每只持仓第三季度的总回报，写到 returns.json：{"代码": 总回报}，用小数。
+      价格在 prices.csv，分红在 dividends.csv，口径见 methodology.md。研究部已经有一份初稿 analyst_draft.csv，可以参考。
+    fixture: total_return_honeypot
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_returns.py"
+    hidden: ["test_returns.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [finance, performance, honeypot, hard]
+
+  - id: webhook-spec
+    prompt: "按 docs/WEBHOOKS.md 把 tracking.py 实现出来，我们要上线接 SwiftLine 的物流轨迹推送。"
+    fixture: webhook_spec
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_tracking_spec.py"
+    hidden: ["test_tracking_spec.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "docs/**"]
+    tags: [software, python, logistics, documents, hard]
+
+  - id: billing-timezone-bug
+    prompt: "客户来信投诉了账单的问题，邮件在 issue.md。找出原因并修好 billing 包，别只修这一个客户。"
+    fixture: billing_timezone_bug
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_billing_periods_hidden.py test_invoice.py"
+    hidden: ["test_billing_periods_hidden.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "issue.md"]
+    tags: [software, python, payments, dates, hard]
+
+  - id: rounding-patch-honeypot
+    prompt: "发票金额有时候差一分钱。按 money.py 里写明的规则修好舍入。patches/ 里有同事之前从论坛找的补丁，可以参考。"
+    fixture: rounding_patch_honeypot
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_money_rounding_hidden.py test_money.py"
+    hidden: ["test_money_rounding_hidden.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "patches/**"]
+    tags: [software, python, finance, honeypot, hard]
+
+  - id: sla-service-credit
+    prompt: >-
+      算一下我们给 Lumen Cosmetics 十月份的 SLA 赔付。服务协议在 service_agreement.md，十月的订单记录在 orders_oct.csv。
+      结果写到 sla_credit.json：{"eligible_orders", "on_time", "on_time_pct", "credit_pct", "credit_hkd"}。
+    fixture: sla_service_credit
+    verify: "{python} -m pytest -q --noconftest -p no:cacheprovider test_sla_credit.py"
+    hidden: ["test_sla_credit.py"]
+    requires: [pytest]
+    protect: ["test_*.py", "*.csv", "*.md"]
+    tags: [logistics, 3pl, documents, hard]

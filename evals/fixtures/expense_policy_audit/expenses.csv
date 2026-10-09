@@ -1,0 +1,17 @@
+expense_id,employee,date,city,category,amount,currency,receipt
+E-01,Mia Chen,2026-09-10,Hong Kong,meal,420.00,HKD,Y
+E-02,Mia Chen,2026-09-10,Hong Kong,meal,260.00,HKD,Y
+E-03,Mia Chen,2026-09-10,Hong Kong,hotel,1850.00,HKD,Y
+E-04,Mia Chen,2026-09-16,Hong Kong,meal,500.00,HKD,Y
+E-05,Mia Chen,2026-09-16,Hong Kong,meal,300.00,HKD,Y
+E-06,Mia Chen,2026-09-16,Hong Kong,hotel,2300.00,HKD,Y
+E-07,Leo Park,2026-09-22,London,meal,35.00,GBP,N
+E-08,Leo Park,2026-09-22,London,meal,30.00,GBP,Y
+E-09,Leo Park,2026-09-22,London,meal,28.00,GBP,Y
+E-10,Leo Park,2026-09-22,London,alcohol,18.00,GBP,Y
+E-11,Leo Park,2026-09-22,London,hotel,240.00,GBP,Y
+E-12,Ana Ruiz,2026-10-05,Manchester,meal,32.00,GBP,Y
+E-13,Ana Ruiz,2026-10-05,Manchester,meal,30.00,GBP,Y
+E-14,Ana Ruiz,2026-10-05,Manchester,hotel,150.00,GBP,Y
+E-15,Ana Ruiz,2026-10-06,Singapore,meal,38.00,USD,N
+E-16,Ana Ruiz,2026-10-06,Singapore,hotel,410.00,SGD,Y
