@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import io
 from pathlib import Path
 
@@ -12,13 +11,40 @@ from aria_code.ui import banner, image_render, robot_pixels
 ASSET = Path(banner.__file__).parent / "assets" / "aria-robot.png"
 
 
-def test_fallback_pixels_are_compiled_from_the_actual_reference():
-    assert hashlib.sha256(ASSET.read_bytes()).hexdigest() == robot_pixels.SOURCE_SHA256
-    face = banner._artwork_pixels()
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_fallback_pixels_are_flat_colours_from_the_palette(theme):
+    # The old fallback was the PNG box-resampled to a grid its units do not
+    # fit, so most cells blended two or three colours into greys.
+    face = banner._artwork_pixels(theme)
     rows = face.plain.splitlines()
     assert len(rows) == robot_pixels.HEIGHT // 2
     assert all(len(row) == robot_pixels.WIDTH for row in rows)
-    assert len(face.spans) == robot_pixels.WIDTH * robot_pixels.HEIGHT // 2
+    palette = {colour.upper() for colour in robot_pixels.PALETTES[theme].values()}
+    for span in face.spans:
+        for colour in str(span.style).replace(" on ", " ").split():
+            assert colour.upper() in palette
+
+
+def test_pixel_map_is_a_symmetric_robot():
+    grid = robot_pixels.GRID
+    assert len(grid) == robot_pixels.HEIGHT
+    assert all(len(row) == robot_pixels.WIDTH for row in grid)
+    # Everything but the face (eye and dash) mirrors left to right.
+    for row in grid:
+        plain = row.replace("E", "S").replace("D", "S")
+        assert plain == plain[::-1]
+    # A 2×2 eye and a 2×1 dash, each two units in from its side of the screen.
+    eye = [(y, x) for y, row in enumerate(grid) for x, c in enumerate(row) if c == "E"]
+    dash = [(y, x) for y, row in enumerate(grid) for x, c in enumerate(row) if c == "D"]
+    assert len(eye) == 4 and len(dash) == 2
+    assert {x for _, x in eye} == {robot_pixels.WIDTH - 1 - x for _, x in dash}
+
+
+def test_the_seam_sits_under_the_body():
+    face = banner._artwork_pixels("dark")
+    seam_line = face.plain.splitlines()[robot_pixels.SEAM_ROW // 2]
+    assert seam_line.strip() == "▁" * seam_line.strip().count("▁")
+    assert seam_line.count("▁") == robot_pixels.GRID[robot_pixels.SEAM_ROW].count("B")
 
 
 @pytest.mark.parametrize("method", ["iterm", "kitty"])
@@ -51,8 +77,8 @@ def test_explicit_pixels_work_without_a_tty_and_narrow_layout_remains_compact(mo
     monkeypatch.setenv("ARIA_ROBOT_RENDER", "pixels")
     console = Console(file=io.StringIO(), width=100, force_terminal=True, no_color=False, color_system="truecolor")
     face, cols, rows, sequence = banner._mascot(console, 100)
-    assert cols == 20 and rows == 9 and sequence is None
-    assert len(face.plain.splitlines()) == 9
+    assert (cols, rows) == (robot_pixels.WIDTH, robot_pixels.HEIGHT // 2) and sequence is None
+    assert len(face.plain.splitlines()) == robot_pixels.HEIGHT // 2
     assert banner._mascot(console, 40)[1:3] == (9, 4)
 
 
