@@ -66,6 +66,7 @@ class DeliveryReport:
     checks: tuple = ()                   # ({"command", "passed", "exit_code"}, …)
     verified: Optional[bool] = None
     review: str = "Not reviewed"
+    review_lines: tuple = ()
     risk_level: Optional[int] = None
     risk_summary: str = ""
     checkpoints: tuple = ()
@@ -92,6 +93,7 @@ class DeliveryReport:
             "checks": [dict(item) for item in self.checks],
             "verified": self.verified,
             "review": self.review,
+            "review_lines": list(self.review_lines),
             "risk": None if self.risk_level is None else {
                 "level": self.risk_level, "name": LEVEL_NAMES[self.risk_level], "summary": self.risk_summary},
             "checkpoints": list(self.checkpoints),
@@ -109,6 +111,7 @@ class DeliveryReport:
             checks=tuple(dict(item) for item in data.get("checks") or ()),
             verified=data.get("verified"),
             review=str(data.get("review") or "Not reviewed"),
+            review_lines=tuple(data.get("review_lines") or ()),
             risk_level=risk.get("level"),
             risk_summary=str(risk.get("summary") or ""),
             checkpoints=tuple(data.get("checkpoints") or ()),
@@ -137,7 +140,7 @@ class DeliveryReport:
                 lines.append("  ⚠ changed again after the last check")
         else:
             lines.append("  — no check ran" + (" (none could be inferred)" if self.changed else ""))
-        lines += ["", "Review", f"  {self.review}"]
+        lines += ["", "Review"] + [f"  {line}" for line in (self.review_lines or (self.review,))]
         if self.risk_level is not None:
             lines += ["", "Risk", f"  L{self.risk_level} {LEVEL_NAMES[self.risk_level]}"
                       + (f" · {self.risk_summary}" if self.risk_summary else "")]
@@ -192,6 +195,7 @@ class DeliveryLedger:
     mutating_tools: frozenset = DEFAULT_MUTATING_TOOLS
     _changed: dict = field(default_factory=dict)
     _checkpoints: list = field(default_factory=list)
+    _diffs: list = field(default_factory=list)
     _risk: Optional[tuple] = None
 
     def record(self, tool: str, params: Mapping | None, result: Any) -> None:
@@ -205,7 +209,10 @@ class DeliveryLedger:
         if not paths:
             return
         data = _data(result)
-        added, removed, created = _diff_stats(str(data.get("diff") or ""))
+        diff = str(data.get("diff") or "")
+        if diff.strip():
+            self._diffs.append(diff if diff.endswith("\n") else diff + "\n")
+        added, removed, created = _diff_stats(diff)
         action = str(data.get("action") or "").lower()
         created = created or action in {"created", "create", "write new file"}
         for index, path in enumerate(paths):
@@ -219,11 +226,20 @@ class DeliveryLedger:
         if checkpoint and checkpoint not in self._checkpoints:
             self._checkpoints.append(str(checkpoint))
 
+    @property
+    def changed(self) -> bool:
+        return bool(self._changed)
+
+    def diff_text(self) -> str:
+        """Every applied change's diff, in order — what a reviewer reads."""
+        return "".join(self._diffs)
+
     def report(
         self,
         *,
         acceptance: Optional[Mapping] = None,
         contract: Optional[Mapping] = None,
+        review: Optional[Mapping] = None,
         stop_reason: str = "completed",
     ) -> DeliveryReport:
         checks: list = []
@@ -257,6 +273,10 @@ class DeliveryLedger:
         else:
             status = "done"
             next_step = ""
+        review_blocks = bool(review) and review.get("verdict") == "blocking"
+        if review_blocks and status == "done":
+            status = "incomplete"
+            next_step = "Address the review's blocking findings"
         if refused and status == "done":
             next_step = "Some calls were refused by the change contract — see above" if not changed \
                 else next_step + " · some calls were refused by the contract"
@@ -266,6 +286,8 @@ class DeliveryLedger:
             changed=changed,
             checks=tuple(checks),
             verified=verified,
+            review=str((review or {}).get("headline") or "Not reviewed"),
+            review_lines=tuple((review or {}).get("lines") or ()),
             risk_level=self._risk[0] if self._risk else None,
             risk_summary=self._risk[1] if self._risk else "",
             checkpoints=tuple(self._checkpoints),
@@ -281,12 +303,13 @@ def report_from_activities(
     root: Optional[str] = None,
     acceptance: Optional[Mapping] = None,
     contract: Optional[Mapping] = None,
+    review: Optional[Mapping] = None,
     stop_reason: str = "completed",
 ) -> DeliveryReport:
     ledger = DeliveryLedger(root=root)
     for tool, params, result in activities:
         ledger.record(tool, params, result)
-    return ledger.report(acceptance=acceptance, contract=contract, stop_reason=stop_reason)
+    return ledger.report(acceptance=acceptance, contract=contract, review=review, stop_reason=stop_reason)
 
 
 __all__ = ["ChangedFile", "DeliveryLedger", "DeliveryReport", "report_from_activities"]

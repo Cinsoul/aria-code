@@ -613,6 +613,15 @@ class TerminalRuntimeEventConsumer:
             else:
                 print(f"  {'✓' if passed else '✗'} {message}")
             return
+        if state in ("review_passed", "review_blocking", "review_error"):
+            mark, colour = {"review_passed": ("✓", "green"), "review_blocking": ("✗", "yellow"),
+                            "review_error": ("⚠", "dim")}[state]
+            if self.has_rich and self.console is not None:
+                from rich.markup import escape
+                self.console.print(f"  [{colour}]{mark} {escape(message)}[/{colour}]")
+            else:
+                print(f"  {mark} {message}")
+            return
         if state in {"max_rounds", "budget_exhausted", "loop_guard", "checks_failed"}:
             if self.has_rich and self.console is not None:
                 self.console.print(f"  [yellow]Task incomplete: {message}[/yellow]")
