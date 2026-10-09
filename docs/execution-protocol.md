@@ -34,7 +34,9 @@ INSPECT → PLAN → (approval if needed) → EXECUTE → VERIFY → REVIEW → 
 | **Independent review gate** | `runtime/review.py` | **phase 2** |
 | **Actions transcript** (Explored / Ran / Edit) | `ui/render/actions.py` | **phase 3** |
 | **Approval shortcuts, deny with feedback** | `ui/picker.py`, `runtime/approval.py` | **phase 3** |
-| **Semantic diff** (definitions touched, behaviour) | `runtime/semantic_diff.py` | **phase 3** |
+| **Semantic diff** (definitions touched, behaviour, tested by) | `runtime/semantic_diff.py` | **phase 3** |
+| **Detail on demand** (output tail, ctrl+o) | `ui/render/actions.py` | **phase 3** |
+| **Edit by symbol** (`edit_file` with `symbol`) | `runtime/symbol_edit.py` | **phase 3** |
 
 ## Risk levels
 
@@ -169,8 +171,16 @@ Tool calls are shown as actions:
 ⏺  Edit src/auth/session.py
    └ ✓ +12 -3 · 14ms
 ⏺  Ran python3 -m pytest -q
-   └ ✓ 2.1s
+   └ ✓ 2.1s · 14 lines
+     … +12 lines (ctrl+o)
+     ........
+     5 passed in 0.31s
 ```
+
+Three levels of detail: the cell; the tail of a command's output inside it
+(two lines when it passes, four in red when it fails); and **ctrl+o**, which
+prints every action of the last turn in full — commands with their whole
+output, edits with their whole diff, errors.
 
 Reads, searches, listings, `git status`/`diff` and read-only commands coalesce
 into one *Explored* cell, printed when the next kind of action starts or the
@@ -191,7 +201,20 @@ definitions in both versions (any language `repo_map` parses):
 Changed
   M src/auth/session.py  +12 -3
       SessionManager added · Session.refresh() modified · legacy_refresh() removed
+      tested by tests/test_session.py
 ```
+
+*Tested by* lists test files that reference an added or modified definition
+(a method only where its class is referenced too).
+
+## Edit by symbol
+
+`edit_file` takes `symbol` — a name or `Class.method` — in place of
+`old_string`; `new_string` is the whole new definition, or with
+`position: "after"` code to insert after it. The definition's full text is
+found and becomes `old_string`, so it is the same tool with the same
+approval, preview, checkpoint, contract and checks. Code written
+flush-left is indented to the definition's level.
 
 With the review gate on, the reviewer also describes the change as behaviour —
 *Before / After / Why / Impact* — shown above its findings.
@@ -217,17 +240,6 @@ Claude Code changelog, October 2026:
   or both.
 
 ## Roadmap
-
-**Phase 3 — remaining**
-
-- Detail on demand: the full commands, patches and raw events of a cell behind
-  one key (Codex `⌃T`, Claude Code `ctrl+o`); command output head/tail inside
-  the *Ran* cell.
-- *Tested by*: link each changed definition to the tests that cover it.
-- Symbol-level patches (`replace_symbol`, `insert_after`, …) instead of
-  whole-file writes.
-- Symbol-level patches (`replace_symbol`, `insert_after`, …) instead of
-  whole-file writes.
 
 **Phase 4 — transactions and project knowledge**
 
