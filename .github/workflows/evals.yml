@@ -20,6 +20,13 @@
 #
 # A task the model gets wrong is a result, not a red build; the job fails only
 # when a task could not run or no longer measures anything.
+#
+# Holdout: when the HOLDOUT_DEPLOY_KEY secret holds a read-only deploy key for
+# artheras/aria-evals-holdout, its suites run too. They are twins of public
+# tasks (the same skill, different data) that no model has seen, and the gap
+# between the two scores shows whether the public one is inflated. Their
+# reports and trajectories are never uploaded, and the summary shows only
+# their counts, because this repository's run pages are public.
 
 name: Evals
 
@@ -53,6 +60,7 @@ jobs:
       READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
       MODEL: ${{ github.event.inputs.model || 'google/gemini-3.5-flash' }}
       REPEAT: ${{ github.event.inputs.repeat || '1' }}
+      HOLDOUT: ${{ secrets.HOLDOUT_DEPLOY_KEY != '' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
       # global: some Gemini 3 models are served only there.
       GOOGLE_CLOUD_LOCATION: global
@@ -99,12 +107,37 @@ jobs:
           python -m aria_code.evals.runner evals/suites/hard.yaml --model "$MODEL" \
             --solve-timeout 600 --repeat "$REPEAT" --report evals-hard.json --trajectories trajectories || true
 
+      - name: Check out the holdout suites
+        if: env.READY == 'true' && env.HOLDOUT == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: artheras/aria-evals-holdout
+          ssh-key: ${{ secrets.HOLDOUT_DEPLOY_KEY }}
+          path: .holdout
+          persist-credentials: false
+
+      - name: Run the holdout suites
+        if: env.READY == 'true' && env.HOLDOUT == 'true'
+        run: |
+          mkdir -p .holdout-reports
+          for suite in .holdout/suites/*.yaml; do
+            python -m aria_code.evals.runner "$suite" --fixtures .holdout/fixtures --model "$MODEL" \
+              --solve-timeout 600 --repeat "$REPEAT" --report ".holdout-reports/$(basename "$suite" .yaml).json" \
+              > /dev/null 2>&1 || true
+          done
+
       - name: Scoreboard
         if: env.READY == 'true'
         shell: bash   # -eo pipefail, so tee keeps the summary's exit code
         run: |
+          shopt -s nullglob
+          private=(.holdout-reports/*.json)
           python -m aria_code.evals.summary --model "$MODEL" evals-core.json evals-operations.json evals-hard.json \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+            ${private:+--private "${private[@]}"} | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ ${#private[@]} -gt 0 ]; then
+            python -m aria_code.evals.gap --markdown --public evals-core.json evals-operations.json evals-hard.json \
+              --holdout "${private[@]}" --suites .holdout/suites/*.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always() && env.READY == 'true'
