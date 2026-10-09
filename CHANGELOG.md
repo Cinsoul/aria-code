@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.114.0] — 2026-10-09
+
+- Merge pull request #152 from Cinsoul/ci/evals-repeat
+
 ## [0.113.0] — 2026-10-09
 
 - Merge pull request #149 from Cinsoul/feat/client-isolation-guard
