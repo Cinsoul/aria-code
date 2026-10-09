@@ -10,6 +10,7 @@ from .permissions import (
     evaluate_command_policy,
     normalize_command,
 )
+from .risk import RiskAssessment, assess_command, assess_tool
 
 __all__ = [
     "SafetyService",
@@ -18,6 +19,9 @@ __all__ = [
     "PermissionService",
     "PolicyDecision",
     "classify_command_risk",
+    "RiskAssessment",
+    "assess_command",
+    "assess_tool",
     "evaluate_command_policy",
     "normalize_command",
 ]
