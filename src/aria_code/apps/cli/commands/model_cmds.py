@@ -185,6 +185,17 @@ class ModelCommandsMixin:
     async def cmd_model(self, args: str):
         name = args.strip()
 
+        # A model Google has retired would fail on the next request; switch
+        # to its replacement and say so (model_retirement.py).
+        from aria_code.apps.cli.model_retirement import retired_replacement
+
+        _replacement = retired_replacement(name)
+        if _replacement:
+            msg = ui_text(self, f"ℹ {name} 已被 Google 停用，改用 {_replacement}。",
+                          f"ℹ {name} has been retired by Google; using {_replacement}.")
+            self.context.console.print(f"[yellow]{msg}[/yellow]") if self.context.has_rich else print(msg)
+            name = _replacement
+
         # ── "provider/model" format (Open Interpreter style) ─────────────────
         # Examples: /model deepseek/deepseek-chat  /model ollama/qwen2.5:7b
         #           /model openai/gpt-4.5          /model openai/o3  /model openai/o4-mini
@@ -1421,7 +1432,7 @@ class ModelCommandsMixin:
             ("deepseek",    "DeepSeek",      "deepseek/deepseek-chat"),
             ("anthropic",   "Anthropic",     "anthropic/claude-sonnet-4-6"),
             ("openai",      "OpenAI",        "openai/gpt-4.5"),
-            ("google",      "Google Gemini", "google/gemini-2.0-flash-exp"),
+            ("google",      "Google Gemini", "google/gemini-3.5-flash"),
             ("xai",         "xAI Grok",      "xai/grok-3-fast"),
             ("groq",        "Groq",          "groq/llama-3.3-70b-versatile"),
             ("mistral",     "Mistral",       "mistral/mistral-large-latest"),

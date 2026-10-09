@@ -64,14 +64,56 @@ def load_cli_config(
     starting, because the user would then have no way to run the tool that
     would fix it.
     """
-    config = build_settings_service(paths, defaults, sync_policy=sync_policy).load()
+    service = build_settings_service(paths, defaults, sync_policy=sync_policy)
+    config = service.load()
+    # A model Google has retired fails on every request. The user's own saved
+    # choice is replaced once and written back; see model_retirement.
+    from aria_code.apps.cli.model_retirement import migrate_config
+
+    saved = migrate_config(config)
+    if saved:
+        try:
+            service.save(config)
+        except Exception:
+            pass
+        _announce(saved, config, pinned=False)
     try:
         from aria_code.ariarc import apply_to_config
 
         apply_to_config(config)
     except Exception:
         pass
+    # A project's .ariarc is the user's file: replace in memory, say so, never rewrite it.
+    pinned = migrate_config(config)
+    if pinned:
+        _announce(pinned, config, pinned=True)
     return config
+
+
+_ANNOUNCED: set[tuple[str, str]] = set()
+
+
+def _announce(changes, config: dict, *, pinned: bool) -> None:
+    """One line on stderr per retired model, once per process."""
+    import sys
+
+    zh = str(config.get("ui_lang", "")).lower().startswith("zh")
+    for _key, old, new in changes:
+        if (old, new) in _ANNOUNCED:
+            continue
+        _ANNOUNCED.add((old, new))
+        if zh:
+            where = "项目 .ariarc 里固定的" if pinned else "你设置的"
+            tail = "，请修改 .ariarc 里的 model" if pinned else "。可以用 /model 换成其他模型"
+            msg = f"ℹ {where}模型 {old} 已被 Google 停用，本次改用 {new}{tail}。"
+        else:
+            where = "The model pinned in this project's .ariarc" if pinned else "Your model"
+            tail = "; update the model in .ariarc" if pinned else "; use /model to pick another"
+            msg = f"ℹ {where}, {old}, has been retired by Google. Using {new}{tail}."
+        try:
+            print(msg, file=sys.stderr)
+        except Exception:
+            pass
 
 
 def save_cli_config(paths: AriaConfigPaths, cfg: dict) -> None:

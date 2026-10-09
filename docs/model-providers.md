@@ -38,12 +38,12 @@ llm:
   # 后备链：默认不可用时按顺序尝试
   fallback:
     - ollama/qwen2.5:7b
-    - arthera-cloud/gemini-1.5-pro
+    - arthera-cloud/gemini-3.5-flash
     - deepseek/deepseek-chat
 
   # 按任务类型选模型
   code_tasks:     ollama/qwen2.5-coder:7b
-  heavy_analysis: arthera-cloud/gemini-1.5-pro
+  heavy_analysis: arthera-cloud/gemini-3.5-flash
   fast_response:  groq/llama-3.3-70b-versatile
 
 # 声明内置列表之外的 provider
