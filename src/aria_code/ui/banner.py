@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import os
 import shutil
-from functools import lru_cache
-from pathlib import Path
 from typing import Optional
 
 from .startup_dashboard import StartupDashboardViewModel
@@ -207,61 +205,16 @@ def _robot_text():
     return face
 
 
-@lru_cache(maxsize=2)
-def _artwork_pixels(theme: str = "dark"):
-    """The robot's pixel map as Rich half-blocks: two flat pixels per cell."""
-    from rich.text import Text
-    from .robot_pixels import GRID, HEIGHT, PALETTES, SEAM_ROW, WIDTH
+def _mascot(console):
+    """Return (renderable, columns): the compact robot, or nothing.
 
-    colours = PALETTES[theme]
-    face = Text()
-    for y in range(0, HEIGHT, 2):
-        for x in range(WIDTH):
-            top, bottom = GRID[y][x], GRID[y + 1][x]
-            if top == bottom == ".":
-                face.append(" ")
-            elif bottom == ".":
-                face.append("▀", style=colours[top])
-            elif top == ".":
-                face.append("▄", style=colours[bottom])
-            elif y + 1 == SEAM_ROW and top == bottom == "B":
-                face.append("▁", style=f"{colours['seam']} on {colours['B']}")
-            else:
-                face.append("▀", style=f"{colours[top]} on {colours[bottom]}")
-        if y + 2 < HEIGHT:
-            face.append("\n")
-    return face
-
-
-def _mascot(console, width: int):
-    """Return (renderable, columns, rows, optional native image sequence).
-
-    Inline graphics go only to a real TTY. Rich's text parser strips OSC/APC
-    escapes, so the PNG is written separately after reserving its cells.
+    ARIA_ROBOT_RENDER=off leaves the four summary lines without a robot.
     """
     from rich.text import Text
-    from .robot_pixels import BOUNDS, HEIGHT, IMAGE_COLUMNS, IMAGE_ROWS, WIDTH
-    mode = os.getenv("ARIA_ROBOT_RENDER", "auto").strip().lower()
-    tty = bool(console.is_terminal and getattr(console.file, "isatty", lambda: False)())
-    if mode == "off":
-        return Text(), 0, 4, None
-    if console.no_color or console.color_system is None:
-        # Uncoloured half-blocks are a solid rectangle, not a robot.
-        return _robot_text(), 9, 4, None
-    if mode == "compact" or width < 60 or (not tty and mode not in ("pixels", "image")):
-        return _robot_text(), 9, 4, None
-    if mode != "pixels" and tty:
-        from .image_render import best_method, render_image
-        method = best_method()
-        if method in ("iterm", "kitty"):
-            asset = Path(__file__).parent / "assets" / "aria-robot.png"
-            sequence = render_image(str(asset), IMAGE_COLUMNS, method, crop=BOUNDS,
-                                    cells_high=IMAGE_ROWS)
-            if sequence and sequence.startswith(("\x1b]1337;", "\x1b_G")):
-                blank = Text("\n".join([" " * IMAGE_COLUMNS] * IMAGE_ROWS))
-                return blank, IMAGE_COLUMNS, IMAGE_ROWS, sequence
-    theme = "light" if _is_light_theme() else "dark"
-    return _artwork_pixels(theme).copy(), WIDTH, HEIGHT // 2, None
+
+    if os.getenv("ARIA_ROBOT_RENDER", "").strip().lower() == "off":
+        return Text(), 0
+    return _robot_text(), 9
 
 
 def _summary_lines(view: StartupDashboardViewModel) -> list[str]:
@@ -316,7 +269,7 @@ def render_startup_dashboard(
     terminal_width: Optional[int] = None,
     terminal_height: Optional[int] = None,
 ) -> None:
-    """The original mascot beside the model/workspace summary, then notes."""
+    """The robot beside the model/workspace summary, then notes."""
     del rich_box, terminal_height
     from .robot import ROBOT_ROW_COUNT, get_robot_row
 
@@ -335,18 +288,13 @@ def render_startup_dashboard(
     from rich.text import Text
 
     width = terminal_width or _console_width(console)
-    face, columns, rows, sequence = _mascot(console, width)
+    face, columns = _mascot(console)
     block = Table.grid(padding=(0, 2))
     block.add_column(no_wrap=True, width=columns or None)
     # One line per row, cut rather than wrapped, so the block keeps its height.
     block.add_column(no_wrap=True, overflow="ellipsis", max_width=max(10, width - columns - 3))
     block.add_row(face, Text.from_markup("\n".join(_summary_lines(view)), overflow="ellipsis"))
     console.print(block)
-    if sequence:
-        # Reserve the rows first (also handles scrolling), draw at their top,
-        # then restore the cursor before the notes and prompt are printed.
-        console.file.write(f"\x1b7\x1b[{rows}A\r{sequence}\x1b8")
-        console.file.flush()
     for note in _notes(view):
         console.print(Text.from_markup("  " + note, overflow="ellipsis"), no_wrap=True)
 

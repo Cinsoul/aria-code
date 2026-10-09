@@ -34,13 +34,14 @@ class RobotBannerTests(unittest.TestCase):
         ])
 
     def test_robot_uses_the_artworks_colours(self):
+        # Sampled from docs/assets/aria-robot.png on the robot's 18×8 grid.
         styles = [style for row in range(ROBOT_ROW_COUNT) for style, _ in get_robot_row(2, row)]
 
-        self.assertIn("#F3EEE9 on #0B0A09", styles)   # cream shell around the black screen
-        self.assertIn("#F1EDE9 on #0B0A09", styles)   # square eye
-        self.assertIn("#EDBC7F on #0B0A09", styles)   # orange dash
-        self.assertIn("#989088 on #F3EEE9", styles)   # grey ear nub on the shell
-        self.assertIn("#CDAD8F on #B4AEA6", styles)   # tan base over a grey foot
+        self.assertIn("#F4EBE4 on #0E0E0E", styles)   # cream shell around the black screen
+        self.assertIn("#FFFDF5 on #0E0E0E", styles)   # square eye, brighter than the shell
+        self.assertIn("#F9B467 on #0E0E0E", styles)   # orange dash
+        self.assertIn("#B6ADA4 on #F4EBE4", styles)   # grey ear nub on the shell
+        self.assertIn("#B6ADA4 on #D5CCC3", styles)   # grey base over a light foot
 
     def test_robot_palette_follows_theme(self):
         robot._theme_cache = "light"
@@ -49,10 +50,10 @@ class RobotBannerTests(unittest.TestCase):
         dark = [s for row in range(ROBOT_ROW_COUNT) for s, _ in get_robot_row(2, row)]
 
         self.assertNotEqual(light, dark)
-        # Only the shell is deepened on a light terminal, where the artwork's
-        # cream would vanish; the screen and the orange dash stay as drawn.
-        self.assertIn("#E6DDD0 on #0B0A09", light)
-        self.assertIn("#EDBC7F on #0B0A09", light)
+        # The shell and greys are deepened on a light terminal, where the
+        # artwork's would vanish; the screen, eye and dash stay as drawn.
+        self.assertIn("#E6DDD0 on #0E0E0E", light)
+        self.assertIn("#F9B467 on #0E0E0E", light)
 
     def test_idle_status_dot_does_not_blink_to_dim_dot(self):
         set_robot_state(RobotState.IDLE)
