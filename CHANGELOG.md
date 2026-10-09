@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.117.0] — 2026-10-09
+
+- fix: restore task history without quadratic startup writes (#155)
+
 ## [0.116.0] — 2026-10-09
 
 - fix: reference artwork, process cleanup and project verification (#154)
