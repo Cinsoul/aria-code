@@ -1,0 +1,15 @@
+Found this on a forum thread about float rounding -- fixes the 2.675 case for me. -- Sam
+
+--- a/money.py
++++ b/money.py
+@@
+-def to_cents(amount) -> int:
+-    return round(float(amount) * 100)
++from decimal import Decimal
++
++def to_cents(amount) -> int:
++    return int(round(Decimal(str(amount)), 2) * 100)
+@@
+ def line_total(unit_price, quantity) -> int:
+-    return to_cents(float(unit_price) * quantity)
++    return to_cents(Decimal(str(unit_price)) * quantity)

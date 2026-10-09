@@ -2,7 +2,7 @@
 #
 # CI only runs the suites with --check (every fixture still starts red); no
 # model ever attempted them, so nothing tracked whether Aria can fix code.
-# This runs evals/suites/core.yaml and operations.yaml through `aria-code -p`
+# This runs evals/suites/core.yaml, operations.yaml and hard.yaml through `aria-code -p`
 # with a Gemini model on Vertex AI and publishes the scoreboard as the job
 # summary and an artifact.
 #
@@ -41,7 +41,7 @@ jobs:
   evals:
     name: Coding and operations evals
     runs-on: ubuntu-latest
-    # 40 tasks: most finish in a minute (24 took 21 min), but a job killed at its
+    # 50 tasks: most finish in a minute (24 took 21 min), but a job killed at its
     # limit uploads nothing, so leave room for slow ones.
     timeout-minutes: 240
     env:
@@ -90,12 +90,14 @@ jobs:
             --solve-timeout 600 --report evals-core.json --trajectories trajectories || true
           python -m aria_code.evals.runner evals/suites/operations.yaml --model "$MODEL" \
             --solve-timeout 600 --report evals-operations.json --trajectories trajectories || true
+          python -m aria_code.evals.runner evals/suites/hard.yaml --model "$MODEL" \
+            --solve-timeout 600 --report evals-hard.json --trajectories trajectories || true
 
       - name: Scoreboard
         if: env.READY == 'true'
         shell: bash   # -eo pipefail, so tee keeps the summary's exit code
         run: |
-          python -m aria_code.evals.summary --model "$MODEL" evals-core.json evals-operations.json \
+          python -m aria_code.evals.summary --model "$MODEL" evals-core.json evals-operations.json evals-hard.json \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4

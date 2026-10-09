@@ -1,0 +1,4 @@
+supplier,lead_time_days,case_pack,moq
+SUP-1,6,12,48
+SUP-2,10,24,24
+SUP-3,4,10,100
