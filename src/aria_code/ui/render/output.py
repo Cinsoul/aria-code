@@ -210,7 +210,7 @@ def print_risk_card(console, assessment) -> None:
             console.print(f"[{style}]{text}[/{style}]" if style else text, highlight=False)
 
 
-_DELIVERY_HEADINGS = {"Changed", "Verified", "Review", "Risk", "Contract", "Checkpoint", "Next"}
+_DELIVERY_HEADINGS = {"Changed", "Verified", "Behaviour", "Review", "Risk", "Contract", "Checkpoint", "Next"}
 
 
 def format_delivery_report(delivery: dict, *, run_id: str = "", root=None) -> list[tuple[str, str]]:

@@ -46,8 +46,14 @@ Answer with exactly this JSON shape:
  "summary": "<one sentence>",
  "findings": [{"severity": "blocking" | "suggestion",
                "file": "<path>", "line": <number or null>,
-               "issue": "<what is wrong and why, one or two sentences>"}]}
-"verdict" is "blocking" exactly when a finding is blocking."""
+               "issue": "<what is wrong and why, one or two sentences>"}],
+ "behaviour": {"before": "<what the code did before, one sentence>",
+               "after": "<what it does now>",
+               "why": "<why the change was needed, from the goal>",
+               "impact": "<callers, modules or users affected>"}}
+"verdict" is "blocking" exactly when a finding is blocking. "behaviour" describes
+the change in terms of behaviour, not lines; leave a field empty if the diff does
+not say."""
 
 Reviewer = Callable[[str], Union[str, Awaitable[str]]]
 
@@ -79,6 +85,7 @@ class ReviewReport:
     findings: tuple = ()
     attempt: int = 1
     error: str = ""
+    behaviour: Optional[dict] = None
 
     @property
     def blocking(self) -> tuple:
@@ -134,6 +141,7 @@ class ReviewReport:
             "error": self.error,
             "headline": self.headline(),
             "lines": self.lines(),
+            "behaviour": dict(self.behaviour) if self.behaviour else None,
         }
 
 
@@ -166,8 +174,14 @@ def parse_review(text: str, *, attempt: int = 1) -> ReviewReport:
     # finding gives the builder nothing to fix, and a "pass" over one would
     # hide it.
     verdict = "blocking" if any(f.blocking for f in findings) else "pass"
+    raw_behaviour = data.get("behaviour") or data.get("behavior")
+    behaviour = None
+    if isinstance(raw_behaviour, dict):
+        behaviour = {key: " ".join(str(raw_behaviour.get(key) or "").split())[:240]
+                     for key in ("before", "after", "why", "impact")}
+        behaviour = {k: v for k, v in behaviour.items() if v} or None
     return ReviewReport(verdict, summary=str(data.get("summary") or "").strip(),
-                        findings=tuple(findings), attempt=attempt)
+                        findings=tuple(findings), attempt=attempt, behaviour=behaviour)
 
 
 def build_review_prompt(*, goal: str, diff: str, checks: Sequence[dict] = (), contract: str = "",

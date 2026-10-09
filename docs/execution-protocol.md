@@ -32,6 +32,9 @@ INSPECT → PLAN → (approval if needed) → EXECUTE → VERIFY → REVIEW → 
 | **Delivery report** from evidence | `runtime/delivery.py` | **phase 1** |
 | **Risk-aware approval** (card, `approval_mode: risk`, L4 always asks) | `apps/cli/tool_executor.py` | **phase 2** |
 | **Independent review gate** | `runtime/review.py` | **phase 2** |
+| **Actions transcript** (Explored / Ran / Edit) | `ui/render/actions.py` | **phase 3** |
+| **Approval shortcuts, deny with feedback** | `ui/picker.py`, `runtime/approval.py` | **phase 3** |
+| **Semantic diff** (definitions touched, behaviour) | `runtime/semantic_diff.py` | **phase 3** |
 
 ## Risk levels
 
@@ -155,6 +158,44 @@ blocking.
 
 It costs one model call per reviewed change, so it is off by default.
 
+## The transcript
+
+Tool calls are shown as actions:
+
+```text
+⏺  Explored
+   └ Read session.py, refresh.py
+     Search "refresh_token"
+⏺  Edit src/auth/session.py
+   └ ✓ +12 -3 · 14ms
+⏺  Ran python3 -m pytest -q
+   └ ✓ 2.1s
+```
+
+Reads, searches, listings, `git status`/`diff` and read-only commands coalesce
+into one *Explored* cell, printed when the next kind of action starts or the
+answer begins. `tool_display: classic` restores one line per call.
+
+Approval prompts are numbered with one-key answers — `y` yes, `a` always for
+this scope, `n` no. *No, tell Aria what to do instead* asks for a sentence: it
+goes to the model as the declined call's result and the turn continues. Enter
+with nothing typed, or Esc, stops the turn.
+
+## Semantic diff
+
+The delivery report names the definitions each file's change touched,
+computed by undoing the turn's diffs on the current file and comparing the
+definitions in both versions (any language `repo_map` parses):
+
+```text
+Changed
+  M src/auth/session.py  +12 -3
+      SessionManager added · Session.refresh() modified · legacy_refresh() removed
+```
+
+With the review gate on, the reviewer also describes the change as behaviour —
+*Before / After / Why / Impact* — shown above its findings.
+
 ## How Codex and Claude Code present the same things
 
 From the Codex TUI source (`codex-rs/tui`, its render snapshots) and the
@@ -177,15 +218,14 @@ Claude Code changelog, October 2026:
 
 ## Roadmap
 
-**Phase 3 — semantic diff and the action layer**
+**Phase 3 — remaining**
 
-- Semantic diff: behaviour before / after / why / impact / tested-by, with the
-  code diff one level down.
-- Actions over tool calls in the terminal, Codex-style: coalesce reads and
-  searches into one *Explored* line, *Ran* with head/tail output, *Edited N
-  files (+a -r)*; three levels of detail (summary, files and commands, raw
-  events behind a key).
-- Approval choices with one-key shortcuts and *deny with feedback*.
+- Detail on demand: the full commands, patches and raw events of a cell behind
+  one key (Codex `⌃T`, Claude Code `ctrl+o`); command output head/tail inside
+  the *Ran* cell.
+- *Tested by*: link each changed definition to the tests that cover it.
+- Symbol-level patches (`replace_symbol`, `insert_after`, …) instead of
+  whole-file writes.
 - Symbol-level patches (`replace_symbol`, `insert_after`, …) instead of
   whole-file writes.
 

@@ -53,6 +53,8 @@ class ChangedFile:
     added: int = 0
     removed: int = 0
     created: bool = False
+    # Definitions touched, from runtime/semantic_diff: "refresh() modified".
+    symbols: tuple = ()
 
     @property
     def mark(self) -> str:
@@ -67,6 +69,7 @@ class DeliveryReport:
     verified: Optional[bool] = None
     review: str = "Not reviewed"
     review_lines: tuple = ()
+    behaviour: Optional[dict] = None
     risk_level: Optional[int] = None
     risk_summary: str = ""
     checkpoints: tuple = ()
@@ -94,6 +97,7 @@ class DeliveryReport:
             "verified": self.verified,
             "review": self.review,
             "review_lines": list(self.review_lines),
+            "behaviour": dict(self.behaviour) if self.behaviour else None,
             "risk": None if self.risk_level is None else {
                 "level": self.risk_level, "name": LEVEL_NAMES[self.risk_level], "summary": self.risk_summary},
             "checkpoints": list(self.checkpoints),
@@ -107,11 +111,13 @@ class DeliveryReport:
         risk = data.get("risk") or {}
         return cls(
             status=str(data.get("status") or "done"),
-            changed=tuple(ChangedFile(**item) for item in data.get("changed") or ()),
+            changed=tuple(ChangedFile(**{**item, "symbols": tuple(item.get("symbols") or ())})
+                          for item in data.get("changed") or ()),
             checks=tuple(dict(item) for item in data.get("checks") or ()),
             verified=data.get("verified"),
             review=str(data.get("review") or "Not reviewed"),
             review_lines=tuple(data.get("review_lines") or ()),
+            behaviour=data.get("behaviour") or None,
             risk_level=risk.get("level"),
             risk_summary=str(risk.get("summary") or ""),
             checkpoints=tuple(data.get("checkpoints") or ()),
@@ -128,6 +134,10 @@ class DeliveryReport:
             for item in self.changed:
                 stats = f"+{item.added}" + (f" -{item.removed}" if item.removed or not item.created else "")
                 lines.append(f"  {item.mark} {_display(item.path, root):<{width}}  {stats}")
+                if item.symbols:
+                    shown = " · ".join(item.symbols[:4])
+                    more = f" · +{len(item.symbols) - 4}" if len(item.symbols) > 4 else ""
+                    lines.append(f"      {shown}{more}")
             if len(self.changed) > 1:
                 lines.append(f"  {len(self.changed)} files · +{self.added} / -{self.removed}")
         lines += ["", "Verified"]
@@ -140,6 +150,11 @@ class DeliveryReport:
                 lines.append("  ⚠ changed again after the last check")
         else:
             lines.append("  — no check ran" + (" (none could be inferred)" if self.changed else ""))
+        if self.behaviour:
+            lines += ["", "Behaviour"]
+            for key in ("before", "after", "why", "impact"):
+                if self.behaviour.get(key):
+                    lines.append(f"  {key.capitalize():<7}{self.behaviour[key]}")
         lines += ["", "Review"] + [f"  {line}" for line in (self.review_lines or (self.review,))]
         if self.risk_level is not None:
             lines += ["", "Risk", f"  L{self.risk_level} {LEVEL_NAMES[self.risk_level]}"
@@ -196,6 +211,7 @@ class DeliveryLedger:
     _changed: dict = field(default_factory=dict)
     _checkpoints: list = field(default_factory=list)
     _diffs: list = field(default_factory=list)
+    _file_diffs: dict = field(default_factory=dict)
     _risk: Optional[tuple] = None
 
     def record(self, tool: str, params: Mapping | None, result: Any) -> None:
@@ -222,6 +238,8 @@ class DeliveryLedger:
             if index == 0:  # one diff per call; attribute it to the first path
                 entry.added += added
                 entry.removed += removed
+                if diff.strip():
+                    self._file_diffs.setdefault(path, []).append(diff)
         checkpoint = data.get("checkpoint_id")
         if checkpoint and checkpoint not in self._checkpoints:
             self._checkpoints.append(str(checkpoint))
@@ -229,6 +247,18 @@ class DeliveryLedger:
     @property
     def changed(self) -> bool:
         return bool(self._changed)
+
+    def _symbols(self, path: str) -> tuple:
+        diffs = self._file_diffs.get(path)
+        if not diffs:
+            return ()
+        try:
+            from .semantic_diff import file_symbol_changes
+
+            changes = file_symbol_changes(path, diffs)
+        except Exception:
+            return ()
+        return tuple(change.label() for change in changes or ())
 
     def diff_text(self) -> str:
         """Every applied change's diff, in order — what a reviewer reads."""
@@ -252,6 +282,8 @@ class DeliveryLedger:
         verified = (acceptance or {}).get("verified")
         refused = tuple(dict(item) for item in (contract or {}).get("refused") or ())
         changed = tuple(self._changed.values())
+        for item in changed:
+            item.symbols = self._symbols(item.path)
 
         if stop_reason != "completed":
             status = "incomplete"
@@ -288,6 +320,7 @@ class DeliveryLedger:
             verified=verified,
             review=str((review or {}).get("headline") or "Not reviewed"),
             review_lines=tuple((review or {}).get("lines") or ()),
+            behaviour=(review or {}).get("behaviour") or None,
             risk_level=self._risk[0] if self._risk else None,
             risk_summary=self._risk[1] if self._risk else "",
             checkpoints=tuple(self._checkpoints),
