@@ -1,5 +1,6 @@
 import unittest
 import asyncio
+import os
 from pathlib import Path
 
 from aria_code.runtime import (
@@ -924,3 +925,98 @@ class MultiEditTests(unittest.TestCase):
         ]})
         self.assertTrue(r["success"])
         self.assertTrue(r.get("warning"))
+
+
+class TextToolCallTests(unittest.TestCase):
+    """A reply that writes tool calls as text ran nothing and must not end the task."""
+
+    LEAKED = (
+        "<tool_call>default_api:read_file{path:lots.py}"
+        "## Tool Results\n\n### [run_command] ✓ Success\n5 passed"
+    )
+
+    def _run(self, provider_fn, tools=None):
+        async def collect():
+            return [
+                event
+                async for event in run_agent(
+                    "fix lots.py",
+                    [],
+                    provider_fn=provider_fn,
+                    tool_executor=ToolExecutor(tools or {}),
+                    options=AgentOptions(max_rounds=6),
+                )
+            ]
+
+        return asyncio.run(collect())
+
+    def test_detects_written_out_calls_but_not_quoted_ones(self):
+        from aria_code.runtime.agent_loop import looks_like_text_tool_calls
+
+        self.assertTrue(looks_like_text_tool_calls(self.LEAKED))
+        self.assertTrue(looks_like_text_tool_calls("<tool_call>default_api:read_file{path:x}"))
+        self.assertFalse(looks_like_text_tool_calls("Fixed lots.py; all 5 tests pass."))
+        self.assertFalse(looks_like_text_tool_calls(
+            "The parser matches `<tool_call>` tags:\n```\n## Tool Results\n```"))
+
+    def test_text_calls_get_the_round_back_then_real_calls_run(self):
+        messages = []
+        ran = []
+
+        async def provider_fn(message, history, **kwargs):
+            messages.append(message)
+            if len(messages) == 1:
+                return {"success": True, "response": self.LEAKED, "provider": "fake"}
+            if len(messages) == 2:
+                return {
+                    "success": True, "response": "", "provider": "fake",
+                    "tool_calls_pending": [{"tool": "read_file", "params": {"path": "lots.py"}}],
+                }
+            return {"success": True, "response": "done", "provider": "fake"}
+
+        def read_file(params):
+            ran.append(params["path"])
+            return {"success": True, "content": "x"}
+
+        events = self._run(provider_fn, {"read_file": (read_file, "Read")})
+
+        self.assertTrue(any(
+            isinstance(e, AgentEventStatus) and e.state == "text_tool_calls" for e in events))
+        self.assertIn("were executed", messages[1])
+        self.assertEqual([os.path.basename(p) for p in ran], ["lots.py"])
+        self.assertIsInstance(events[-1], AgentEventComplete)
+
+    def test_persistent_text_calls_end_the_turn_incomplete(self):
+        async def provider_fn(message, history, **kwargs):
+            return {"success": True, "response": self.LEAKED, "provider": "fake"}
+
+        events = self._run(provider_fn)
+
+        self.assertIsInstance(events[-1], AgentEventComplete)
+        result = events[-1].result
+        self.assertFalse(result.success)
+        self.assertEqual(result.stop_reason, "text_tool_calls")
+        self.assertIn("none of them were executed", result.final_text)
+
+    def test_provider_call_tokens_are_replayed_in_history(self):
+        histories = []
+
+        async def provider_fn(message, history, **kwargs):
+            histories.append(list(history))
+            if len(histories) == 1:
+                return {
+                    "success": True, "response": "", "provider": "fake",
+                    "tool_calls_pending": [{
+                        "tool": "read_file", "params": {"path": "a"},
+                        "call_id": "call-1", "thought_signature": "c2ln",
+                    }],
+                }
+            return {"success": True, "response": "done", "provider": "fake"}
+
+        self._run(provider_fn, {"read_file": (lambda _p: {"success": True}, "Read")})
+
+        assistant = next(m for m in histories[1] if m.get("role") == "assistant")
+        call = assistant["tool_calls"][0]
+        self.assertEqual(call["id"], "call-1")
+        self.assertEqual(call["thought_signature"], "c2ln")
+        self.assertEqual(call["function"]["arguments"], {"path": "a"})

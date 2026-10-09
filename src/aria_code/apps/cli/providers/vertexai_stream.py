@@ -7,8 +7,10 @@ what to do rather than leaking a ModuleNotFoundError.
 """
 
 import asyncio
+import base64
 import json
 import os
+import re
 from typing import AsyncGenerator, Optional
 
 from aria_code.apps.cli.providers.base import (
@@ -24,6 +26,13 @@ _MISSING_SDK_MESSAGE = (
     "Gemini/Vertex AI 需要 google-genai，当前未安装。\n"
     "  安装：pip install google-genai\n"
     "  或改用其他模型：/model  （Ollama 本地模型无需额外依赖）"
+)
+
+# How runtime.agent_loop.build_tool_followup ends its results text; what
+# follows is guidance, not a copy of the results.
+_TOOL_RESULTS_TRAILERS = (
+    "\n\n⚠ Tool(s) returned errors:",
+    "\n\nAll tools completed successfully.",
 )
 
 
@@ -86,6 +95,40 @@ def _chunk_text(chunk) -> str:
         except Exception:
             return ""
     return ""
+
+
+def _chunk_calls(chunk) -> list:
+    """The function calls in a chunk, with their ids and thought signatures.
+
+    Signatures are base64 text: the call is recorded in history, and history
+    is JSON.
+    """
+    calls = []
+    for candidate in (getattr(chunk, "candidates", None) or [])[:1]:
+        content = getattr(candidate, "content", None)
+        for part in (getattr(content, "parts", None) or []):
+            fc = getattr(part, "function_call", None)
+            if not fc:
+                continue
+            call = {
+                "tool": fc.name,
+                "params": {k: v for k, v in fc.args.items()} if fc.args else {},
+            }
+            if getattr(fc, "id", None):
+                call["call_id"] = fc.id
+            signature = getattr(part, "thought_signature", None)
+            if signature:
+                call["thought_signature"] = base64.b64encode(signature).decode("ascii")
+            calls.append(call)
+    if not calls:
+        # No call parts to read (a chunk without candidates): take the SDK's
+        # own list, which has no signatures.
+        for fc in (getattr(chunk, "function_calls", None) or []):
+            calls.append({
+                "tool": fc.name,
+                "params": {k: v for k, v in fc.args.items()} if fc.args else {},
+            })
+    return calls
 
 
 class VertexAIProvider(LLMProvider):
@@ -170,40 +213,109 @@ class VertexAIProvider(LLMProvider):
                 self._client = genai.Client(api_key=api_key)
         return self._client
         
+    def _requires_thought_signatures(self) -> bool:
+        """Gemini 3 and later reject a replayed function call without its signature."""
+        match = re.search(r"gemini-(\d+)", str(self.model).lower())
+        return bool(match) and int(match.group(1)) >= 3
+
+    @staticmethod
+    def _append(contents: list, role: str, parts: list, types) -> None:
+        # Gemini requires alternating roles: user, model, user, model.
+        if contents and contents[-1].role == role:
+            contents[-1].parts.extend(parts)
+        else:
+            contents.append(types.Content(role=role, parts=parts))
+
+    @staticmethod
+    def _strip_tool_results_text(text: str) -> str:
+        """Drop the text copy of tool results from the loop's follow-up message.
+
+        The follow-up repeats every result as ``## Tool Results ...`` text for
+        providers that have no native tool turn. Once the results have gone to
+        Gemini as function responses, that copy is not just redundant: it is a
+        transcript of tool calls written as prose, and Gemini learns from it to
+        write its next calls — and their results — as prose too, which run
+        nothing. Only what the loop appends after the results is kept: the
+        error / completion guidance and any loop-guard directives.
+        """
+        cut = max(text.rfind(marker) for marker in _TOOL_RESULTS_TRAILERS)
+        return text[cut:].strip() if cut >= 0 else ""
+
     def _messages_to_contents(self, messages: list):
         # Convert aria chat messages to genai Content objects
         from google.genai import types
-        
+
         system_instruction = self.system_override or ""
         contents = []
-        
+        # Calls from the latest native model turn that still need a
+        # function_response, as [name, id] pairs.
+        unanswered: list = []
+        native_results = False
+
+        def answer_leftovers() -> None:
+            # Gemini rejects a turn that leaves any call of the previous model
+            # turn unanswered — e.g. when the batch was cut short.
+            parts = [
+                types.Part(function_response=types.FunctionResponse(
+                    name=name, id=call_id, response={"error": "not executed"}))
+                for name, call_id in unanswered
+            ]
+            unanswered.clear()
+            if parts:
+                self._append(contents, "user", parts, types)
+
         for msg in messages:
             role = msg.get("role", "user")
             content_str = msg.get("content", "")
-            
+
             if role == "system":
                 if system_instruction:
                     system_instruction += "\n\n" + content_str
                 else:
                     system_instruction = content_str
                 continue
-                
+
             genai_role = "user" if role == "user" else "model"
-            
+
+            if role == "assistant" and msg.get("tool_calls"):
+                answer_leftovers()
+                parts = self._function_call_parts(msg["tool_calls"], types)
+                if parts is not None:
+                    if str(content_str or "").strip():
+                        parts.insert(0, types.Part.from_text(text=content_str))
+                    self._append(contents, "model", parts, types)
+                    unanswered = [
+                        [part.function_call.name, part.function_call.id]
+                        for part in parts
+                        if part.function_call
+                    ]
+                    native_results = False
+                    continue
+                # No usable signatures (history from before they were kept, or
+                # from another provider): fall through to the text rendering.
+
+            if role == "tool" and unanswered:
+                tool_name = msg.get("name") or ""
+                index = next(
+                    (i for i, (name, _) in enumerate(unanswered) if name == tool_name),
+                    0,
+                )
+                name, call_id = unanswered.pop(index)
+                self._append(contents, "user", [types.Part(
+                    function_response=types.FunctionResponse(
+                        name=name, id=call_id, response={"result": str(content_str)}),
+                )], types)
+                native_results = True
+                continue
+
             if role == "tool":
-                # Rendered as text, not as a FunctionResponse part.
+                # No native call to answer: rendered as text instead.
                 #
                 # Gemini only accepts a function_response that answers a
-                # function_call it can see in the preceding model turn, and the
-                # agent loop does not preserve those: it records the assistant
-                # turn as plain text. Sending an unanswered function_response
-                # made the conversation malformed, and Gemini replied with a
-                # single whitespace character and no tool call — the turn died
-                # as "empty_response" a round or two in, every time.
-                #
-                # The information is not lost by doing this: the loop already
-                # puts the same results in the follow-up user message that
-                # comes next, in a form written to be read.
+                # function_call it can see in the preceding model turn.
+                # Sending an unanswered function_response made the
+                # conversation malformed, and Gemini replied with a single
+                # whitespace character and no tool call.
                 tool_name = msg.get("name") or "tool"
                 text = f"[{tool_name}] {content_str}".strip()
                 if not text:
@@ -214,7 +326,17 @@ class VertexAIProvider(LLMProvider):
                     contents.append(types.Content(
                         role="user", parts=[types.Part.from_text(text=text)]))
                 continue
-                
+
+            answer_leftovers()
+            if (
+                native_results
+                and role == "user"
+                and isinstance(content_str, str)
+                and content_str.lstrip().startswith("## Tool Results")
+            ):
+                content_str = self._strip_tool_results_text(content_str)
+            native_results = False
+
             # An empty part is worse than no part. When a model answers a turn
             # with nothing but a function call — which Gemini does routinely,
             # and which the agent loop records as an assistant message whose
@@ -233,6 +355,37 @@ class VertexAIProvider(LLMProvider):
                 contents.append(types.Content(role=genai_role, parts=[types.Part.from_text(text=content_str)]))
                 
         return contents, system_instruction
+
+    def _function_call_parts(self, tool_calls: list, types) -> Optional[list]:
+        """The assistant's recorded calls as function_call parts.
+
+        None when they cannot be replayed natively: Gemini 3 rejects a call
+        replayed without the thought signature it was issued with, and calls
+        recorded before signatures were kept (or by another provider) have none.
+        """
+        parts = []
+        signed = False
+        for tool_call in tool_calls:
+            fn = tool_call.get("function", tool_call)
+            name = str(fn.get("name") or "")
+            if not name:
+                continue
+            args = fn.get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            part = types.Part(function_call=types.FunctionCall(
+                name=name, args=dict(args or {}), id=tool_call.get("id") or None))
+            signature = tool_call.get("thought_signature")
+            if signature:
+                part.thought_signature = base64.b64decode(signature)
+                signed = True
+            parts.append(part)
+        if not parts or (self._requires_thought_signatures() and not signed):
+            return None
+        return parts
 
     def _schema_from_dict(self, d: dict, types):
         if not d:
@@ -365,11 +518,17 @@ class VertexAIProvider(LLMProvider):
                                 full_response += text
                                 yield LLMToken(text=text)
 
-                            if chunk.function_calls:
-                                for fc in chunk.function_calls:
-                                    args = {k: v for k, v in fc.args.items()} if fc.args else {}
-                                    yield LLMToolCall(tool=fc.name, params=args)
-                                    tool_calls.append({"tool": fc.name, "params": args})
+                            # Read calls from the parts, not chunk.function_calls:
+                            # the thought signature lives on the part, and Gemini 3
+                            # refuses the next request if the call is replayed
+                            # without it.
+                            for call in _chunk_calls(chunk):
+                                yield LLMToolCall(
+                                    tool=call["tool"], params=call["params"],
+                                    call_id=call.get("call_id"),
+                                    thought_signature=call.get("thought_signature"),
+                                )
+                                tool_calls.append(call)
 
                             for candidate in (getattr(chunk, "candidates", None) or []):
                                 reason = getattr(candidate, "finish_reason", None)

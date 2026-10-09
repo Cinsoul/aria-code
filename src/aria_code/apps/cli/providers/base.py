@@ -33,9 +33,17 @@ class LLMThinking:
 
 @dataclass(frozen=True)
 class LLMToolCall:
-    """Model requested a tool call."""
+    """Model requested a tool call.
+
+    ``call_id`` and ``thought_signature`` are opaque values some backends
+    (Gemini) hand out with a call and require back, unchanged, when the call
+    is replayed in history. Providers that have no such thing leave them None.
+    The signature is base64 text, not bytes, because history is JSON.
+    """
     tool: str
     params: dict
+    call_id: Optional[str] = None
+    thought_signature: Optional[str] = None
 
 
 @dataclass(frozen=True)

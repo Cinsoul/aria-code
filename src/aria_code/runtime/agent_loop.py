@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import time
 from dataclasses import dataclass, field
 from typing import AsyncGenerator, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
@@ -933,6 +934,13 @@ async def execute_tool_turn(
         {
             "tool": str(tool_call.get("tool", "")),
             "params": dict(tool_call.get("params", {}) or {}),
+            # Opaque provider tokens (Gemini call ids / thought signatures)
+            # that must be replayed with the call in the next request.
+            **{
+                key: tool_call[key]
+                for key in ("call_id", "thought_signature")
+                if tool_call.get(key)
+            },
         }
         for tool_call in pending
     ]
@@ -1010,7 +1018,13 @@ async def execute_tool_turn(
             "function": {
                 "name": str(tool_call.get("tool", "")),
                 "arguments": dict(tool_call.get("params", {}) or {}),
-            }
+            },
+            **({"id": tool_call["call_id"]} if tool_call.get("call_id") else {}),
+            **(
+                {"thought_signature": tool_call["thought_signature"]}
+                if tool_call.get("thought_signature")
+                else {}
+            ),
         }
         for tool_call in pending_transcript
         if tool_call.get("tool")
@@ -1062,6 +1076,37 @@ def _truncate_tool_result(text: str, limit: int = _MAX_TOOL_RESULT_CHARS) -> str
         + f"\n\n… [已截断 {omitted:,} 字符 — 输出过长，仅保留首尾以保护上下文] …\n\n"
         + text[-tail:]
     )
+
+
+_MAX_TEXT_TOOL_CALL_RETRIES = 2
+
+# What a reply looks like when the model wrote tool calls instead of making
+# them: a raw call tag, Gemini's "default_api:" call syntax, or an imitation of
+# the "## Tool Results" block build_tool_followup produces.
+_TEXT_TOOL_CALL = re.compile(
+    r"<tool_call>|\bdefault_api[:.]\w|^#{2,3} ?Tool Results\b|^### \[\w+\] (?:✓ Success|❌ Error)",
+    re.MULTILINE,
+)
+
+TEXT_TOOL_CALL_DIRECTIVE = (
+    "Your last reply wrote tool calls (or tool results) as text. None of them "
+    "were executed and no files were changed. Do not write calls or results "
+    "out as text: call the tools through function calling, and only report "
+    "results you actually received."
+)
+
+
+_CODE_SPAN = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.DOTALL)
+
+
+def looks_like_text_tool_calls(text: str) -> bool:
+    """True when a reply with no real tool calls contains written-out ones.
+
+    Code spans are ignored, so an answer that quotes these formats — this
+    being a coding agent, a repo can well contain them — is not mistaken
+    for one.
+    """
+    return bool(text) and bool(_TEXT_TOOL_CALL.search(_CODE_SPAN.sub("", text)))
 
 
 def build_tool_followup(tool_results: Sequence[dict]) -> str:
@@ -1353,6 +1398,7 @@ async def run_agent(
     loop_guard = LoopGuard()
     grounded_results = 1 if opts.evidence_already_grounded else 0
     stop_reason = "max_rounds"
+    text_tool_call_retries = 0
 
     for round_num in range(opts.max_rounds):
         # ── 预算闸门 ─────────────────────────────────────────────────────────
@@ -1435,6 +1481,34 @@ async def run_agent(
         turn_state.apply_model_result(result, response_text)
 
         pending = result.get("tool_calls_pending", [])
+        if not pending and looks_like_text_tool_calls(result.get("response") or response_text):
+            # The model wrote its calls (and often their "results") as prose:
+            # nothing ran. Ending here reported a task as done — sometimes with
+            # tests "passing" — while no file had been touched. Say so and
+            # give it the round back; if it keeps doing it, end incomplete.
+            text_tool_call_retries += 1
+            if text_tool_call_retries > _MAX_TEXT_TOOL_CALL_RETRIES:
+                stop_reason = "text_tool_calls"
+                yield AgentEventStatus(
+                    state=stop_reason,
+                    message="Model kept writing tool calls as text; task remains incomplete",
+                )
+                turn_state.append_response(
+                    "\n\nThe model kept writing tool calls as text instead of "
+                    "calling the tools; none of them were executed."
+                )
+                break
+            yield AgentEventStatus(
+                state="text_tool_calls",
+                message="Model wrote tool calls as text; asking it to call them",
+            )
+            history = list(history) + [
+                {"role": "user", "content": current_message},
+                {"role": "assistant", "content": turn_state.total_response},
+            ]
+            current_message = TEXT_TOOL_CALL_DIRECTIVE
+            turn_state.reset_response()
+            continue
         if not pending:
             # ── 验收闸门 ─────────────────────────────────────────────────────
             # 模型不再要工具 = 它认为做完了。这是唯一一个「宣称完成」的出口,
