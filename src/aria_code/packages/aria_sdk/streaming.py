@@ -38,6 +38,10 @@ async def stream_provider_result(
                 on_thinking(event.content)
         elif event_kind(event) == "LLMToolCall":
             call = {"tool": event.tool, "params": dict(event.params)}
+            if getattr(event, "call_id", None):
+                call["call_id"] = event.call_id
+            if getattr(event, "thought_signature", None):
+                call["thought_signature"] = event.thought_signature
             tool_calls.append(call)
             if on_tool_call:
                 on_tool_call(event.tool, dict(event.params))
