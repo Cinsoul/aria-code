@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.111.0] — 2026-10-09
+
+- fix: verified update recovery and explicit model diagnostics (#146)
+
 ## [0.110.0] — 2026-10-08
 
 - fix: npm update checks no longer fail with HTTP 406 (#144)
