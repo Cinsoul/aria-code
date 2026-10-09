@@ -38,6 +38,7 @@ report: questions and read-only exploration end as they always did.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
@@ -55,6 +56,8 @@ class ChangedFile:
     created: bool = False
     # Definitions touched, from runtime/semantic_diff: "refresh() modified".
     symbols: tuple = ()
+    # Test files that reference what changed (repo_map), relative to the root.
+    tested_by: tuple = ()
 
     @property
     def mark(self) -> str:
@@ -111,7 +114,8 @@ class DeliveryReport:
         risk = data.get("risk") or {}
         return cls(
             status=str(data.get("status") or "done"),
-            changed=tuple(ChangedFile(**{**item, "symbols": tuple(item.get("symbols") or ())})
+            changed=tuple(ChangedFile(**{**item, "symbols": tuple(item.get("symbols") or ()),
+                                         "tested_by": tuple(item.get("tested_by") or ())})
                           for item in data.get("changed") or ()),
             checks=tuple(dict(item) for item in data.get("checks") or ()),
             verified=data.get("verified"),
@@ -138,6 +142,10 @@ class DeliveryReport:
                     shown = " · ".join(item.symbols[:4])
                     more = f" · +{len(item.symbols) - 4}" if len(item.symbols) > 4 else ""
                     lines.append(f"      {shown}{more}")
+                if item.tested_by:
+                    shown = ", ".join(item.tested_by[:3])
+                    more = f" +{len(item.tested_by) - 3}" if len(item.tested_by) > 3 else ""
+                    lines.append(f"      tested by {shown}{more}")
             if len(self.changed) > 1:
                 lines.append(f"  {len(self.changed)} files · +{self.added} / -{self.removed}")
         lines += ["", "Verified"]
@@ -178,6 +186,13 @@ def _display(path: str, root: Optional[Path | str]) -> str:
         except (ValueError, OSError):
             pass
     return path
+
+
+_TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec)/|(^|/)test_[^/]+$|_test\.[a-z]+$|\.(test|spec)\.[a-z]+$")
+
+
+def _is_test_path(path: str) -> bool:
+    return bool(_TEST_PATH.search(path.replace("\\", "/")))
 
 
 def _diff_stats(diff: str) -> tuple[int, int, bool]:
@@ -248,17 +263,39 @@ class DeliveryLedger:
     def changed(self) -> bool:
         return bool(self._changed)
 
-    def _symbols(self, path: str) -> tuple:
+    def _symbol_changes(self, path: str) -> list:
         diffs = self._file_diffs.get(path)
         if not diffs:
-            return ()
+            return []
         try:
             from .semantic_diff import file_symbol_changes
 
-            changes = file_symbol_changes(path, diffs)
+            return list(file_symbol_changes(path, diffs) or [])
+        except Exception:
+            return []
+
+    def _tested_by(self, changes: Sequence) -> tuple:
+        """Test files that reference a definition this change added or modified.
+
+        A method counts only where its class is referenced too: "get" alone
+        appears in half the tests of any project.
+        """
+        wanted = [c.name.split(".") for c in changes if c.kind != "removed"]
+        if not wanted or not self.root:
+            return ()
+        try:
+            from .repo_map import get_repo_map
+
+            refs = get_repo_map(self.root).refs
         except Exception:
             return ()
-        return tuple(change.label() for change in changes or ())
+        found: set = set()
+        for parts in wanted:
+            files = set(refs.get(parts[-1], ()))
+            for outer in parts[:-1]:
+                files &= set(refs.get(outer, ()))
+            found |= {f for f in files if _is_test_path(f)}
+        return tuple(sorted(found))
 
     def diff_text(self) -> str:
         """Every applied change's diff, in order — what a reviewer reads."""
@@ -283,7 +320,9 @@ class DeliveryLedger:
         refused = tuple(dict(item) for item in (contract or {}).get("refused") or ())
         changed = tuple(self._changed.values())
         for item in changed:
-            item.symbols = self._symbols(item.path)
+            changes = self._symbol_changes(item.path)
+            item.symbols = tuple(change.label() for change in changes)
+            item.tested_by = self._tested_by(changes)
 
         if stop_reason != "completed":
             status = "incomplete"

@@ -99,3 +99,22 @@ def test_the_reviewer_describes_behaviour():
     assert report.behaviour["after"] == "They share one refresh."
     rendered = DeliveryReport(status="done", review="x", behaviour=report.behaviour).render()
     assert "Behaviour" in rendered and "  After  They share one refresh." in rendered
+
+
+def test_tested_by_names_the_tests_that_reference_what_changed(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    path = tmp_path / "src" / "session.py"
+    path.write_text(V1)
+    (tmp_path / "tests" / "test_session.py").write_text(
+        "from src.session import Session\n\ndef test_refresh():\n    Session().refresh()\n")
+    (tmp_path / "tests" / "test_other.py").write_text("def test_x():\n    thing.refresh()\n")
+    (tmp_path / "src" / "uses.py").write_text("from src.session import Session\nSession().refresh()\n")
+    ledger = DeliveryLedger(root=str(tmp_path))
+    ledger.record("edit_file", {"path": str(path)},
+                  {"success": True, "data": {"path": str(path), "applied": True, "diff": _diff(V0, V1)}})
+    item = ledger.report().changed[0]
+    assert item.symbols == ("Session.refresh() modified",)
+    # test_other.py says "refresh" but never "Session"; uses.py is not a test.
+    assert item.tested_by == ("tests/test_session.py",)
+    assert "      tested by tests/test_session.py" in ledger.report().render()
