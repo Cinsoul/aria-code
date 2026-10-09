@@ -1,0 +1,292 @@
+"""The delivery report — how a coding turn ends, written from evidence.
+
+A turn used to end with whatever the model chose to say: "I have successfully
+implemented…", sometimes over a red test run, sometimes with nothing changed.
+The runtime knows better than the model what happened — which files changed and
+by how much, which checks ran and how they came out, what the change contract
+refused, the riskiest thing that ran, and where the checkpoints are — so it
+writes the ending itself, in one fixed shape:
+
+    DONE
+
+    Changed
+      M src/auth/session.py          +43 -18
+      A src/auth/refresh.py          +82
+
+    Verified
+      ✓ python3 -m pytest -q
+
+    Review
+      Not reviewed
+
+    Risk
+      L1 low · Edit files
+
+    Checkpoint
+      2 checkpoints · /rewind code <run>
+
+    Next
+      Ready to commit
+
+The status comes from evidence, never from the model's text: a turn that
+stopped early, or whose checks are red, is INCOMPLETE however confident its
+last message sounds.
+
+A turn that changed nothing, ran no checks and had nothing refused gets no
+report: questions and read-only exploration end as they always did.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Optional, Sequence
+
+from aria_code.safety.risk import LEVEL_NAMES, assess_tool
+
+from .acceptance import DEFAULT_MUTATING_TOOLS, extract_mutated_paths
+
+
+@dataclass
+class ChangedFile:
+    path: str
+    added: int = 0
+    removed: int = 0
+    created: bool = False
+
+    @property
+    def mark(self) -> str:
+        return "A" if self.created else "M"
+
+
+@dataclass(frozen=True)
+class DeliveryReport:
+    status: str                          # "done" | "incomplete"
+    changed: tuple = ()
+    checks: tuple = ()                   # ({"command", "passed", "exit_code"}, …)
+    verified: Optional[bool] = None
+    review: str = "Not reviewed"
+    risk_level: Optional[int] = None
+    risk_summary: str = ""
+    checkpoints: tuple = ()
+    refused: tuple = ()
+    stop_reason: str = "completed"
+    next: str = ""
+
+    @property
+    def worth_showing(self) -> bool:
+        return bool(self.changed or self.checks or self.refused)
+
+    @property
+    def added(self) -> int:
+        return sum(item.added for item in self.changed)
+
+    @property
+    def removed(self) -> int:
+        return sum(item.removed for item in self.changed)
+
+    def as_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "changed": [vars(item).copy() for item in self.changed],
+            "checks": [dict(item) for item in self.checks],
+            "verified": self.verified,
+            "review": self.review,
+            "risk": None if self.risk_level is None else {
+                "level": self.risk_level, "name": LEVEL_NAMES[self.risk_level], "summary": self.risk_summary},
+            "checkpoints": list(self.checkpoints),
+            "refused": [dict(item) for item in self.refused],
+            "stop_reason": self.stop_reason,
+            "next": self.next,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "DeliveryReport":
+        risk = data.get("risk") or {}
+        return cls(
+            status=str(data.get("status") or "done"),
+            changed=tuple(ChangedFile(**item) for item in data.get("changed") or ()),
+            checks=tuple(dict(item) for item in data.get("checks") or ()),
+            verified=data.get("verified"),
+            review=str(data.get("review") or "Not reviewed"),
+            risk_level=risk.get("level"),
+            risk_summary=str(risk.get("summary") or ""),
+            checkpoints=tuple(data.get("checkpoints") or ()),
+            refused=tuple(dict(item) for item in data.get("refused") or ()),
+            stop_reason=str(data.get("stop_reason") or "completed"),
+            next=str(data.get("next") or ""),
+        )
+
+    def render(self, *, rewind_hint: str = "", root: Optional[Path | str] = None) -> str:
+        lines = [self.status.upper()]
+        if self.changed:
+            width = max(len(_display(item.path, root)) for item in self.changed)
+            lines += ["", "Changed"]
+            for item in self.changed:
+                stats = f"+{item.added}" + (f" -{item.removed}" if item.removed or not item.created else "")
+                lines.append(f"  {item.mark} {_display(item.path, root):<{width}}  {stats}")
+            if len(self.changed) > 1:
+                lines.append(f"  {len(self.changed)} files · +{self.added} / -{self.removed}")
+        lines += ["", "Verified"]
+        if self.checks:
+            for check in self.checks:
+                ok = check.get("passed")
+                tail = "" if ok else f"  (exit {check.get('exit_code')})"
+                lines.append(f"  {'✓' if ok else '✗'} {check.get('command', '')}{tail}")
+            if self.verified is None and self.changed:
+                lines.append("  ⚠ changed again after the last check")
+        else:
+            lines.append("  — no check ran" + (" (none could be inferred)" if self.changed else ""))
+        lines += ["", "Review", f"  {self.review}"]
+        if self.risk_level is not None:
+            lines += ["", "Risk", f"  L{self.risk_level} {LEVEL_NAMES[self.risk_level]}"
+                      + (f" · {self.risk_summary}" if self.risk_summary else "")]
+        if self.refused:
+            lines += ["", "Contract"]
+            lines += [f"  × {item.get('tool', '')}: {item.get('reason', '')}" for item in self.refused]
+        if self.checkpoints:
+            count = len(self.checkpoints)
+            label = f"{count} checkpoint{'s' if count != 1 else ''}"
+            lines += ["", "Checkpoint", f"  {label}" + (f" · {rewind_hint}" if rewind_hint else "")]
+        if self.next:
+            lines += ["", "Next", f"  {self.next}"]
+        return "\n".join(lines)
+
+
+def _display(path: str, root: Optional[Path | str]) -> str:
+    if root:
+        try:
+            return Path(path).resolve().relative_to(Path(root).expanduser().resolve()).as_posix()
+        except (ValueError, OSError):
+            pass
+    return path
+
+
+def _diff_stats(diff: str) -> tuple[int, int, bool]:
+    added = removed = 0
+    created = False
+    for line in (diff or "").splitlines():
+        if line.startswith("+++") or line.startswith("---"):
+            if line.startswith("--- /dev/null"):
+                created = True
+            continue
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+    return added, removed, created
+
+
+def _data(result: Any) -> Mapping:
+    if not isinstance(result, Mapping):
+        return {}
+    data = result.get("data")
+    return data if isinstance(data, Mapping) else result
+
+
+@dataclass
+class DeliveryLedger:
+    """What a turn did, recorded as it happens; turned into a report at the end."""
+
+    root: Optional[str] = None
+    mutating_tools: frozenset = DEFAULT_MUTATING_TOOLS
+    _changed: dict = field(default_factory=dict)
+    _checkpoints: list = field(default_factory=list)
+    _risk: Optional[tuple] = None
+
+    def record(self, tool: str, params: Mapping | None, result: Any) -> None:
+        if isinstance(result, Mapping) and result.get("contract_violation"):
+            return  # refused calls did not run; the contract summary has them
+        if isinstance(result, Mapping) and result.get("success") is not False:
+            assessment = assess_tool(tool, params or {}, root=self.root)
+            if self._risk is None or assessment.level > self._risk[0]:
+                self._risk = (assessment.level, assessment.summary)
+        paths = extract_mutated_paths(tool, result, mutating_tools=self.mutating_tools)
+        if not paths:
+            return
+        data = _data(result)
+        added, removed, created = _diff_stats(str(data.get("diff") or ""))
+        action = str(data.get("action") or "").lower()
+        created = created or action in {"created", "create", "write new file"}
+        for index, path in enumerate(paths):
+            entry = self._changed.get(path)
+            if entry is None:
+                entry = self._changed[path] = ChangedFile(path=path, created=created)
+            if index == 0:  # one diff per call; attribute it to the first path
+                entry.added += added
+                entry.removed += removed
+        checkpoint = data.get("checkpoint_id")
+        if checkpoint and checkpoint not in self._checkpoints:
+            self._checkpoints.append(str(checkpoint))
+
+    def report(
+        self,
+        *,
+        acceptance: Optional[Mapping] = None,
+        contract: Optional[Mapping] = None,
+        stop_reason: str = "completed",
+    ) -> DeliveryReport:
+        checks: list = []
+        reports = list((acceptance or {}).get("reports") or [])
+        if reports:
+            checks = [
+                {"command": c.get("command", ""), "passed": bool(c.get("passed")), "exit_code": c.get("exit_code")}
+                for c in reports[-1].get("checks") or []
+            ]
+        verified = (acceptance or {}).get("verified")
+        refused = tuple(dict(item) for item in (contract or {}).get("refused") or ())
+        changed = tuple(self._changed.values())
+
+        if stop_reason != "completed":
+            status = "incomplete"
+            next_step = {
+                "max_rounds": "Ran out of rounds — continue, or narrow the task",
+                "budget_exhausted": "Budget reached — raise it or narrow the task",
+                "loop_guard": "Stopped repeating a failing call — look at the error above",
+                "checks_failed": "Fix the failing checks",
+                "text_tool_calls": "The model wrote tool calls as text — retry the turn",
+            }.get(stop_reason, f"Stopped: {stop_reason}")
+        elif verified is False or any(not c["passed"] for c in checks):
+            status = "incomplete"
+            next_step = "Fix the failing checks"
+        elif changed:
+            status = "done"
+            next_step = ("Ready to commit" if verified else
+                         "Review the changes — no check ran" if not checks else
+                         "Re-run the checks: files changed after the last run")
+        else:
+            status = "done"
+            next_step = ""
+        if refused and status == "done":
+            next_step = "Some calls were refused by the change contract — see above" if not changed \
+                else next_step + " · some calls were refused by the contract"
+
+        return DeliveryReport(
+            status=status,
+            changed=changed,
+            checks=tuple(checks),
+            verified=verified,
+            risk_level=self._risk[0] if self._risk else None,
+            risk_summary=self._risk[1] if self._risk else "",
+            checkpoints=tuple(self._checkpoints),
+            refused=refused,
+            stop_reason=stop_reason,
+            next=next_step,
+        )
+
+
+def report_from_activities(
+    activities: Iterable[tuple[str, Mapping, Any]],
+    *,
+    root: Optional[str] = None,
+    acceptance: Optional[Mapping] = None,
+    contract: Optional[Mapping] = None,
+    stop_reason: str = "completed",
+) -> DeliveryReport:
+    ledger = DeliveryLedger(root=root)
+    for tool, params, result in activities:
+        ledger.record(tool, params, result)
+    return ledger.report(acceptance=acceptance, contract=contract, stop_reason=stop_reason)
+
+
+__all__ = ["ChangedFile", "DeliveryLedger", "DeliveryReport", "report_from_activities"]

@@ -18,6 +18,7 @@ from .acceptance import AcceptanceGate
 from .approval import ApprovalDecision, apply_approval_decision
 from .tool_executor import ToolExecutor
 from .budget import BudgetTracker
+from .delivery import DeliveryLedger
 
 if TYPE_CHECKING:
     from .contract import ChangeContract
@@ -360,6 +361,7 @@ class AgentTurnState:
         acceptance: Optional[dict] = None,
         stop_reason: str = "completed",
         contract: Optional[dict] = None,
+        delivery: Optional[dict] = None,
     ) -> "AgentTurnResult":
         metadata = self.build_metadata(
             elapsed=elapsed,
@@ -378,6 +380,7 @@ class AgentTurnState:
             acceptance=acceptance,
             stop_reason=stop_reason,
             contract=contract,
+            delivery=delivery,
         )
 
     def build_cancelled_result(
@@ -455,6 +458,10 @@ class AgentTurnResult:
     # The change contract this turn ran under and what it refused, or None
     # when no contract applied.
     contract: Optional[dict] = None
+    # The runtime's account of the turn (runtime/delivery.py): what changed,
+    # what was verified, the risk, checkpoints. None when nothing happened
+    # worth reporting.
+    delivery: Optional[dict] = None
 
     @classmethod
     def cancelled_result(
@@ -1421,6 +1428,8 @@ async def run_agent(
         request = current_message if opts.requires_evidence else f"[User request]\n{prompt}"
         current_message = f"{opts.contract.prompt_block()}\n\n{request}"
     contract_refusals: List[dict] = []
+    ledger = DeliveryLedger(root=str(
+        getattr(opts.acceptance, "root", None) or getattr(opts.contract, "root", None) or "") or None)
     token_count = 0
     thinking_tokens = 0
     result: dict = {}
@@ -1609,6 +1618,7 @@ async def run_agent(
 
         for activity in tool_turn_result.activities:
             turn_state.tools_used.append(activity.tool)
+            ledger.record(activity.tool, activity.params, activity.result)
             refusal = (activity.result or {}).get("contract_violation")
             if refusal:
                 contract_refusals.append(dict(refusal))
@@ -1678,6 +1688,16 @@ async def run_agent(
     )
     if stop_reason == "completed" and acceptance_summary and acceptance_summary.get("verified") is False:
         stop_reason = "checks_failed"
+    contract_summary = (
+        {
+            "goal": opts.contract.goal,
+            "source": opts.contract.source,
+            "text": opts.contract.render(),
+            "refused": contract_refusals,
+        }
+        if opts.contract is not None else None
+    )
+    delivery = ledger.report(acceptance=acceptance_summary, contract=contract_summary, stop_reason=stop_reason)
     turn_result = turn_state.build_result(
         elapsed=elapsed,
         success=stop_reason == "completed",
@@ -1687,14 +1707,7 @@ async def run_agent(
         token_count=token_count,
         thinking_tokens=thinking_tokens,
         acceptance=acceptance_summary,
-        contract=(
-            {
-                "goal": opts.contract.goal,
-                "source": opts.contract.source,
-                "text": opts.contract.render(),
-                "refused": contract_refusals,
-            }
-            if opts.contract is not None else None
-        ),
+        contract=contract_summary,
+        delivery=delivery.as_dict() if delivery.worth_showing else None,
     )
     yield AgentEventComplete(result=turn_result)
