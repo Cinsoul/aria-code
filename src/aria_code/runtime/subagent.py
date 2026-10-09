@@ -113,7 +113,7 @@ def restore_tasks() -> int:
     A running coroutine cannot safely be resumed, so it is retained as an
     explicit interrupted task rather than silently disappearing.
     """
-    restored = 0
+    restored = []
     for record in _ledger().restore():
         task_id = str(record.get("task_id") or "").strip()
         if not task_id or task_id in _TASKS:
@@ -141,9 +141,12 @@ def restore_tasks() -> int:
             handoff=dict(record.get("handoff") or {}),
         )
         _TASKS[task_id] = task
-        _persist(task)
-        restored += 1
-    return restored
+        restored.append(task)
+    try:
+        _ledger().upsert_many(task.snapshot() for task in restored)
+    except Exception:
+        pass
+    return len(restored)
 
 
 def register_runner(runner: Callable) -> None:

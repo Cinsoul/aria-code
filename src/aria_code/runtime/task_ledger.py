@@ -69,18 +69,33 @@ class TaskLedger:
                 os.unlink(temp_name)
 
     def upsert(self, record: Mapping[str, Any]) -> None:
-        task_id = str(record.get("task_id") or "").strip()
-        if not task_id:
-            raise ValueError("Task record requires task_id")
-        records = self.load()
-        snapshot = dict(record)
-        snapshot["updated_at"] = time.time()
-        result = str(snapshot.get("result") or "")
-        if len(result) > MAX_RESULT_CHARS:
-            snapshot["result"] = result[:MAX_RESULT_CHARS] + "\n…[truncated in task ledger]"
-            snapshot["result_truncated"] = True
-        records[task_id] = snapshot
-        self.save(records)
+        self.upsert_many([record])
+
+    def upsert_many(self, records: Iterable[Mapping[str, Any]]) -> None:
+        """Write several snapshots with one read and one write of the file.
+
+        Each write rewrites the whole ledger, so a caller with many records
+        must not upsert them one by one: restoring a 2,500-task ledger that
+        way read and rewrote 1.7 MB 2,500 times and held CLI startup for
+        minutes.
+        """
+        snapshots = []
+        for record in records:
+            task_id = str(record.get("task_id") or "").strip()
+            if not task_id:
+                raise ValueError("Task record requires task_id")
+            snapshot = dict(record)
+            snapshot["updated_at"] = time.time()
+            result = str(snapshot.get("result") or "")
+            if len(result) > MAX_RESULT_CHARS:
+                snapshot["result"] = result[:MAX_RESULT_CHARS] + "\n…[truncated in task ledger]"
+                snapshot["result_truncated"] = True
+            snapshots.append((task_id, snapshot))
+        if not snapshots:
+            return
+        stored = self.load()
+        stored.update(snapshots)
+        self.save(stored)
 
     def restore(self) -> Iterable[dict[str, Any]]:
         return self.load().values()

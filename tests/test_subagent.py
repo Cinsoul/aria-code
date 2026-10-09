@@ -188,6 +188,29 @@ class TestTaskPersistence:
         assert restored.status == "interrupted"
         assert "restarted" in restored.error
 
+    def test_restoring_many_tasks_reads_and_writes_the_ledger_once(self, tmp_path, monkeypatch):
+        # One rewrite per restored task made startup quadratic in the ledger:
+        # minutes for a ledger of a few thousand tasks.
+        import aria_code.runtime.subagent as subagent
+        ledger = TaskLedger(tmp_path / "tasks.json")
+        ledger.save({
+            f"t{i}": {"task_id": f"t{i}", "prompt": "p", "status": "running" if i % 2 else "done"}
+            for i in range(300)
+        })
+        subagent._LEDGER = ledger
+        subagent._TASKS.clear()
+        calls = {"load": 0, "save": 0}
+        load, save = ledger.load, ledger.save
+        monkeypatch.setattr(ledger, "load", lambda: calls.__setitem__("load", calls["load"] + 1) or load())
+        monkeypatch.setattr(ledger, "save", lambda records: calls.__setitem__("save", calls["save"] + 1) or save(records))
+
+        assert restore_tasks() == 300
+        assert calls == {"load": 2, "save": 1}  # restore's read, then one read-modify-write
+        stored = load()
+        assert stored["t1"]["status"] == "interrupted"
+        assert stored["t2"]["status"] == "done"
+        subagent._TASKS.clear()
+
     def test_completed_handoff_is_exposed(self):
         task = SubagentTask(
             task_id="handoff1", prompt="inspect", status="done", result="ok",
