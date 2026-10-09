@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.118.0] — 2026-10-09
+
+- Merge pull request #157 from Cinsoul/fix/crisp-robot-mascot
+
 ## [0.117.0] — 2026-10-09
 
 - fix: restore task history without quadratic startup writes (#155)
