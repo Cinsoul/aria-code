@@ -846,6 +846,9 @@ _ACTIVE_LSP_AUTOCHECK = [False]  # opt-in: run LSP diagnostics after each edit
 # "risk" runs calls at or below the auto-approve level without a prompt.
 _ACTIVE_APPROVAL_MODE = ["manual"]
 _ACTIVE_AUTO_APPROVE_LEVEL = [1]
+# True only while a chat turn renders tools as action cells: run_command then
+# leaves its exit line and output tail to the cell instead of printing them.
+_ACTION_VIEW_ACTIVE = [False]
 
 
 def _sync_write_policy(config: dict):
@@ -4206,6 +4209,7 @@ class ArtheraTerminal(_ChatTurn, _Chrome, _HeadlessMixin):
         self._transcript_log: list[str] = []
         self._transcript_visible = False
         self._last_thinking: str = ""   # full thinking text of last turn (Ctrl+O)
+        self._action_details: list = []  # every action of the last turn, in full (Ctrl+O)
         # Session recap: timestamp of last completed AI turn
         self._last_turn_ts: float = 0.0
 

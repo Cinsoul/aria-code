@@ -139,3 +139,44 @@ def test_a_plain_denial_still_stops():
 
     events = asyncio.run(collect())
     assert type(events[-1]).__name__ == "AgentEventCancelled"
+
+
+def _ran(code, stdout="", stderr=""):
+    return {"success": True, "data": {"command": "x", "exit_code": code, "stdout": stdout, "stderr": stderr}}
+
+
+def test_a_passing_command_shows_the_tail_of_its_output():
+    view = ActionView()
+    out = view.done("run_command", {"command": "pytest -q"}, _ran(0, "a\nb\nc\n5 passed in 0.1s\n"), 0.4)
+    assert _texts(out) == ["   └ ✓ 400ms · 4 lines", "     … +2 lines (ctrl+o)", "     c", "     5 passed in 0.1s"]
+
+
+def test_a_failing_command_is_red_with_more_of_the_tail():
+    view = ActionView()
+    out = view.done("run_command", {}, _ran(1, "", "E1\nE2\nE3\nE4\nE5\n"), 1.0)
+    assert out[0] == ("red", "   └ ✗ exit 1 · 1.0s · 5 lines")
+    assert [t for _, t in out[2:]] == ["     E2", "     E3", "     E4", "     E5"]
+
+
+def test_the_detail_view_has_everything():
+    from aria_code.ui.render.actions import format_action_details
+
+    view = ActionView()
+    view.done("read_file", {"path": "a.py"}, {"success": True})
+    view.done("edit_file", {"path": "a.py"}, {"success": True, "data": {"diff": "--- a\n+++ b\n-x\n+y\n"}}, 0.01)
+    view.done("run_command", {"command": "pytest -q"}, _ran(1, "\n".join(f"line {i}" for i in range(200))), 2.0)
+    lines = format_action_details(view.details, max_lines=150)
+    texts = _texts(lines)
+    assert "✓ Read a.py" in texts and "✓ Edit a.py  · 10ms" in texts
+    assert ("red", "    -x") in lines and ("green", "    +y") in lines
+    assert "✓ $ pytest -q  · 2.0s" in texts and "    exit 1" in texts
+    assert "    line 0" in texts and "    … +50 lines" in texts
+
+
+def test_run_command_can_leave_its_outcome_to_the_transcript(capsys):
+    from aria_code.apps.cli.tools.system_tools import tool_run_command
+
+    result = tool_run_command({"command": "echo hi", "policy": "balanced", "user_approved": True},
+                              console=None, has_rich=False, quiet=True)
+    assert result["success"] and "hi" in result["data"]["stdout"]
+    assert "Command exit" not in capsys.readouterr().out

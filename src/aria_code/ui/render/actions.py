@@ -151,9 +151,28 @@ class _Explored:
         return out
 
 
+def _command_output(result: Any) -> tuple[Optional[int], list[str], str]:
+    """(exit code, output lines, saved full-output path) of a run_command result."""
+    data = result.get("data") if isinstance(result, Mapping) else None
+    if not isinstance(data, Mapping):
+        return None, [], ""
+    stdout = str(data.get("stdout") or "").rstrip()
+    stderr = str(data.get("stderr") or "").rstrip()
+    lines = (stdout.splitlines() if stdout else []) + (stderr.splitlines() if stderr else [])
+    code = data.get("exit_code")
+    return (code if isinstance(code, int) else None), lines, str(data.get("full_output_path") or "")
+
+
+TAIL_OK = 2      # output lines kept under a passing command
+TAIL_FAIL = 4    # … and under a failing one
+
+
 @dataclass
 class ActionView:
     _explored: Optional[_Explored] = None
+    # Everything each action did, for the detail view (ctrl+o): the full
+    # command and output, the whole diff, the error.
+    details: list = field(default_factory=list)
 
     def flush(self) -> list[Line]:
         """The pending Explored cell, if any. Call before printing anything else."""
@@ -188,6 +207,7 @@ class ActionView:
     def done(self, tool: str, params: Mapping[str, Any] | None, result: Any,
              seconds: Optional[float] = None) -> list[Line]:
         params = params or {}
+        self._record(tool, params, result, seconds)
         item = explore_item(tool, params)
         if item is not None:
             if self._explored is None:
@@ -200,10 +220,12 @@ class ActionView:
             return []
         ok = _ok(result)
         took = _duration(seconds)
+        canonical = str(tool).rsplit("__", 1)[-1]
+        if ok and canonical == "run_command":
+            return self._ran(result, took)
         if not ok:
             detail = _error(result) or "failed"
             return [("red", f"   └ ✗ {detail}" + (f" · {took}" if took else ""))]
-        canonical = str(tool).rsplit("__", 1)[-1]
         parts = []
         if canonical in EDIT_TOOLS:
             counts = _diff_counts(result)
@@ -213,5 +235,63 @@ class ActionView:
             parts.append(took)
         return [("green", "   └ ✓" + (f" {' · '.join(parts)}" if parts else ""))]
 
+    def _ran(self, result: Any, took: str) -> list[Line]:
+        """A command's result line and the tail of its output — where "OK" or the failure is."""
+        code, lines, _ = _command_output(result)
+        passed = code in (None, 0)
+        facts = ([] if passed else [f"exit {code}"]) + ([took] if took else [])
+        if lines:
+            facts.append(f"{len(lines)} line{'s' if len(lines) != 1 else ''}")
+        head = ("green", "   └ ✓" + (f" {' · '.join(facts)}" if facts else "")) if passed else \
+            ("red", f"   └ ✗ {' · '.join(facts)}")
+        keep = TAIL_OK if passed else TAIL_FAIL
+        out = [head]
+        if len(lines) > keep:
+            out.append(("dim", f"     … +{len(lines) - keep} lines (ctrl+o)"))
+        out += [("dim" if passed else "red", f"     {_short(line, 150)}") for line in lines[-keep:]]
+        return out
 
-__all__ = ["ActionView", "EDIT_TOOLS", "EXPLORE_TOOLS", "explore_item"]
+    def _record(self, tool: str, params: Mapping[str, Any], result: Any, seconds: Optional[float]) -> None:
+        canonical = str(tool).rsplit("__", 1)[-1]
+        entry = {"tool": canonical, "ok": _ok(result), "seconds": seconds, "error": _error(result)}
+        if canonical == "run_command":
+            code, lines, saved = _command_output(result)
+            entry.update(title=f"$ {_short(params.get('command'), 200)}", exit_code=code,
+                         output=lines, saved=saved)
+        else:
+            item = explore_item(tool, params)
+            target = _path_of(params) or params.get("query") or params.get("pattern") or ""
+            verb = item[0] if item else EDIT_TOOLS.get(canonical, canonical.replace("_", " "))
+            entry["title"] = f"{verb} {_short(target, 200)}".strip()
+            data = result.get("data") if isinstance(result, Mapping) else None
+            if isinstance(data, Mapping) and isinstance(data.get("diff"), str):
+                entry["diff"] = data["diff"].splitlines()
+        self.details.append(entry)
+
+
+def format_action_details(details: list, *, max_lines: int = 120) -> list[Line]:
+    """The detail view: every action of the turn with its full command, output and diff."""
+    out: list[Line] = []
+    for entry in details:
+        mark = "✓" if entry.get("ok") else "✗"
+        took = _duration(entry.get("seconds"))
+        out.append(("bold" if entry.get("ok") else "bold red",
+                    f"{mark} {entry.get('title', entry.get('tool', ''))}" + (f"  · {took}" if took else "")))
+        if entry.get("error"):
+            out.append(("red", f"    {entry['error']}"))
+        if entry.get("exit_code") not in (None, 0):
+            out.append(("red", f"    exit {entry['exit_code']}"))
+        for key, style_of in (("output", lambda l: "dim"),
+                              ("diff", lambda l: "green" if l.startswith("+") and not l.startswith("+++")
+                               else "red" if l.startswith("-") and not l.startswith("---") else "dim")):
+            body = entry.get(key) or []
+            for line in body[:max_lines]:
+                out.append((style_of(line), f"    {line[:200]}"))
+            if len(body) > max_lines:
+                out.append(("dim", f"    … +{len(body) - max_lines} lines"))
+        if entry.get("saved"):
+            out.append(("dim", f"    full output: {entry['saved']}"))
+    return out
+
+
+__all__ = ["ActionView", "EDIT_TOOLS", "EXPLORE_TOOLS", "explore_item", "format_action_details"]

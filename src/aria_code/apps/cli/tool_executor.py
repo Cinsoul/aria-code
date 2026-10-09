@@ -138,7 +138,8 @@ def _tool_run_command(params: dict) -> dict:
     """Run a shell command — thin wrapper supplying global defaults."""
     params.setdefault("permission_mode", _g("_ACTIVE_PERMISSION_MODE")[0])
     params.setdefault("network_enabled", _g("_ACTIVE_NETWORK_ENABLED")[0])
-    return _src_run_command(params, console=_g("console"), has_rich=_g("HAS_RICH"))
+    return _src_run_command(params, console=_g("console"), has_rich=_g("HAS_RICH"),
+                            quiet=bool(_g("_ACTION_VIEW_ACTIVE")[0]))
 def _tool_web_fetch(params: dict) -> dict:
     return _src_web_fetch(params)
 def _tool_github(params: dict) -> dict:
@@ -570,6 +571,10 @@ def _confirm_tool_execution_decision(tool_name: str, params: dict,
 
     # ── Default confirmation for write_file / edit_file / low-risk run ────────
     if tool_name == "edit_file":
+        # Resolve a symbol edit now, so the preview shows the real change and
+        # the approved params are the ones that run.
+        from aria_code.runtime.symbol_edit import resolve_symbol_edit
+        resolve_symbol_edit(params)
         _show_edit_preview(params)
     elif tool_name == "multi_edit":
         _show_multi_edit_preview(params)
