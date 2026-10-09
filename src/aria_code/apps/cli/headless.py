@@ -212,6 +212,8 @@ class HeadlessMixin:
                     "provider": getattr(_turn.final, "provider", ""),
                     "tools_used": _tools_used,
                     "acceptance": getattr(_turn.final, "acceptance", None),
+                    "delivery": getattr(_turn.final, "delivery", None),
+                    "contract": getattr(_turn.final, "contract", None),
                     "stop_reason": getattr(_turn.final, "stop_reason", "") or _turn.error or "completed",
                 }
             finally:

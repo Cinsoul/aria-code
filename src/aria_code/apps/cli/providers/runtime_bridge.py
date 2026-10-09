@@ -85,6 +85,16 @@ def _declared_acceptance_commands(cfg: dict, message: str) -> tuple:
     return tuple(commands)
 
 
+def _workspace_root(cfg: dict, executor=None) -> str:
+    """Where this turn's tools act: the executor's workspace if it names one."""
+    import os
+
+    root = cfg.get("_session_workspace_root") or cfg.get("workspace_root") or os.getcwd()
+    if getattr(executor, "execution_context", None) is not None:
+        root = dict(executor.execution_context() or {}).get("_workspace") or root
+    return str(root)
+
+
 def build_acceptance_gate(executor, config: Optional[dict] = None, message: str = ""):
     """The CLI's acceptance gate, or ``None`` when this session shouldn't have one.
 
@@ -108,14 +118,11 @@ def build_acceptance_gate(executor, config: Optional[dict] = None, message: str 
     if "run_command" not in getattr(executor, "local_tools", {}):
         return None
 
-    import os
     from aria_code.runtime.acceptance import AcceptanceGate
     from aria_code.runtime.approval import ApprovalDecision
 
     timeout = int(cfg.get("acceptance_timeout", 300) or 300)
-    root = cfg.get("_session_workspace_root") or cfg.get("workspace_root") or os.getcwd()
-    if getattr(executor, "execution_context", None) is not None:
-        root = dict(executor.execution_context() or {}).get("_workspace") or root
+    root = _workspace_root(cfg, executor)
 
     def _runner(command: str) -> dict:
         return executor.execute_local("run_command", {
@@ -130,6 +137,25 @@ def build_acceptance_gate(executor, config: Optional[dict] = None, message: str 
         max_attempts=int(cfg.get("acceptance_max_attempts", 2) or 2),
         commands=_declared_acceptance_commands(cfg, message),
     )
+
+
+def build_change_contract(config: Optional[dict] = None, message: str = "", executor=None):
+    """The project's change contract with this request as its goal, or None.
+
+    Declared in ``.aria/policy.yaml`` under the workspace root. A file that
+    cannot be read yields a fail-closed contract rather than none — see
+    ``ChangeContract.fail_closed``.
+    """
+    from aria_code.runtime.contract import ChangeContract, ContractError
+
+    root = _workspace_root(config or {}, executor)
+    try:
+        contract = ChangeContract.load(root)
+    except ContractError as exc:
+        contract = ChangeContract.fail_closed(root, str(exc))
+    except Exception as exc:  # unreadable file, missing yaml, …: still fail closed
+        contract = ChangeContract.fail_closed(root, f"{type(exc).__name__}: {exc}")
+    return contract.with_goal(message) if contract is not None else None
 
 
 async def run_with_fallback(
@@ -354,6 +380,7 @@ async def run_chat_via_runtime(
     )
     executor = build_tool_executor(local_tools, config, execution_context)
     gate = build_acceptance_gate(executor, config, prompt)
+    contract = build_change_contract(config, prompt, executor)
 
     result = await run_turn(
         prompt, history,
@@ -369,5 +396,6 @@ async def run_chat_via_runtime(
         grounding_tools=grounding_tools,
         evidence_already_grounded=evidence_already_grounded,
         acceptance=gate,
+        contract=contract,
     )
     return result if return_result else result.text

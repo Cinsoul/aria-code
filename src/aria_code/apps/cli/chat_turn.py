@@ -693,6 +693,10 @@ class ChatTurnMixin:
                 "error": getattr(_rt_turn, "error", None) or getattr(_rt_final, "error", ""),
                 "stop_reason": getattr(_rt_final, "stop_reason", "completed"),
                 "acceptance": getattr(_rt_final, "acceptance", None),
+                "delivery": getattr(_rt_final, "delivery", None),
+                # Captured now: the run id is cleared when the run is marked done,
+                # before the report that names it for /rewind is printed.
+                "run_id": self._active_run_id,
                 "provider": _rt_provider,
                 "cancelled": False,
                 "usage": {
@@ -1025,6 +1029,21 @@ class ChatTurnMixin:
             if _ml_signal_syms and final_text:
                 for _sym in _ml_signal_syms:
                     self._record_prediction(_sym, final_text)
+
+            # The runtime's delivery report: what changed, what was verified,
+            # risk, checkpoints — from evidence, not from the model's summary.
+            _delivery = result.get("delivery") if isinstance(result, dict) else None
+            if _delivery and self.config.get("delivery_report", True):
+                try:
+                    from ui.render.output import print_delivery_report
+                    print_delivery_report(
+                        console if HAS_RICH else None,
+                        _delivery,
+                        run_id=str(result.get("run_id") or ""),
+                        root=os.getcwd(),
+                    )
+                except Exception as _delivery_err:
+                    logger.debug("delivery report not shown: %s", _delivery_err)
 
             # Metadata line — detailed stats
             metadata = turn_result.metadata

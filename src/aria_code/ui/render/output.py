@@ -171,6 +171,54 @@ def tool_display_label(tool_name: str) -> str:
     return f"{tool_name} · {tool_display_kind(tool_name)}"
 
 
+_DELIVERY_HEADINGS = {"Changed", "Verified", "Review", "Risk", "Contract", "Checkpoint", "Next"}
+
+
+def format_delivery_report(delivery: dict, *, run_id: str = "", root=None) -> list[tuple[str, str]]:
+    """The runtime's delivery report as (style, line) pairs, for any console.
+
+    The text comes from :meth:`DeliveryReport.render`; this only colours it:
+    the status by outcome, headings dim, ✓ green, ✗ red, × and ⚠ yellow.
+    """
+    from aria_code.runtime.delivery import DeliveryReport
+
+    report = DeliveryReport.from_dict(delivery)
+    hint = f"/rewind code {run_id}" if run_id and report.checkpoints else ""
+    styled: list[tuple[str, str]] = []
+    for index, line in enumerate(report.render(rewind_hint=hint, root=root).splitlines()):
+        stripped = line.strip()
+        if index == 0:
+            style = "bold green" if report.status == "done" else "bold yellow"
+        elif stripped in _DELIVERY_HEADINGS:
+            style = "dim"
+        elif stripped.startswith("✓"):
+            style = "green"
+        elif stripped.startswith("✗"):
+            style = "red"
+        elif stripped.startswith(("×", "⚠")):
+            style = "yellow"
+        else:
+            style = ""
+        styled.append((style, line))
+    return styled
+
+
+def print_delivery_report(console, delivery: dict, *, run_id: str = "", root=None) -> None:
+    """Print the report indented under the answer; plain print without Rich."""
+    from rich.markup import escape
+
+    lines = format_delivery_report(delivery, run_id=run_id, root=root)
+    if console is None:
+        print()
+        for _, line in lines:
+            print(f"  {line}" if line else "")
+        return
+    console.print()
+    for style, line in lines:
+        text = f"  {escape(line)}" if line else ""
+        console.print(f"[{style}]{text}[/{style}]" if style and text else text, highlight=False)
+
+
 def format_turn_footer(metadata, *, mode: str = "compact", copy_available: bool = False) -> str:
     """Return the post-response status line.
 

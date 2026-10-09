@@ -12,12 +12,16 @@ import inspect
 import re
 import time
 from dataclasses import dataclass, field
-from typing import AsyncGenerator, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, AsyncGenerator, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
 
 from .acceptance import AcceptanceGate
 from .approval import ApprovalDecision, apply_approval_decision
 from .tool_executor import ToolExecutor
 from .budget import BudgetTracker
+from .delivery import DeliveryLedger
+
+if TYPE_CHECKING:
+    from .contract import ChangeContract
 
 
 DEFAULT_SERIAL_TOOLS = {"write_file", "edit_file", "multi_edit", "run_command", "process"}
@@ -356,6 +360,8 @@ class AgentTurnState:
         error: str = "",
         acceptance: Optional[dict] = None,
         stop_reason: str = "completed",
+        contract: Optional[dict] = None,
+        delivery: Optional[dict] = None,
     ) -> "AgentTurnResult":
         metadata = self.build_metadata(
             elapsed=elapsed,
@@ -373,6 +379,8 @@ class AgentTurnState:
             sources=list(self.sources),
             acceptance=acceptance,
             stop_reason=stop_reason,
+            contract=contract,
+            delivery=delivery,
         )
 
     def build_cancelled_result(
@@ -447,6 +455,13 @@ class AgentTurnResult:
     # 有值时 ``acceptance["verified"]`` 才是「做完了」这句话的凭据。
     acceptance: Optional[dict] = None
     stop_reason: str = "completed"
+    # The change contract this turn ran under and what it refused, or None
+    # when no contract applied.
+    contract: Optional[dict] = None
+    # The runtime's account of the turn (runtime/delivery.py): what changed,
+    # what was verified, the risk, checkpoints. None when nothing happened
+    # worth reporting.
+    delivery: Optional[dict] = None
 
     @classmethod
     def cancelled_result(
@@ -918,6 +933,7 @@ async def execute_tool_turn(
     approval_applier: Callable[[dict, ApprovalDecision], dict] = apply_approval_decision,
     loop_guard: LoopGuard | None = None,
     serial_tools: Iterable[str] = DEFAULT_SERIAL_TOOLS,
+    contract: "ChangeContract | None" = None,
 ) -> ToolExecutionTurnResult:
     """Execute one model-requested tool batch and prepare the next turn.
 
@@ -944,13 +960,25 @@ async def execute_tool_turn(
         }
         for tool_call in pending
     ]
-    parallel_done = await run_parallel_tools(
-        pending,
+    # The contract is checked before anything runs — parallel-safe calls run
+    # first, all at once — and a refused call never reaches the executor: its
+    # refusal stands in for its result, so the model learns which rule held.
+    refused: Dict[int, dict] = {}
+    if contract is not None:
+        for index, tool_call in enumerate(pending):
+            verdict = contract.check(str(tool_call.get("tool", "")), tool_call.get("params", {}) or {})
+            if not verdict.allowed:
+                refused[index] = verdict.as_tool_result(str(tool_call.get("tool", "")))
+    runnable_indices = [index for index in range(len(pending)) if index not in refused]
+    ran_in_parallel = await run_parallel_tools(
+        [pending[index] for index in runnable_indices],
         tool_executor,
         remote_runner=remote_runner,
         hook=hook,
         serial_tools=serial_tools,
     )
+    parallel_done = {runnable_indices[i]: result for i, result in ran_in_parallel.items()}
+    parallel_done.update(refused)
     tool_turn = ToolTurnPlan(pending=pending, parallel_done=parallel_done)
     tool_batch = tool_turn.batch
     activities: List[ToolExecutionActivity] = []
@@ -1319,6 +1347,10 @@ class AgentOptions:
     # 只要本轮真的改写了磁盘上的文件，模型宣称完成时循环会先跑一遍推断出的
     # 检查命令；红了就把失败输出回灌给模型继续修，绿了才让这一轮结束。
     acceptance: Optional["AcceptanceGate"] = None
+    # Change contract. None = no task bounds beyond the permission mode. With
+    # one, the model is shown it before the first round and the runtime
+    # refuses every tool call that breaks it (see runtime/contract.py).
+    contract: Optional["ChangeContract"] = None
 
 
 # ── run_agent() ───────────────────────────────────────────────────────────────
@@ -1392,6 +1424,12 @@ async def run_agent(
             f"Grounding tools: {available_grounding_tools}\n\n"
             f"[User request]\n{prompt}"
         )
+    if opts.contract is not None:
+        request = current_message if opts.requires_evidence else f"[User request]\n{prompt}"
+        current_message = f"{opts.contract.prompt_block()}\n\n{request}"
+    contract_refusals: List[dict] = []
+    ledger = DeliveryLedger(root=str(
+        getattr(opts.acceptance, "root", None) or getattr(opts.contract, "root", None) or "") or None)
     token_count = 0
     thinking_tokens = 0
     result: dict = {}
@@ -1575,10 +1613,19 @@ async def run_agent(
             confirm_tools=opts.confirm_tools,
             approval_callback=opts.approval_callback,
             approval_applier=opts.approval_applier or apply_approval_decision,
+            contract=opts.contract,
         )
 
         for activity in tool_turn_result.activities:
             turn_state.tools_used.append(activity.tool)
+            ledger.record(activity.tool, activity.params, activity.result)
+            refusal = (activity.result or {}).get("contract_violation")
+            if refusal:
+                contract_refusals.append(dict(refusal))
+                yield AgentEventStatus(
+                    state="contract_blocked",
+                    message=f"{activity.tool} refused by the change contract: {refusal.get('reason', '')}",
+                )
             if opts.acceptance is not None:
                 opts.acceptance.record_tool(activity.tool, activity.result)
             canonical_tool = str(activity.tool).rsplit("__", 1)[-1]
@@ -1641,6 +1688,16 @@ async def run_agent(
     )
     if stop_reason == "completed" and acceptance_summary and acceptance_summary.get("verified") is False:
         stop_reason = "checks_failed"
+    contract_summary = (
+        {
+            "goal": opts.contract.goal,
+            "source": opts.contract.source,
+            "text": opts.contract.render(),
+            "refused": contract_refusals,
+        }
+        if opts.contract is not None else None
+    )
+    delivery = ledger.report(acceptance=acceptance_summary, contract=contract_summary, stop_reason=stop_reason)
     turn_result = turn_state.build_result(
         elapsed=elapsed,
         success=stop_reason == "completed",
@@ -1650,5 +1707,7 @@ async def run_agent(
         token_count=token_count,
         thinking_tokens=thinking_tokens,
         acceptance=acceptance_summary,
+        contract=contract_summary,
+        delivery=delivery.as_dict() if delivery.worth_showing else None,
     )
     yield AgentEventComplete(result=turn_result)
