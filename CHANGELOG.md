@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.120.0] — 2026-10-09
+
+- Merge pull request #160 from Cinsoul/feat/execution-protocol
+
 ## [0.119.0] — 2026-10-09
 
 - Merge pull request #159 from Cinsoul/fix/compact-robot
