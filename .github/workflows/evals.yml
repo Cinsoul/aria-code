@@ -32,6 +32,10 @@ on:
         description: "Model id for the agent, e.g. google/gemini-3.5-flash or a Gemma id from Model Garden"
         default: "google/gemini-3.5-flash"
         required: false
+      repeat:
+        description: "Attempts per task. One run is one draw; use 3 for a baseline a tuned model will be compared against"
+        default: "1"
+        required: false
 
 permissions:
   contents: read
@@ -41,14 +45,16 @@ jobs:
   evals:
     name: Coding and operations evals
     runs-on: ubuntu-latest
-    # 50 tasks: most finish in a minute (24 took 21 min), but a job killed at its
-    # limit uploads nothing, so leave room for slow ones.
-    timeout-minutes: 240
+    # 50 tasks, times `repeat`: most attempts finish in about a minute (24 took
+    # 21 min), but a job killed at its limit uploads nothing. 360 is the most a
+    # GitHub-hosted job may run; with repeat 3 that is ~150 attempts.
+    timeout-minutes: 360
     env:
       READY: ${{ vars.GCP_PROJECT != '' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_EVAL_SERVICE_ACCOUNT != '' }}
       MODEL: ${{ github.event.inputs.model || 'google/gemini-3.5-flash' }}
+      REPEAT: ${{ github.event.inputs.repeat || '1' }}
       GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT }}
-      # global: the Gemini 3 previews are served only there, and 2.5 is too.
+      # global: some Gemini 3 models are served only there.
       GOOGLE_CLOUD_LOCATION: global
       GOOGLE_GENAI_USE_VERTEXAI: "true"
       ARIA_OFFLINE: "1"
@@ -87,11 +93,11 @@ jobs:
         if: env.READY == 'true'
         run: |
           python -m aria_code.evals.runner evals/suites/core.yaml --model "$MODEL" \
-            --solve-timeout 600 --report evals-core.json --trajectories trajectories || true
+            --solve-timeout 600 --repeat "$REPEAT" --report evals-core.json --trajectories trajectories || true
           python -m aria_code.evals.runner evals/suites/operations.yaml --model "$MODEL" \
-            --solve-timeout 600 --report evals-operations.json --trajectories trajectories || true
+            --solve-timeout 600 --repeat "$REPEAT" --report evals-operations.json --trajectories trajectories || true
           python -m aria_code.evals.runner evals/suites/hard.yaml --model "$MODEL" \
-            --solve-timeout 600 --report evals-hard.json --trajectories trajectories || true
+            --solve-timeout 600 --repeat "$REPEAT" --report evals-hard.json --trajectories trajectories || true
 
       - name: Scoreboard
         if: env.READY == 'true'
