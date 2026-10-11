@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.139.0] — 2026-10-11
+
+- Merge pull request #182 from artheras/fix/native-npm-platform
+
 ## [0.138.0] — 2026-10-11
 
 - Use Rust for native interactive startup while preserving Aria's robot (#181)
