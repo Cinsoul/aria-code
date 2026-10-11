@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.140.0] — 2026-10-11
+
+- fix(native): preserve formal command routing and bundled worker through symlinks (#183)
+
 ## [0.139.0] — 2026-10-11
 
 - Merge pull request #182 from artheras/fix/native-npm-platform
