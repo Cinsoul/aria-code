@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.138.0] — 2026-10-11
+
+- Use Rust for native interactive startup while preserving Aria's robot (#181)
+
 ## [0.137.0] — 2026-10-10
 
 - Merge pull request #180 from artheras/fix/rust-ui-approval-context
