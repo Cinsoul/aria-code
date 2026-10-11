@@ -158,7 +158,9 @@ def rollback_native() -> Path:
 
 def _npm_native(latest: str, system: str, arch: str, stage: Path, cache: Path) -> Path:
     """Official scoped npm artifact fallback, verified against its SHA-512 SRI."""
-    package = f"aria-code-{system}-{arch}"
+    # GitHub release assets use "macos"; npm follows Node's "darwin" slug.
+    npm_system = "darwin" if system == "macos" else system
+    package = f"aria-code-{npm_system}-{arch}"
     metadata = _fetch_json(f"https://registry.npmjs.org/@artheras%2F{package}/{latest}")
     if metadata.get("name") != f"@artheras/{package}" or metadata.get("version") != latest:
         raise ValueError("npm fallback does not match this Aria Code platform release")
