@@ -206,26 +206,36 @@ def test_pinned_release_does_not_replace_the_latest_cache(monkeypatch):
 
 
 @pytest.mark.parametrize("valid_integrity", [True, False])
-def test_native_network_fallback_verifies_official_npm_artifact(monkeypatch, tmp_path, valid_integrity):
+@pytest.mark.parametrize("system,machine,asset_platform,npm_platform", [
+    ("Darwin", "arm64", "macos-arm64", "darwin-arm64"),
+    ("Darwin", "x86_64", "macos-x64", "darwin-x64"),
+    ("Linux", "aarch64", "linux-arm64", "linux-arm64"),
+    ("Linux", "x86_64", "linux-x64", "linux-x64"),
+])
+def test_native_network_fallback_verifies_official_npm_artifact(
+        monkeypatch, tmp_path, valid_integrity, system, machine, asset_platform, npm_platform):
     command = tmp_path / "bin/aria-code"
     command.parent.mkdir()
     command.write_text("previous")
     monkeypatch.setattr(updater, "_install_dir", lambda: command.parent)
     monkeypatch.setenv("ARIA_CODE_HOME", str(tmp_path / "app"))
-    monkeypatch.setattr(updater.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(updater.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(updater.platform, "system", lambda: system)
+    monkeypatch.setattr(updater.platform, "machine", lambda: machine)
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
         entry = tarfile.TarInfo("package/bin/aria-code-bin/aria-code-bin")
         entry.size, entry.mode = 6, 0o755
         bundle.addfile(entry, io.BytesIO(b"binary"))
     payload = archive.getvalue()
-    name = "aria-code-macos-arm64"
+    name = "aria-code-" + npm_platform
     url = f"https://registry.npmjs.org/@artheras/{name}/-/{name}-0.110.0.tgz"
     checksum = hashlib.sha512(payload if valid_integrity else b"wrong").digest()
     metadata = {"name": f"@artheras/{name}", "version": "0.110.0",
                 "dist": {"tarball": url, "integrity": "sha512-" + base64.b64encode(checksum).decode()}}
-    monkeypatch.setattr(updater, "_fetch_json", lambda requested: metadata)
+    def fetch(requested):
+        assert requested == f"https://registry.npmjs.org/@artheras%2F{name}/0.110.0"
+        return metadata
+    monkeypatch.setattr(updater, "_fetch_json", fetch)
     def download(requested, target):
         if "github.com" in requested:
             raise URLError("CDN unavailable")
@@ -237,7 +247,7 @@ def test_native_network_fallback_verifies_official_npm_artifact(monkeypatch, tmp
         return SimpleNamespace(stdout="aria-code 0.110.0")
     monkeypatch.setattr(updater.subprocess, "run", check)
     assets = [{"name": n, "browser_download_url": f"https://github.com/artheras/aria-code/releases/download/v0.110.0/{n}"}
-              for n in ("aria-code-macos-arm64.tar.gz", "SHA256SUMS")]
+              for n in (f"aria-code-{asset_platform}.tar.gz", "SHA256SUMS")]
     if valid_integrity:
         updater.install_native("0.110.0", {"assets": assets})
         assert command.read_bytes() == b"binary"
