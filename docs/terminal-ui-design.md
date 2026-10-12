@@ -2,8 +2,9 @@
 
 Aria uses a Rust terminal frontend and a persistent Python model/tool service.
 The frontend owns display and editing; the service owns approvals, workspace
-permissions, model routing, tool execution and session persistence. The
-canonical robot artwork and its span colours remain unchanged.
+permissions, model routing, tool execution and session persistence. The installed
+path retains that worker. The opt-in Go replacement and revised native cream
+robot are described in [the migration inventory](native-runtime-migration.md).
 
 ## Public references reviewed on 2026-10-11
 
@@ -42,11 +43,38 @@ private implementation. Aria's changes are independently implemented.
   list items are not styled as deleted code.
 - UI language follows `ui_lang`. Light and dark text palettes have automated
   4.5:1 contrast checks against supported white and near-black backgrounds.
-  The robot uses its existing palette independently.
-- The input grows with multiline content. Busy input is a draft that the user
+  The robot uses its own palette independently of text contrast.
+- The input has a rounded boundary, a prompt gutter and an empty-state hint.
+  It grows from one to six visible content rows; long input scrolls within the
+  boundary. Wrapping uses exactly the available text width after borders,
+  padding and the prompt, including Chinese characters and emoji. Send/newline
+  hints shorten on narrow terminals. Busy input is a draft that the user
   sends after the current task; it is not automatically queued or submitted.
   The footer shows status and elapsed time once. Manual history scrolling keeps
   the viewport stable as new output arrives.
+
+## Compact mascot and composer, 2026-10-12
+
+The [official Claude Code 2.1.27 distribution](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.27)
+contains a compact mascot made from three text rows, at most nine columns
+including its spacing. This is a measurement of that published version, not a
+claim about all versions or access to its private source repository. It informed
+the visual budget; no Claude mascot artwork is included in Aria.
+
+Aria's cream reference drawing uses one set of geometry for both sizes. The
+default is scaled equally along both axes from 22 by 18 half-cell pixels to
+11 by 9, with one transparent half-row of padding (five terminal rows). It does
+not enlarge when the terminal is resized. Four distinct feet and the thin
+orange lower stripe remain. The square white eye and quarter-cell orange dash
+share a baseline; expanding a subpixel dash downwards must not displace it below
+the other eye. Tiny details are quantized to terminal glyphs, so actual pixels
+also depend on the terminal's font and line height.
+
+The rounded composer keeps its two-column prompt gutter separate from editable
+text. Chinese multiline paste, long input scrolling, shrinking after deletion,
+and resizing from 100 to 60 columns were checked through the actual source-built
+Rust/Go processes in a pseudo-terminal. Source-build previews are reconstructed
+from captured terminal cells, not screenshots of an installed release.
 
 ## Validation
 

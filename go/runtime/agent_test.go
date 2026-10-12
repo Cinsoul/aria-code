@@ -1,0 +1,151 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"google.golang.org/genai"
+)
+
+type providerFunc func(context.Context, []*genai.Content, string, []*genai.Tool, func(string)) (*genai.Content, error)
+
+func (f providerFunc) Generate(c context.Context, h []*genai.Content, s string, t []*genai.Tool, e func(string)) (*genai.Content, error) {
+	return f(c, h, s, t, e)
+}
+func call(name string, args map[string]any) *genai.Part {
+	return &genai.Part{FunctionCall: &genai.FunctionCall{Name: name, Args: args}, ThoughtSignature: []byte("signed-call")}
+}
+func quietHooks() agentHooks {
+	return agentHooks{emit: func(string, map[string]any) {}, approve: func(context.Context, string, map[string]any, fileChange) (bool, string, error) { return true, "", nil }}
+}
+func TestSocialClassificationRetainsTasksAndContinuations(t *testing.T) {
+	for _, s := range []string{"你好", "Hello, Aria!", "thank you", "你好呀", "👋"} {
+		if !social(s) {
+			t.Fatal(s)
+		}
+	}
+	for _, s := range []string{"你好，读取 README.md", "hello there, fix tests", "yes", "continue", "hi.txt", "谢谢，继续"} {
+		if social(s) {
+			t.Fatal(s)
+		}
+	}
+}
+func TestModelCannotReadOrWriteFilesDuringStandaloneGreeting(t *testing.T) {
+	root := t.TempDir()
+	scope, err := newScope(root, nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("private workspace"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	turn := 0
+	provider := providerFunc(func(ctx context.Context, contents []*genai.Content, system string, tools []*genai.Tool, emit func(string)) (*genai.Content, error) {
+		if len(tools) != 0 || !strings.Contains(system, "standalone social") {
+			t.Fatal(system, tools)
+		}
+		turn++
+		if turn == 1 {
+			return &genai.Content{Role: "model", Parts: []*genai.Part{call("read_file", map[string]any{"path": "note.txt"}), call("write_file", map[string]any{"path": "note.txt", "content": "replace"})}}, nil
+		}
+		for _, part := range contents[len(contents)-1].Parts {
+			if part.FunctionResponse.Response["success"] != false {
+				t.Fatal("greeting executed a tool", part)
+			}
+		}
+		emit("你好！")
+		return genai.NewContentFromText("你好！", genai.RoleModel), nil
+	})
+	hooks := quietHooks()
+	hooks.approve = func(context.Context, string, map[string]any, fileChange) (bool, string, error) {
+		t.Fatal("greeting requested approval")
+		return false, "", nil
+	}
+	_, answer, err := nativeTurn(context.Background(), provider, scope, config{}, nil, "你好", hooks)
+	if err != nil || answer != "你好！" {
+		t.Fatal(answer, err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "note.txt"))
+	if err != nil || string(body) != "private workspace" {
+		t.Fatal(string(body), err)
+	}
+}
+func TestNativeReadResultsRetainSignaturesAndAreFreshAfterMutation(t *testing.T) {
+	root := t.TempDir()
+	scope, err := newScope(root, nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "note.txt")
+	if err := os.WriteFile(path, []byte("old evidence"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	stage := 0
+	provider := providerFunc(func(ctx context.Context, contents []*genai.Content, system string, tools []*genai.Tool, emit func(string)) (*genai.Content, error) {
+		stage++
+		switch stage {
+		case 1:
+			return &genai.Content{Role: "model", Parts: []*genai.Part{call("read_file", map[string]any{"path": "note.txt"}), call("read_file", map[string]any{"path": "note.txt"})}}, nil
+		case 2:
+			model := contents[len(contents)-2]
+			if string(model.Parts[0].ThoughtSignature) != "signed-call" {
+				t.Fatal("signature lost")
+			}
+			results := contents[len(contents)-1].Parts
+			if results[1].FunctionResponse.Response["reused"] != true {
+				t.Fatal("duplicate not reused")
+			}
+			return &genai.Content{Role: "model", Parts: []*genai.Part{call("edit_file", map[string]any{"path": "note.txt", "old_string": "old evidence", "new_string": "new evidence"})}}, nil
+		case 3:
+			return &genai.Content{Role: "model", Parts: []*genai.Part{call("read_file", map[string]any{"path": "note.txt"})}}, nil
+		default:
+			data := contents[len(contents)-1].Parts[0].FunctionResponse.Response["data"].(map[string]any)
+			if !strings.Contains(data["content"].(string), "new evidence") {
+				t.Fatal("stale read", data)
+			}
+			emit("Read and verified.")
+			return genai.NewContentFromText("Read and verified.", genai.RoleModel), nil
+		}
+	})
+	hooks := quietHooks()
+	approvals := 0
+	hooks.approve = func(ctx context.Context, name string, params map[string]any, c fileChange) (bool, string, error) {
+		if name == "edit_file" {
+			approvals++
+		}
+		return true, "", nil
+	}
+	_, answer, err := nativeTurn(context.Background(), provider, scope, config{}, nil, "Edit note.txt and read it back", hooks)
+	if err != nil || answer != "Read and verified." || approvals != 1 {
+		t.Fatal(answer, approvals, err)
+	}
+}
+func TestPersistentReadDenialIsCheckedBeforeOpeningTheFile(t *testing.T) {
+	root := t.TempDir()
+	scope, err := newScope(root, nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := providerFunc(func(ctx context.Context, contents []*genai.Content, system string, tools []*genai.Tool, emit func(string)) (*genai.Content, error) {
+		if len(contents) == 1 {
+			return &genai.Content{Role: "model", Parts: []*genai.Part{call("read_file", map[string]any{"path": "does-not-exist"})}}, nil
+		}
+		result := contents[len(contents)-1].Parts[0].FunctionResponse.Response
+		if result["success"] != false || !strings.Contains(result["error"].(string), "persistent denial") {
+			t.Fatal(result)
+		}
+		emit("Denied.")
+		return genai.NewContentFromText("Denied.", genai.RoleModel), nil
+	})
+	hooks := quietHooks()
+	hooks.approve = func(context.Context, string, map[string]any, fileChange) (bool, string, error) {
+		return false, "persistent denial", nil
+	}
+	_, _, err = nativeTurn(context.Background(), p, scope, config{}, nil, "Read a file", hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

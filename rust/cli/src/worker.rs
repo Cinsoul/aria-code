@@ -161,7 +161,11 @@ pub fn call(
     // Write in a separate thread too: a worker which never reads its stdin
     // must not block the timeout while a large request fills the pipe.
     let mut stdin = worker.child.stdin.take().ok_or("Missing worker stdin")?;
+    let native = crate::runtime::is_native(python);
     thread::spawn(move || {
+        if native && stdin.write_all(b"\n").is_err() {
+            return;
+        }
         let _ = stdin.write_all(&bytes);
     });
     let output = loop {

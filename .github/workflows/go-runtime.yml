@@ -1,0 +1,84 @@
+name: Native Go runtime
+
+on:
+  pull_request:
+    paths:
+      - 'go/runtime/**'
+      - 'rust/**'
+      - 'tests/test_native_runtime_domain.py'
+      - 'tests/test_native_training_compare.py'
+      - 'tests/test_native_training_dataset.py'
+      - 'tests/test_native_go_app.py'
+      - 'tests/test_native_go_bridge.py'
+      - 'tests/test_native_go_stream.py'
+      - 'src/aria_code/apps/cli/native_bridge.py'
+      - 'src/aria_code/apps/cli/tools/file_tools.py'
+      - 'src/aria_code/workspace/files.py'
+      - 'src/aria_code/training/**'
+      - 'src/aria_code/domain/backtest_engine.py'
+      - '.github/workflows/go-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'go/runtime/**'
+      - 'rust/**'
+      - 'tests/test_native_runtime_domain.py'
+      - 'tests/test_native_training_compare.py'
+      - 'tests/test_native_training_dataset.py'
+      - 'tests/test_native_go_app.py'
+      - 'tests/test_native_go_bridge.py'
+      - 'tests/test_native_go_stream.py'
+      - 'src/aria_code/apps/cli/native_bridge.py'
+      - 'src/aria_code/apps/cli/tools/file_tools.py'
+      - 'src/aria_code/workspace/files.py'
+      - 'src/aria_code/training/**'
+      - 'src/aria_code/domain/backtest_engine.py'
+      - '.github/workflows/go-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/runtime/go.mod
+          cache-dependency-path: go/runtime/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build the pinned Rust frontend for process-boundary tests
+        working-directory: rust
+        run: |
+          rustup show
+          cargo build --release --locked
+      - name: Format, vet and race tests
+        working-directory: go/runtime
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race -count=1 ./...
+      - name: Build the runtime without a Python worker
+        working-directory: go/runtime
+        run: |
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/aria-runtime${{ matrix.os == 'windows-latest' && '.exe' || '' }}" .
+      - name: Verify native protocols and compare retained business behavior
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          ARIA_GO_RUNTIME_BINARY: ${{ runner.temp }}/aria-runtime${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          ARIA_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/aria-native${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+        run: |
+          python -m pip install pytest pytest-timeout PyYAML
+          python -m pytest tests/test_native_runtime_domain.py tests/test_native_training_compare.py tests/test_native_training_dataset.py tests/test_native_go_app.py tests/test_native_go_bridge.py tests/test_native_go_stream.py -q --timeout=15

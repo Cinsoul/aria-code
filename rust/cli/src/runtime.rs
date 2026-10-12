@@ -2,6 +2,9 @@
 use std::{env, ffi::OsStr, path::Path, process::Command};
 
 pub fn default_python() -> std::ffi::OsString {
+    if let Some(value) = env::var_os("ARIA_RUNTIME") {
+        return value;
+    }
     if let Some(value) = env::var_os("ARIA_PYTHON") {
         return value;
     }
@@ -26,6 +29,10 @@ pub fn default_python() -> std::ffi::OsString {
 
 pub fn command(python: &OsStr, mode: &str) -> Command {
     let mut cmd = Command::new(python);
+    if is_native(python) {
+        cmd.arg(mode);
+        return cmd;
+    }
     let frozen = Path::new(python)
         .file_stem()
         .is_some_and(|s| s == "aria-code-worker");
@@ -46,11 +53,19 @@ pub fn command(python: &OsStr, mode: &str) -> Command {
     cmd
 }
 
+pub fn is_native(executable: &OsStr) -> bool {
+    Path::new(executable)
+        .file_stem()
+        .is_some_and(|s| s == "aria-runtime")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn frozen_worker_uses_modes_not_interpreter_flags() {
+        let native = command(OsStr::new("/somewhere/aria-runtime.exe"), "app");
+        assert_eq!(native.get_args().collect::<Vec<_>>(), ["app"]);
         let cmd = command(OsStr::new("/somewhere/aria-code-worker.exe"), "app");
         assert_eq!(cmd.get_args().collect::<Vec<_>>(), ["--aria-worker", "app"]);
         let cmd = command(OsStr::new("python3"), "app");

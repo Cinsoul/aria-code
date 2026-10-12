@@ -1,4 +1,5 @@
-//! Render the canonical Python mascot's spans, with no Rust-specific artwork.
+//! Native cream-block mascot. Legacy span packets remain readable during
+//! migration; the new runtime names a design instead of drawing it in Python.
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
@@ -17,6 +18,9 @@ fn color(hex: &str) -> Option<Color> {
 }
 impl Robot {
     pub fn from_event(value: &Value) -> Self {
+        if value["design"] == "cream-block-v2" {
+            return Self::cream(value["theme"].as_str().unwrap_or("dark"), true);
+        }
         let Some(rows) = value.as_array() else {
             return Self::default();
         };
@@ -64,11 +68,152 @@ impl Robot {
         }
         Self(lines)
     }
+
+    pub fn cream(theme: &str, compact: bool) -> Self {
+        let body = if theme == "light" {
+            Color::Rgb(232, 223, 213)
+        } else {
+            Color::Rgb(244, 235, 228)
+        };
+        let face = Color::Rgb(14, 14, 14);
+        let eye = Color::Rgb(255, 253, 245);
+        let orange = Color::Rgb(249, 180, 103);
+        let shadow = Color::Rgb(156, 148, 139);
+        let leg = Color::Rgb(213, 204, 195);
+        // One reference drawing at both sizes. Scale both axes together;
+        // terminal pixels round to the nearest cell, with a minimum pixel for
+        // small details. Odd heights receive transparent padding, not stretch.
+        let scale = if compact { 2 } else { 1 };
+        let (width, height) = (22 / scale, 18 / scale);
+        let mut pixels = vec![vec![None; width]; height.next_multiple_of(2)];
+        let mut fill = |x: std::ops::Range<usize>, y: std::ops::Range<usize>, color| {
+            let left = x.start.div_ceil(scale);
+            let right = x.end.div_ceil(scale).max(left + 1).min(width);
+            let bottom = y.end.div_ceil(scale).min(height);
+            // Preserve the lower edge of tiny features. Expanding downward
+            // after rounding displaced the short eye below the square eye.
+            let top = y.start.div_ceil(scale).min(bottom.saturating_sub(1));
+            for row in pixels.iter_mut().take(bottom).skip(top) {
+                for pixel in row.iter_mut().take(right).skip(left) {
+                    *pixel = Some(color);
+                }
+            }
+        };
+        // Stepped cap, inset black screen, white eye, amber dash and ears.
+        fill(3..19, 2..14, body);
+        fill(4..18, 1..2, body);
+        fill(5..17, 3..11, face);
+        fill(1..3, 6..10, shadow);
+        fill(19..21, 6..10, shadow);
+        fill(2..3, 7..8, orange);
+        fill(19..20, 7..8, orange);
+        fill(7..9, 6..8, eye);
+        fill(12..15, 7..8, orange);
+        fill(3..19, 14..15, shadow);
+        for col in [4, 8, 12, 16] {
+            fill(col..col + 2, 15..18, leg);
+            fill(col..col + 2, 17..18, shadow);
+        }
+        let stripe = 6 / scale;
+        let stripe_columns = 3_usize.div_ceil(scale)..19_usize.div_ceil(scale);
+        let mut rows = Vec::new();
+        for row in (0..height).step_by(2) {
+            let mut spans = Vec::new();
+            for (col, (&upper, &lower)) in pixels[row].iter().zip(&pixels[row + 1]).enumerate() {
+                let (glyph, style) = match (upper, lower) {
+                    (Some(a), Some(b)) if a == b => (" ", Style::new().bg(a)),
+                    (Some(a), Some(b)) => ("▀", Style::new().fg(a).bg(b)),
+                    (Some(a), None) => ("▀", Style::new().fg(a)),
+                    (None, Some(b)) => ("▄", Style::new().fg(b)),
+                    _ => (" ", Style::new()),
+                };
+                spans.push(if compact && row == 2 && (6..8).contains(&col) {
+                    // The reference's amber eye is half the white eye's
+                    // height, with the same baseline. A quarter-cell stroke
+                    // retains that relationship below half-pixel resolution.
+                    Span::styled("▂", Style::new().fg(orange).bg(face))
+                } else if row / 2 == stripe && stripe_columns.contains(&col) {
+                    // A one-eighth block keeps the bottom orange detail thin,
+                    // instead of filling half a terminal row with orange.
+                    Span::styled("▁", Style::new().fg(orange).bg(body))
+                } else {
+                    Span::styled(glyph, style)
+                });
+            }
+            rows.push(Line::from(spans));
+        }
+        Self(rows)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_reference_has_four_separate_feet_and_thin_amber_detail() {
+        for theme in ["light", "dark"] {
+            let robot = Robot::cream(theme, false);
+            assert_eq!(robot.0.len(), 9);
+            assert!(robot.0.iter().all(|row| row.width() == 22));
+            let feet = &robot.0[8].spans;
+            let shadow = Some(Color::Rgb(156, 148, 139));
+            let mut groups = 0;
+            let mut inside = false;
+            for span in feet {
+                let leg = span.style.bg == shadow;
+                if leg && !inside {
+                    groups += 1;
+                }
+                inside = leg;
+            }
+            assert_eq!(groups, 4);
+            assert_eq!(robot.0[6].spans[3].content, "▁");
+            assert_eq!(
+                robot.0[6].spans[3].style.fg,
+                Some(Color::Rgb(249, 180, 103))
+            );
+            assert_eq!(
+                robot.0[3].spans[7].style.bg,
+                Some(Color::Rgb(255, 253, 245))
+            );
+            assert_eq!(Robot::cream(theme, true).0.len(), 5);
+        }
+    }
+    #[test]
+    fn default_mascot_is_half_size_and_retains_its_identifying_details() {
+        for theme in ["light", "dark"] {
+            let robot = Robot::from_event(&serde_json::json!({
+                "design": "cream-block-v2", "theme": theme
+            }));
+            assert_eq!(robot.0.len(), 5);
+            assert!(robot.0.iter().all(|row| row.width() == 11));
+            let feet = &robot.0[4].spans;
+            let positions: Vec<_> = feet
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.content == "▀")
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(positions, [2, 4, 6, 8]);
+            assert_eq!(
+                robot.0[1].spans[4].style.bg,
+                Some(Color::Rgb(255, 253, 245))
+            );
+            assert_eq!(
+                robot.0[1].spans[6].style.fg,
+                Some(Color::Rgb(249, 180, 103))
+            );
+            assert!(robot.0[3].spans[2..10].iter().all(|s| s.content == "▁"));
+            for col in 6..8 {
+                assert_eq!(robot.0[1].spans[col].content, "▂");
+                assert_eq!(robot.0[1].spans[col].style.bg, Some(Color::Rgb(14, 14, 14)));
+                assert_ne!(
+                    robot.0[2].spans[col].style.fg,
+                    Some(Color::Rgb(249, 180, 103))
+                );
+            }
+        }
+    }
     #[test]
     fn spans_keep_exact_glyphs_and_foreground_background() {
         let value = serde_json::json!([
