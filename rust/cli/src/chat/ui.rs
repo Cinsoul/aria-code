@@ -774,9 +774,9 @@ mod tests {
             };
             terminal.draw(|f| draw(f, &app)).unwrap();
             let buffer = terminal.backend().buffer();
-            assert_eq!(buffer[(2, 4)].symbol(), "▀");
-            assert_eq!(buffer[(8, 4)].symbol(), "▀");
-            assert_eq!(buffer[(13, 0)].symbol(), "A");
+            assert_eq!(buffer[(3, 5)].symbol(), "▌");
+            assert_eq!(buffer[(10, 5)].symbol(), "▐");
+            assert_eq!(buffer[(16, 0)].symbol(), "A");
             assert!(display(&terminal).contains("Aria Code"));
         }
     }

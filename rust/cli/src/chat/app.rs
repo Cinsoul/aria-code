@@ -180,7 +180,13 @@ impl App {
                 self.theme = super::theme::resolve(text("ui_theme"));
                 self.home_workspace = v["home_workspace"].as_bool().unwrap_or(false);
                 let mut robot = v["robot"].clone();
-                if robot["design"] == "cream-block-v2" {
+                if v["robot_design"] == "cream-block-v2"
+                    && robot.as_array().is_some_and(|rows| !rows.is_empty())
+                {
+                    // Python retains legacy spans for older frontends. The
+                    // current frontend owns the same artwork for both workers.
+                    robot = json!({"design": "cream-block-v2", "theme": self.theme});
+                } else if robot["design"] == "cream-block-v2" {
                     robot["theme"] = self.theme.clone().into();
                 }
                 self.robot = super::robot::Robot::from_event(&robot);
@@ -554,6 +560,36 @@ mod tests {
             ..App::default()
         }
     }
+    #[test]
+    fn both_runtime_packets_draw_the_same_mascot_and_respect_hidden_banners() {
+        let legacy = json!([
+            [{"text": "▗▛▀▀▀▀▀▜▖"}], [{"text": "▌▌▗▖ ▂ ▐▐"}],
+            [{"text": "▐▙▄▄▄▄▄▟▌"}], [{"text": "▝▀▀▀▀▀▀▀▘"}]
+        ]);
+        let packet = |robot: Value, design: &str| {
+            json!({
+                "protocol": 1, "type": "session.ready", "session_id": "robot-test",
+                "commands": [], "ui_theme": "light", "robot": robot, "robot_design": design
+            })
+        };
+        let mut python = app();
+        python
+            .event(packet(legacy.clone(), "cream-block-v2"))
+            .unwrap();
+        let mut go = app();
+        go.event(packet(json!({"design": "cream-block-v2"}), ""))
+            .unwrap();
+        assert_eq!(python.robot.0, go.robot.0);
+        assert_eq!(python.robot.0.len(), 6);
+        python.event(packet(json!([]), "cream-block-v2")).unwrap();
+        assert!(python.robot.0.is_empty());
+        go.event(packet(json!([]), "")).unwrap();
+        assert!(go.robot.0.is_empty());
+        // A legacy worker without the optional field remains supported.
+        python.event(packet(legacy, "")).unwrap();
+        assert_eq!(python.robot.0.len(), 4);
+    }
+
     #[test]
     fn stale_events_and_approvals_are_rejected() {
         let mut a = app();

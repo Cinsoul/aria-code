@@ -70,6 +70,9 @@ impl Robot {
     }
 
     pub fn cream(theme: &str, compact: bool) -> Self {
+        if compact {
+            return Self::compact_cream(theme);
+        }
         let body = if theme == "light" {
             Color::Rgb(232, 223, 213)
         } else {
@@ -80,21 +83,11 @@ impl Robot {
         let orange = Color::Rgb(249, 180, 103);
         let shadow = Color::Rgb(156, 148, 139);
         let leg = Color::Rgb(213, 204, 195);
-        // One reference drawing at both sizes. Scale both axes together;
-        // terminal pixels round to the nearest cell, with a minimum pixel for
-        // small details. Odd heights receive transparent padding, not stretch.
-        let scale = if compact { 2 } else { 1 };
-        let (width, height) = (22 / scale, 18 / scale);
-        let mut pixels = vec![vec![None; width]; height.next_multiple_of(2)];
+        let (width, height) = (22, 18);
+        let mut pixels = vec![vec![None; width]; height];
         let mut fill = |x: std::ops::Range<usize>, y: std::ops::Range<usize>, color| {
-            let left = x.start.div_ceil(scale);
-            let right = x.end.div_ceil(scale).max(left + 1).min(width);
-            let bottom = y.end.div_ceil(scale).min(height);
-            // Preserve the lower edge of tiny features. Expanding downward
-            // after rounding displaced the short eye below the square eye.
-            let top = y.start.div_ceil(scale).min(bottom.saturating_sub(1));
-            for row in pixels.iter_mut().take(bottom).skip(top) {
-                for pixel in row.iter_mut().take(right).skip(left) {
+            for row in pixels.iter_mut().take(y.end).skip(y.start) {
+                for pixel in row.iter_mut().take(x.end).skip(x.start) {
                     *pixel = Some(color);
                 }
             }
@@ -114,8 +107,8 @@ impl Robot {
             fill(col..col + 2, 15..18, leg);
             fill(col..col + 2, 17..18, shadow);
         }
-        let stripe = 6 / scale;
-        let stripe_columns = 3_usize.div_ceil(scale)..19_usize.div_ceil(scale);
+        let stripe = 6;
+        let stripe_columns = 3..19;
         let mut rows = Vec::new();
         for row in (0..height).step_by(2) {
             let mut spans = Vec::new();
@@ -127,12 +120,7 @@ impl Robot {
                     (None, Some(b)) => ("▄", Style::new().fg(b)),
                     _ => (" ", Style::new()),
                 };
-                spans.push(if compact && row == 2 && (6..8).contains(&col) {
-                    // The reference's amber eye is half the white eye's
-                    // height, with the same baseline. A quarter-cell stroke
-                    // retains that relationship below half-pixel resolution.
-                    Span::styled("▂", Style::new().fg(orange).bg(face))
-                } else if row / 2 == stripe && stripe_columns.contains(&col) {
+                spans.push(if row / 2 == stripe && stripe_columns.contains(&col) {
                     // A one-eighth block keeps the bottom orange detail thin,
                     // instead of filling half a terminal row with orange.
                     Span::styled("▁", Style::new().fg(orange).bg(body))
@@ -143,6 +131,64 @@ impl Robot {
             rows.push(Line::from(spans));
         }
         Self(rows)
+    }
+
+    /// A small, independently pixel-fitted rendition of docs/assets/aria-robot.png.
+    /// Quadrants keep the feet wider than a single column. The eyes use the
+    /// same baseline, with a square ivory eye and a half-height amber dash.
+    fn compact_cream(theme: &str) -> Self {
+        let body = if theme == "light" {
+            Color::Rgb(241, 233, 223)
+        } else {
+            Color::Rgb(244, 235, 228)
+        };
+        let face = Color::Rgb(14, 14, 14);
+        let eye = Color::Rgb(255, 253, 245);
+        let orange = Color::Rgb(249, 180, 103);
+        let foot = Color::Rgb(207, 196, 183);
+        let ear = Color::Rgb(174, 164, 150);
+        let mut cells = vec![vec![Span::raw(" "); 14]; 6];
+        for cell in cells[0].iter_mut().take(12).skip(2) {
+            *cell = Span::styled("▄", Style::new().fg(body));
+        }
+        for row in cells.iter_mut().take(5).skip(1) {
+            for cell in row.iter_mut().take(13).skip(1) {
+                *cell = Span::styled(" ", Style::new().bg(body));
+            }
+        }
+        // Half-column frame edges preserve the inset screen without making
+        // the cream frame thicker than the eye, or rounding away the face.
+        for row in cells.iter_mut().take(4).skip(1) {
+            row[2] = Span::styled("▌", Style::new().fg(body).bg(face));
+            row[11] = Span::styled("▐", Style::new().fg(body).bg(face));
+            for cell in row.iter_mut().take(11).skip(3) {
+                *cell = Span::styled(" ", Style::new().bg(face));
+            }
+        }
+        for col in [4, 5] {
+            cells[2][col] = Span::styled(" ", Style::new().bg(eye));
+        }
+        for col in [8, 9] {
+            cells[2][col] = Span::styled("▄", Style::new().fg(orange).bg(face));
+        }
+        for col in [0, 13] {
+            cells[2][col] = Span::styled("▂", Style::new().fg(orange).bg(ear));
+        }
+        for cell in cells[4].iter_mut().take(13).skip(1) {
+            *cell = Span::styled("▁", Style::new().fg(orange).bg(body));
+        }
+        // Four attached feet, each 1.5 columns wide by one row high. Mirrored
+        // half-columns avoid the thin one-column stilts of the previous icon.
+        for col in [2, 5, 8, 11] {
+            cells[5][col] = Span::styled(" ", Style::new().bg(foot));
+        }
+        for col in [3, 6] {
+            cells[5][col] = Span::styled("▌", Style::new().fg(foot));
+        }
+        for col in [7, 10] {
+            cells[5][col] = Span::styled("▐", Style::new().fg(foot));
+        }
+        Self(cells.into_iter().map(Line::from).collect())
     }
 }
 
@@ -176,42 +222,43 @@ mod tests {
                 robot.0[3].spans[7].style.bg,
                 Some(Color::Rgb(255, 253, 245))
             );
-            assert_eq!(Robot::cream(theme, true).0.len(), 5);
+            assert_eq!(Robot::cream(theme, true).0.len(), 6);
         }
     }
     #[test]
-    fn default_mascot_is_half_size_and_retains_its_identifying_details() {
+    fn compact_mascot_keeps_reference_eye_baseline_and_mirrored_feet() {
         for theme in ["light", "dark"] {
             let robot = Robot::from_event(&serde_json::json!({
                 "design": "cream-block-v2", "theme": theme
             }));
-            assert_eq!(robot.0.len(), 5);
-            assert!(robot.0.iter().all(|row| row.width() == 11));
-            let feet = &robot.0[4].spans;
-            let positions: Vec<_> = feet
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.content == "▀")
-                .map(|(i, _)| i)
-                .collect();
-            assert_eq!(positions, [2, 4, 6, 8]);
-            assert_eq!(
-                robot.0[1].spans[4].style.bg,
-                Some(Color::Rgb(255, 253, 245))
-            );
-            assert_eq!(
-                robot.0[1].spans[6].style.fg,
-                Some(Color::Rgb(249, 180, 103))
-            );
-            assert!(robot.0[3].spans[2..10].iter().all(|s| s.content == "▁"));
-            for col in 6..8 {
-                assert_eq!(robot.0[1].spans[col].content, "▂");
-                assert_eq!(robot.0[1].spans[col].style.bg, Some(Color::Rgb(14, 14, 14)));
-                assert_ne!(
-                    robot.0[2].spans[col].style.fg,
-                    Some(Color::Rgb(249, 180, 103))
+            assert_eq!(robot.0.len(), 6);
+            assert!(robot.0.iter().all(|row| row.width() == 14));
+            // Ivory square: 2 columns x 1 row. Amber dash: same width and
+            // baseline, half the height. Both are surrounded by black.
+            for col in [4, 5] {
+                assert_eq!(
+                    robot.0[2].spans[col].style.bg,
+                    Some(Color::Rgb(255, 253, 245))
                 );
             }
+            for col in [8, 9] {
+                let dash = &robot.0[2].spans[col];
+                assert_eq!(dash.content, "▄");
+                assert_eq!(dash.style.fg, Some(Color::Rgb(249, 180, 103)));
+                assert_eq!(dash.style.bg, Some(Color::Rgb(14, 14, 14)));
+            }
+            let feet = &robot.0[5].spans;
+            for col in [2, 5, 8, 11] {
+                assert_eq!(feet[col].style.bg, Some(Color::Rgb(207, 196, 183)));
+            }
+            assert_eq!(feet[3].content, "▌");
+            assert_eq!(feet[6].content, "▌");
+            assert_eq!(feet[7].content, "▐");
+            assert_eq!(feet[10].content, "▐");
+            // Gaps stay transparent on any terminal background.
+            assert_eq!(feet[4].style, Style::default());
+            assert_eq!(feet[9].style, Style::default());
+            assert!(robot.0[4].spans[1..13].iter().all(|s| s.content == "▁"));
         }
     }
     #[test]

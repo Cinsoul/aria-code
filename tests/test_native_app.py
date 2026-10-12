@@ -142,6 +142,27 @@ def application(tmp_path):
             c.p.wait(timeout=5)
 
 
+@pytest.mark.parametrize("visibility", ["shown", "no-banner", "banner-off", "env-off"])
+def test_mascot_metadata_preserves_legacy_clients_and_visibility(application, visibility):
+    start, _, _, env = application
+    env.pop("ARIA_ROBOT_RENDER", None)
+    args = ()
+    if visibility == "no-banner":
+        args = ("--no-banner",)
+    elif visibility == "banner-off":
+        args = ("--banner", "off")
+    elif visibility == "env-off":
+        env["ARIA_ROBOT_RENDER"] = "off"
+    c = start(*args)
+    if visibility == "shown":
+        assert c.ready["robot_design"] == "cream-block-v2"
+        assert len(c.ready["robot"]) == 4  # Older frontends keep their span packet.
+    else:
+        assert c.ready["robot_design"] == ""
+        assert c.ready["robot"] == []
+    c.close()
+
+
 @pytest.mark.parametrize("native", [False, True])
 def test_multi_turn_history_and_saved_session_resume(application, native):
     start, _, home, _ = application

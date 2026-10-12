@@ -61,14 +61,25 @@ including its spacing. This is a measurement of that published version, not a
 claim about all versions or access to its private source repository. It informed
 the visual budget; no Claude mascot artwork is included in Aria.
 
-Aria's cream reference drawing uses one set of geometry for both sizes. The
-default is scaled equally along both axes from 22 by 18 half-cell pixels to
-11 by 9, with one transparent half-row of padding (five terminal rows). It does
-not enlarge when the terminal is resized. Four distinct feet and the thin
-orange lower stripe remain. The square white eye and quarter-cell orange dash
-share a baseline; expanding a subpixel dash downwards must not displace it below
-the other eye. Tiny details are quantized to terminal glyphs, so actual pixels
+Aria's compact mascot uses 14 columns by six rows, including a half-row of
+transparent space above the stepped cap. This replaces the 12-by-five prototype:
+its single-column feet looked too thin and its eyes lost definition. The ivory
+eye now occupies two columns by one row; the amber dash is the same width and
+half the height, sharing its bottom edge. Each of the four attached feet is
+1.5 columns wide by one row high. Mirrored half-column edges keep the feet
+symmetrical; their gaps retain the terminal's own background.
+
+The cream shell, inset black screen, orange base line and ear details follow
+`docs/assets/aria-robot.png`. The original asset is unchanged. The compact
+terminal rendition is pixel-fitted separately, not pixel-identical image
+scaling. Standard half/quarter/eighth block glyphs avoid terminal image
+protocols. The compact size stays fixed when the window grows; pixel proportions
 also depend on the terminal's font and line height.
+
+The Python worker sends an optional `robot_design` alongside its existing span
+packet. New Rust frontends draw the named mascot, matching the Go worker;
+older frontends still receive their supported spans. `--no-banner`,
+`--banner off` and `ARIA_ROBOT_RENDER=off` keep the drawing hidden.
 
 The rounded composer keeps its two-column prompt gutter separate from editable
 text. Chinese multiline paste, long input scrolling, shrinking after deletion,

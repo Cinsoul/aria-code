@@ -12,7 +12,7 @@ by this branch.
 
 | Area | Native replacement | Evidence and remaining boundary |
 | --- | --- | --- |
-| Terminal | `rust/cli/src/chat/` | Persistent editing, Markdown, chronological operations, Chinese/English display, reviews and cancelled-turn state. A rounded multiline composer and a uniformly scaled cream robot with four feet, aligned eyes and a thin orange stripe. |
+| Terminal | `rust/cli/src/chat/` | Persistent editing, Markdown, chronological operations, Chinese/English display, reviews and cancelled-turn state. A rounded multiline composer and a hand-tuned compact cream robot with four feet, aligned eyes and a thin orange stripe. |
 | Application protocol | `go/runtime/server.go` | Actual executable barrier, approvals, multi-turn persistence, resume, idle cancellation and broken-output shutdown. Commands/events beyond the implemented catalog remain to port. |
 | Headless and file bridge | `go/runtime/stream.go`, `bridge.go` | Existing single-turn events, actual Rust/Go process tests, bounded JSON-RPC, literal arguments, per-call write grants and refusal. Full legacy command catalog and change-store routes remain. |
 | Google model/auth | `go/runtime/provider_*.go`, `google_auth.go` | SDK and Vertex-compatible streams; signed calls; existing login; independent native OAuth refresh; macOS manual proxy support. Other provider families and automatic proxy discovery remain. |
