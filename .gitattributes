@@ -1,0 +1,6 @@
+# Go sources stay LF on every checkout. gofmt treats CRLF as unformatted, so
+# on Windows runners (core.autocrlf=true) `gofmt -l` listed every file and the
+# Native Go runtime workflow failed before running a single test.
+*.go    text eol=lf
+go.mod  text eol=lf
+go.sum  text eol=lf
