@@ -71,7 +71,7 @@ func reviewedTurn(t *testing.T, cfg config, replies []string, reviewerErr error)
 func TestBlockingReviewGoesBackToTheBuilderOnce(t *testing.T) {
 	blocking := `{"verdict":"blocking","findings":[{"severity":"blocking","file":"app.py","line":1,"issue":"refresh() is never imported"}],
 		"behaviour":{"before":"no token","after":"token refreshed","why":"the goal"}}`
-	answer, evidence, messages, statuses := reviewedTurn(t, config{"review_gate": true}, []string{blocking, `{"verdict":"pass","findings":[]}`}, nil)
+	answer, evidence, messages, statuses := reviewedTurn(t, config{"review_gate": true, "acceptance_gate": false}, []string{blocking, `{"verdict":"pass","findings":[]}`}, nil)
 	if answer != "Fixed after review." {
 		t.Fatalf("the answer must be the repaired turn's, not %q", answer)
 	}
@@ -101,7 +101,7 @@ func TestBlockingReviewGoesBackToTheBuilderOnce(t *testing.T) {
 
 func TestUnresolvedBlockingReviewLeavesTheTurnIncomplete(t *testing.T) {
 	blocking := `{"findings":[{"severity":"blocking","issue":"still wrong"}]}`
-	_, evidence, _, _ := reviewedTurn(t, config{"review_gate": true, "review_max_attempts": 0.0}, []string{blocking}, nil)
+	_, evidence, _, _ := reviewedTurn(t, config{"review_gate": true, "review_max_attempts": 0.0, "acceptance_gate": false}, []string{blocking}, nil)
 	report := evidence.report("completed")
 	text := report.Render("", "")
 	if report.Status != "incomplete" || !strings.Contains(text, "Address the review's blocking findings") || !strings.Contains(text, "✗ still wrong") {
@@ -110,7 +110,7 @@ func TestUnresolvedBlockingReviewLeavesTheTurnIncomplete(t *testing.T) {
 }
 
 func TestAFailedReviewerNeverBlocks(t *testing.T) {
-	answer, evidence, _, statuses := reviewedTurn(t, config{"review_gate": true}, nil, errors.New("quota exceeded"))
+	answer, evidence, _, statuses := reviewedTurn(t, config{"review_gate": true, "acceptance_gate": false}, nil, errors.New("quota exceeded"))
 	if answer != "Done." || evidence.report("completed").Status != "done" {
 		t.Fatal(answer)
 	}
@@ -125,7 +125,7 @@ func TestNoReviewUnlessTheGateIsOn(t *testing.T) {
 			t.Fatal(cfg)
 		}
 	}
-	answer, evidence, messages, _ := reviewedTurn(t, config{}, nil, nil)
+	answer, evidence, messages, _ := reviewedTurn(t, config{"acceptance_gate": false}, nil, nil)
 	if answer != "Done." || evidence.gate != nil || strings.Contains(strings.Join(messages, ""), "GOAL") {
 		t.Fatal("review_gate is off by default")
 	}

@@ -724,6 +724,9 @@ type turnEvidence struct {
 	// the model read it, and the gate when review_gate is on.
 	goal, contract string
 	gate           *reviewGate
+	// The acceptance gate and how it runs a check, when it is on.
+	accept *acceptanceGate
+	runner checkRunner
 }
 
 func newTurnEvidence(root string) *turnEvidence {
@@ -742,6 +745,9 @@ func (e *turnEvidence) applied(tool string, params map[string]any, c fileChange)
 	}
 	e.ledger.Record(tool, params, map[string]any{"success": true, "data": data})
 	e.checks.changed()
+	if e.accept != nil {
+		e.accept.record(c.path)
+	}
 }
 
 // finished records every other call once its result is known.
@@ -779,7 +785,38 @@ func (e *turnEvidence) report(stopReason string) DeliveryReport {
 	if e.gate != nil && e.gate.last() != nil {
 		review = e.gate.last().asDict()
 	}
-	return e.ledger.Report(e.checks.acceptance(), contract, review, stopReason)
+	return e.ledger.Report(e.acceptance(), contract, review, stopReason)
+}
+
+// acceptance is the gate's summary once it has run, else the verification
+// commands the model ran itself.
+func (e *turnEvidence) acceptance() map[string]any {
+	if e.accept != nil && len(e.accept.reports) > 0 {
+		return e.accept.summary()
+	}
+	return e.checks.acceptance()
+}
+
+// verify runs the acceptance gate when the model says it is done and returns
+// the repair directive for a red result, or "".
+func (e *turnEvidence) verify(ctx context.Context, emit func(string, map[string]any)) string {
+	if e == nil || e.accept == nil || e.runner == nil || !e.accept.shouldRun() {
+		return ""
+	}
+	emit("turn.status", map[string]any{"state": "acceptance_started", "message": "Running the checks for the change"})
+	report := e.accept.run(ctx, e.runner)
+	if report == nil {
+		return ""
+	}
+	state := "acceptance_failed"
+	if report.passed() {
+		state = "acceptance_passed"
+	}
+	emit("turn.status", map[string]any{"state": state, "message": report.headline()})
+	if report.ran() && !report.passed() && report.regressed() && ctx.Err() == nil {
+		return report.repairDirective()
+	}
+	return ""
 }
 
 // review runs the independent reviewer when the turn's change is ready for
@@ -790,7 +827,7 @@ func (e *turnEvidence) review(ctx context.Context, p modelProvider, emit func(st
 		return ""
 	}
 	diff := e.ledger.DiffText()
-	acceptance := e.checks.acceptance()
+	acceptance := e.acceptance()
 	if acceptance["verified"] == false || !e.gate.shouldRun(len(e.ledger.order) > 0, diff) {
 		return ""
 	}

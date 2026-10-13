@@ -108,6 +108,26 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 	if hooks.evidence != nil && !greeting {
 		hooks.evidence.goal = prompt
 		hooks.evidence.gate = newReviewGate(c)
+		// Checks run like run_command, under its policy, without a prompt:
+		// they are the planner's or the project's, not the model's.
+		if !remoteScope() && c.boolean("network_enabled", true) && !s.readOnly {
+			hooks.evidence.accept = newAcceptanceGate(c, s.workspace)
+			timeout := float64(300)
+			if n, ok := pyInt(c["acceptance_timeout"]); ok && n > 0 {
+				timeout = float64(n)
+			}
+			hooks.evidence.runner = func(ctx context.Context, command string) map[string]any {
+				spec, err := commandPlan(s, c, map[string]any{"command": command, "cwd": s.workspace, "timeout": timeout})
+				if err != nil {
+					return map[string]any{"success": false, "error": err.Error()}
+				}
+				result := commandTool(ctx, spec)
+				if result.Error != "" && result.Data == nil {
+					return map[string]any{"success": false, "error": result.Error}
+				}
+				return map[string]any{"success": true, "data": result.Data}
+			}
+		}
 		if contract != nil {
 			hooks.evidence.contract = contract.Render()
 		}
@@ -148,6 +168,11 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 			// The model says it is done: with review_gate on, an independent
 			// reviewer reads the change first, and blocking findings go back
 			// to the builder once (runtime/review.py).
+			if directive := hooks.evidence.verify(ctx, hooks.emit); directive != "" {
+				contents = append(contents, genai.NewContentFromText(directive, genai.RoleUser))
+				answer.Reset()
+				continue
+			}
 			if directive := hooks.evidence.review(ctx, p, hooks.emit); directive != "" {
 				contents = append(contents, genai.NewContentFromText(directive, genai.RoleUser))
 				answer.Reset()
