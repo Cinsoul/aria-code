@@ -1,4 +1,4 @@
-//! Rust terminal output with Python retaining inference, tools and approvals.
+//! Rust terminal output with the selected runtime retaining inference/tools.
 use crate::{render, state, worker::Worker};
 use std::{
     env,
@@ -134,7 +134,7 @@ pub fn exec(
         interrupted(&cancelled, deadline, timeout)?;
         if let Some(status) = worker.child.try_wait().map_err(|e| e.to_string())? {
             if !status.success() {
-                eprintln!("aria-native: Python runtime exited with {status}");
+                eprintln!("aria-native: Application runtime exited with {status}");
                 return Ok(status.code().filter(|code| *code != 0).unwrap_or(1));
             }
             return Ok(turn_code);
@@ -149,7 +149,7 @@ fn interrupted(cancelled: &AtomicBool, deadline: Instant, timeout: Duration) -> 
     }
     if Instant::now() >= deadline {
         return Err(format!(
-            "Python turn timed out after {} ms",
+            "Application turn timed out after {} ms",
             timeout.as_millis()
         ));
     }

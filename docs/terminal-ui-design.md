@@ -3,8 +3,8 @@
 Aria uses a Rust terminal frontend and a persistent Python model/tool service.
 The frontend owns display and editing; the service owns approvals, workspace
 permissions, model routing, tool execution and session persistence. The installed
-path retains that worker. The Rust frontend owns the revised cream robot.
-The broader Go runtime migration is separate from this interface change.
+path retains that worker. The opt-in Go replacement and revised native cream
+robot are described in [the migration inventory](native-runtime-migration.md).
 
 ## Public references reviewed on 2026-10-11
 
@@ -77,14 +77,14 @@ protocols. The compact size stays fixed when the window grows; pixel proportions
 also depend on the terminal's font and line height.
 
 The Python worker sends an optional `robot_design` alongside its existing span
-packet. New Rust frontends draw the named mascot;
+packet. New Rust frontends draw the named mascot, matching the Go worker;
 older frontends still receive their supported spans. `--no-banner`,
 `--banner off` and `ARIA_ROBOT_RENDER=off` keep the drawing hidden.
 
 The rounded composer keeps its two-column prompt gutter separate from editable
 text. Chinese multiline paste, long input scrolling, shrinking after deletion,
 and resizing from 100 to 60 columns were checked through the actual source-built
-Rust frontend and Python service in a pseudo-terminal. Source-build previews are reconstructed
+Rust/Go processes in a pseudo-terminal. Source-build previews are reconstructed
 from captured terminal cells, not screenshots of an installed release.
 
 ## Validation
