@@ -14,6 +14,8 @@ on:
       - 'tests/test_native_go_risk.py'
       - 'tests/test_native_go_contract.py'
       - 'tests/test_native_go_delivery.py'
+      - 'tests/test_native_go_review.py'
+      - 'src/aria_code/runtime/review.py'
       - 'tests/test_relay_contract.py'
       - 'src/aria_code/runtime/delivery.py'
       - 'src/aria_code/runtime/acceptance.py'
@@ -44,6 +46,8 @@ on:
       - 'tests/test_native_go_risk.py'
       - 'tests/test_native_go_contract.py'
       - 'tests/test_native_go_delivery.py'
+      - 'tests/test_native_go_review.py'
+      - 'src/aria_code/runtime/review.py'
       - 'tests/test_relay_contract.py'
       - 'src/aria_code/runtime/delivery.py'
       - 'src/aria_code/runtime/acceptance.py'
@@ -112,5 +116,5 @@ jobs:
         run: |
           python -m pip install pytest pytest-timeout PyYAML
           set -o pipefail
-          python -m pytest tests/test_native_runtime_domain.py tests/test_native_training_compare.py tests/test_native_training_dataset.py tests/test_native_go_app.py tests/test_native_go_bridge.py tests/test_native_go_stream.py tests/test_native_go_risk.py tests/test_native_go_contract.py tests/test_native_go_delivery.py -q --timeout=15 --tb=short -rf 2>&1 | tee "$RUNNER_TEMP/pytest.log" \
+          python -m pytest tests/test_native_runtime_domain.py tests/test_native_training_compare.py tests/test_native_training_dataset.py tests/test_native_go_app.py tests/test_native_go_bridge.py tests/test_native_go_stream.py tests/test_native_go_risk.py tests/test_native_go_contract.py tests/test_native_go_delivery.py tests/test_native_go_review.py -q --timeout=15 --tb=short -rf 2>&1 | tee "$RUNNER_TEMP/pytest.log" \
             || { .github/scripts/annotate-failure.sh pytest "$RUNNER_TEMP/pytest.log" 120; exit 1; }

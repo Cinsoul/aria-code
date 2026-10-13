@@ -15,12 +15,15 @@ package main
 // tests/test_native_go_delivery.py compares the rest with Python.
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"google.golang.org/genai"
 )
 
 var defaultMutatingTools = set("write_file", "edit_file", "multi_edit", "apply_patch", "notebook_edit", "str_replace", "create_file")
@@ -717,6 +720,10 @@ type turnEvidence struct {
 	ledger  *DeliveryLedger
 	checks  checkLedger
 	refused []map[string]any
+	// The independent review: the request is its goal, the contract as
+	// the model read it, and the gate when review_gate is on.
+	goal, contract string
+	gate           *reviewGate
 }
 
 func newTurnEvidence(root string) *turnEvidence {
@@ -768,5 +775,51 @@ func (e *turnEvidence) report(stopReason string) DeliveryReport {
 		}
 		contract = map[string]any{"refused": refused}
 	}
-	return e.ledger.Report(e.checks.acceptance(), contract, nil, stopReason)
+	var review map[string]any
+	if e.gate != nil && e.gate.last() != nil {
+		review = e.gate.last().asDict()
+	}
+	return e.ledger.Report(e.checks.acceptance(), contract, review, stopReason)
+}
+
+// review runs the independent reviewer when the turn's change is ready for
+// it and returns the directive to send back to the builder, or "". It runs
+// after the checks, never instead of them: a red run is repaired first.
+func (e *turnEvidence) review(ctx context.Context, p modelProvider, emit func(string, map[string]any)) string {
+	if e == nil || e.gate == nil {
+		return ""
+	}
+	diff := e.ledger.DiffText()
+	acceptance := e.checks.acceptance()
+	if acceptance["verified"] == false || !e.gate.shouldRun(len(e.ledger.order) > 0, diff) {
+		return ""
+	}
+	var checks []map[string]any
+	if reports := asSlice(acceptance["reports"]); len(reports) > 0 {
+		for _, c := range asSlice(asMap(reports[len(reports)-1])["checks"]) {
+			checks = append(checks, asMap(c))
+		}
+	}
+	emit("turn.status", map[string]any{"state": "review_started", "message": "Independent review of the change"})
+	prompt := buildReviewPrompt(e.goal, diff, checks, e.contract, e.gate.maxDiffChars)
+	// Same model, fresh context: no history, no tools, no project context.
+	content, err := p.Generate(ctx, []*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)}, reviewerSystem, nil, func(string) {})
+	var text strings.Builder
+	if content != nil {
+		for _, part := range content.Parts {
+			if !part.Thought {
+				text.WriteString(part.Text)
+			}
+		}
+	}
+	report := e.gate.record(text.String(), err, diff)
+	state := map[string]string{"pass": "review_passed", "blocking": "review_blocking"}[report.Verdict]
+	if state == "" {
+		state = "review_error"
+	}
+	emit("turn.status", map[string]any{"state": state, "message": report.headline()})
+	if blocking, _ := report.split(); len(blocking) > 0 && e.gate.canRepair() && ctx.Err() == nil {
+		return report.repairDirective()
+	}
+	return ""
 }
