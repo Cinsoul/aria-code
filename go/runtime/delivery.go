@@ -747,6 +747,7 @@ func (e *turnEvidence) applied(tool string, params map[string]any, c fileChange)
 	e.checks.changed()
 	if e.accept != nil {
 		e.accept.record(c.path)
+		e.accept.baseline.remember(c)
 	}
 }
 

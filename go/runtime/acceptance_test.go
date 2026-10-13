@@ -20,8 +20,11 @@ func contentCheck() string {
 }
 
 func TestRedChecksGoBackToTheModelUntilGreen(t *testing.T) {
+	t.Setenv("ARIA_HOME", t.TempDir())
+	// The check passes before the turn, so its failure after the first
+	// write is the turn's and goes back to the model (the baseline says so).
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "app.py"), []byte("broken\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "app.py"), []byte("fixed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	scope, err := newScope(root, nil, nil, false)
@@ -80,7 +83,11 @@ func TestRedChecksGoBackToTheModelUntilGreen(t *testing.T) {
 }
 
 func TestTheGateIsBoundedAndEndsHonestly(t *testing.T) {
+	t.Setenv("ARIA_HOME", t.TempDir())
 	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "app.py"), []byte("fixed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	scope, err := newScope(root, nil, nil, false)
 	if err != nil {
 		t.Fatal(err)
