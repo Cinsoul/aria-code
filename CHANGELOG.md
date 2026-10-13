@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.149.0] — 2026-10-13
+
+- Merge pull request #196 from Cinsoul/feat/go-declared-providers
+
 ## [0.148.0] — 2026-10-13
 
 - Merge pull request #194 from Cinsoul/feat/go-acceptance-gate
