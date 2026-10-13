@@ -136,7 +136,8 @@ func TestNativeTurnEndsWithADeliveryReport(t *testing.T) {
 	})
 	hooks := quietHooks()
 	hooks.evidence = newTurnEvidence(root)
-	if _, _, err := nativeTurn(context.Background(), provider, scope, config{}, nil, "Change app.py", hooks); err != nil {
+	// The model's own checks stand in when the acceptance gate is off.
+	if _, _, err := nativeTurn(context.Background(), provider, scope, config{"acceptance_gate": false}, nil, "Change app.py", hooks); err != nil {
 		t.Fatal(err)
 	}
 	report := hooks.evidence.report("completed")

@@ -29,6 +29,9 @@ func mainCode() int {
 	if len(os.Args) == 2 && os.Args[1] == "risk" {
 		return riskCommand(os.Stdin, os.Stdout, os.Stderr)
 	}
+	if len(os.Args) == 2 && os.Args[1] == "acceptance" {
+		return acceptanceCommand(os.Stdin, os.Stdout, os.Stderr)
+	}
 	if len(os.Args) == 2 && os.Args[1] == "review" {
 		return reviewCommand(os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -75,7 +78,7 @@ func mainCode() int {
 		return bridgeCommand(ctx, os.Args[2:], os.Stdin, os.Stdout, os.Stderr)
 	}
 	if len(os.Args) < 2 || (os.Args[1] != "app" && os.Args[1] != "stream") {
-		fmt.Fprintln(os.Stderr, "Usage: aria-runtime app|stream|bridge|backtest|training|risk|contract|delivery|review [options]")
+		fmt.Fprintln(os.Stderr, "Usage: aria-runtime app|stream|bridge|backtest|training|risk|contract|delivery|review|acceptance [options]")
 		return 2
 	}
 	mode := os.Args[1]
