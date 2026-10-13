@@ -22,6 +22,7 @@ by this branch.
 | Portfolio backtest core | `go/runtime/quant/` | 48 complete oracle results plus actual executable comparisons, including gaps, ordering, fees, realized PnL and benchmarks. Market feeds, live broker risk/execution, optimizer/report routes remain. |
 | Training evaluation | `go/runtime/training/compare.go` | Paired reports, fixed bootstrap sampling, confidence intervals, costs and error exclusion compared with Python. |
 | SFT dataset preparation | `go/runtime/training/dataset.go` | Holdout isolation, task splits, eligibility, deduplication, provenance and Unicode trimming compared with Python; malformed inputs preserve existing files. Cloud tuning/job lifecycle and broader ML implementations remain. |
+| Risk assessment and change contracts | `go/runtime/risk.go`, `contract.go` | L0–L4 levels, capabilities, blast radius and score for commands and tools; `.aria/policy.yaml` contracts with allow/restrict/forbid/max_level, fail-closed loading, and a check on every native tool call before approval. Compared field by field with `safety/risk.py` and `runtime/contract.py` through `aria-runtime risk` and `aria-runtime contract`. Go's ASCII `\b` can only rate a keyword flush against a non-ASCII letter higher, never lower. Risk-mode auto-approval, the delivery report and the review gate remain. |
 | Relay | `go/relay/` | Existing separately validated Go candidate and storage contracts. Production switch/old-entrypoint deletion are still separate deployment work. |
 
 All source families are in scope. In particular, agents/packs, financial data
@@ -56,7 +57,8 @@ first-screen measurement.
 
 The retained Python domain code serves as the independent oracle in
 `tests/test_native_runtime_domain.py`, `test_native_training_compare.py` and
-`test_native_training_dataset.py`. The new `.github/workflows/go-runtime.yml`
+`test_native_training_dataset.py`, `test_native_go_risk.py` and
+`test_native_go_contract.py`. The new `.github/workflows/go-runtime.yml`
 builds the executable before running those comparisons. Live model/auth
 verification is opt-in and is not part of normal CI.
 
