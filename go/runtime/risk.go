@@ -929,14 +929,24 @@ func resolveLoose(p string) string {
 	}
 }
 
+// joinPath is pathlib's root / path. On Windows a path rooted without a drive
+// ("/etc/hosts", "\\x") is on root's drive, not inside root, as filepath.Join
+// would make it.
+func joinPath(root, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	if path != "" && os.IsPathSeparator(path[0]) {
+		return filepath.VolumeName(root) + path
+	}
+	return filepath.Join(root, path)
+}
+
 func insideRoot(path, root string) bool {
 	if root == "" {
 		return true
 	}
-	candidate := expandUser(path)
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(root, candidate)
-	}
+	candidate := joinPath(root, expandUser(path))
 	rel, err := filepath.Rel(resolveLoose(root), resolveLoose(candidate))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
