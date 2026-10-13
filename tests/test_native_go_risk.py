@@ -130,3 +130,29 @@ def test_go_risk_rejects_input_that_is_not_a_request_list():
     result = subprocess.run([binary(), "risk"], input="{}", capture_output=True, text=True, timeout=10)
     assert result.returncode == 2
     assert "JSON array" in result.stderr
+
+
+AUTO_LEVELS = [None, 0, 1, 2, 3, -1, "2", " 1 ", "high", 1.9, True, [1]]
+
+
+def test_go_approval_requirement_and_card_match_python():
+    from aria_code.safety.risk import approval_requirement
+    from aria_code.ui.render.output import format_risk_card
+
+    cases = [(c, mode, level) for c in COMMANDS[::3] for mode in ("manual", "risk", "") for level in AUTO_LEVELS]
+    requests = []
+    for command, mode, level in cases:
+        request = {"command": command, "mode": mode}
+        if level is not None:
+            request["auto_level"] = level
+        requests.append(request)
+    actual = go_assess(requests)
+    for (command, mode, level), got in zip(cases, actual):
+        assessment = assess_command(command)
+        kwargs = {} if level is None else {"auto_level": level}
+        expected = {
+            "assessment": assessment.as_dict(),
+            "requirement": approval_requirement(assessment, mode=mode, **kwargs),
+            "card": [line for _, line in format_risk_card(assessment)],
+        }
+        assert got == expected, (command, mode, level)

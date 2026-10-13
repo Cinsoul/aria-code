@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -1022,29 +1023,116 @@ func AssessTool(tool string, params map[string]any, root string) RiskAssessment 
 
 // riskCommand answers `aria-runtime risk`: a JSON array of requests on stdin,
 // each {"command": "..."} or {"tool": "...", "params": {...}, "root": "..."},
-// and the assessments as a JSON array on stdout. It exists so the Python
+// and the assessments as a JSON array on stdout. A request with "mode" (and
+// optionally "auto_level") is answered with its approval requirement and
+// risk card as well. It exists so the Python
 // oracle can compare both implementations on the same corpus.
 func riskCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	var requests []struct {
-		Command *string        `json:"command"`
-		Tool    string         `json:"tool"`
-		Params  map[string]any `json:"params"`
-		Root    string         `json:"root"`
+		Command   *string        `json:"command"`
+		Tool      string         `json:"tool"`
+		Params    map[string]any `json:"params"`
+		Root      string         `json:"root"`
+		Mode      *string        `json:"mode"`
+		AutoLevel any            `json:"auto_level"`
 	}
 	if err := json.NewDecoder(io.LimitReader(stdin, 1<<20)).Decode(&requests); err != nil {
 		fmt.Fprintln(stderr, "risk: expected a JSON array of requests:", err)
 		return 2
 	}
-	out := make([]RiskAssessment, 0, len(requests))
+	out := make([]any, 0, len(requests))
 	for _, r := range requests {
+		var a RiskAssessment
 		if r.Command != nil {
-			out = append(out, AssessCommand(*r.Command))
+			a = AssessCommand(*r.Command)
 		} else {
-			out = append(out, AssessTool(r.Tool, r.Params, r.Root))
+			a = AssessTool(r.Tool, r.Params, r.Root)
 		}
+		if r.Mode == nil {
+			out = append(out, a)
+			continue
+		}
+		// With "mode", also how the action is approved and its card.
+		out = append(out, map[string]any{"assessment": a, "requirement": approvalRequirement(a, *r.Mode, r.AutoLevel), "card": riskCard(a)})
 	}
 	if err := json.NewEncoder(stdout).Encode(out); err != nil {
 		return 2
 	}
 	return 0
+}
+
+// maxAutoLevel is the highest level approval_mode=risk may run without
+// asking. L3 (acting outside the repo) and L4 (destructive) are never automatic.
+const maxAutoLevel = 2
+
+// pyInt is Python's int() for a JSON value; ok is false where int() raises.
+func pyInt(value any) (int, bool) {
+	switch v := value.(type) {
+	case float64:
+		if v != v || v > 1<<62 || v < -(1<<62) {
+			return 0, false
+		}
+		return int(v), true
+	case int:
+		return v, true
+	case bool:
+		if v {
+			return 1, true
+		}
+		return 0, true
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(strings.ReplaceAll(v, "_", "")))
+		return n, err == nil
+	}
+	return 0, false
+}
+
+// approvalRequirement is risk.approval_requirement: "always" for L4, which is
+// asked about even after a standing "allow" given for something milder;
+// "auto" under approval_mode=risk at or below auto_approve_level (capped at
+// L2); "ask" otherwise.
+func approvalRequirement(a RiskAssessment, mode string, autoLevel any) string {
+	if a.Level >= 4 {
+		return "always"
+	}
+	ceiling, ok := pyInt(autoLevel)
+	if !ok {
+		ceiling = 1
+	}
+	ceiling = max(0, min(maxAutoLevel, ceiling))
+	if mode == "risk" && a.Level <= ceiling {
+		return "auto"
+	}
+	return "ask"
+}
+
+// riskCard is ui.render.output.format_risk_card: what an action touches,
+// shown above its approval.
+func riskCard(a RiskAssessment) []string {
+	reversible := "reversible"
+	if !a.Reversible {
+		reversible = "not reversible"
+	}
+	lines := []string{fmt.Sprintf("Risk     L%d %s · %d/100 · %s", a.Level, a.Name, a.Score, reversible)}
+	row := func(label string, values []string) {
+		var shown []string
+		for _, v := range values {
+			if v != "" {
+				shown = append(shown, v)
+			}
+		}
+		if len(shown) == 0 {
+			return
+		}
+		text := strings.Join(shown[:min(4, len(shown))], ", ")
+		if len(shown) > 4 {
+			text += fmt.Sprintf(" +%d", len(shown)-4)
+		}
+		lines = append(lines, fmt.Sprintf("%-9s%s", label, text))
+	}
+	row("Network", a.Hosts)
+	row("Files", a.Files)
+	row("Affects", a.Systems)
+	row("Why", a.Reasons[:min(2, len(a.Reasons))])
+	return lines
 }

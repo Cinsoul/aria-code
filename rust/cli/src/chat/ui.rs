@@ -218,6 +218,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
                 Span::styled(format!("{symbol} {label}"), Style::new().fg(color)),
                 Span::raw(format!(" {target}{count}{exit_code}{reused}")),
             ]));
+            if !action.approval.is_empty() {
+                lines.push(Line::styled(
+                    format!("  ✓ {}", action.approval),
+                    Style::new().fg(p.muted),
+                ));
+            }
             if !action.error.is_empty() {
                 lines.push(Line::styled(
                     format!("  {}", action.error),
