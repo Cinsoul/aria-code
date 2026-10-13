@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -116,16 +117,27 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 			if n, ok := pyInt(c["acceptance_timeout"]); ok && n > 0 {
 				timeout = float64(n)
 			}
-			hooks.evidence.runner = func(ctx context.Context, command string) map[string]any {
+			// cwd "" is the workspace; otherwise Aria's own scratch copy of
+			// it, where the baseline reruns a check on the code before the turn.
+			runIn := func(ctx context.Context, command, cwd string) map[string]any {
 				spec, err := commandPlan(s, c, map[string]any{"command": command, "cwd": s.workspace, "timeout": timeout})
 				if err != nil {
 					return map[string]any{"success": false, "error": err.Error()}
+				}
+				if cwd != "" {
+					spec.cwd = cwd
 				}
 				result := commandTool(ctx, spec)
 				if result.Error != "" && result.Data == nil {
 					return map[string]any{"success": false, "error": result.Error}
 				}
 				return map[string]any{"success": true, "data": result.Data}
+			}
+			hooks.evidence.runner = func(ctx context.Context, command string) map[string]any { return runIn(ctx, command, "") }
+			if gate := hooks.evidence.accept; gate != nil {
+				if home, err := stateRoot(); err == nil {
+					gate.baseline = newTestBaseline(c, s.workspace, filepath.Join(home, "worktrees", "baselines"), runIn)
+				}
 			}
 		}
 		if contract != nil {

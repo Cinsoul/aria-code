@@ -13,6 +13,7 @@ import pytest
 from aria_code.ariarc import AriaRC, _strip_comments
 from aria_code.packs.rules import default_acceptance_commands
 from aria_code.runtime.acceptance import AcceptanceReport, CheckResult, _anchors, _read_run_result, _trim
+from aria_code.runtime.baseline import _keep_collecting, compare
 from aria_code.workspace.verify import VerificationPlanner
 
 
@@ -104,8 +105,8 @@ TRACEBACK = ('Traceback (most recent call last):\n  File "/runner/main.py", line
              "web/index.ts:7:5 - error TS2322\n  数据/模块.py:9: 失败\n")
 
 
-def check(command, exit_code, passed, output="", error=""):
-    return {"command": command, "exit_code": exit_code, "passed": passed, "output": output, "error": error}
+def check(command, exit_code, passed, output="", error="", **baseline):
+    return {"command": command, "exit_code": exit_code, "passed": passed, "output": output, "error": error, **baseline}
 
 
 REPORTS = [
@@ -117,6 +118,14 @@ REPORTS = [
     dict(attempt=2, attempts_remaining=0, reason="r", paths=["a.py"],
          checks=[check("npm test", 1, False, LONG_LOG + "\n" + "x" * 7000, "runner error")]),
     dict(attempt=1, attempts_remaining=3, reason="r", paths=[], checks=[check("make", 0, False, "", "timed out")]),
+    dict(attempt=1, attempts_remaining=1, reason="r", paths=["a.py"], checks=[
+        check("python3 -m pytest -q", 1, False, TRACEBACK, preexisting=False, new_failures=["tests/t.py::b"],
+              old_failures=["tests/t.py::a"], baseline_note="")]),
+    dict(attempt=1, attempts_remaining=1, reason="r", paths=["a.py"], checks=[
+        check("make lint", 0, True), check("python3 -m pytest -q", 2, False, "x", preexisting=True,
+                                           old_failures=["tests/t.py::a"], baseline_note="failing before this change")]),
+    dict(attempt=2, attempts_remaining=0, reason="r", paths=[], checks=[
+        check("npm test", 1, False, "y", baseline_note="passed before this change")]),
 ]
 
 
@@ -127,7 +136,10 @@ def test_go_reports_acceptance_like_python():
             attempt=data["attempt"], attempts_remaining=data["attempts_remaining"], reason=data["reason"],
             paths=tuple(data["paths"]),
             checks=tuple(CheckResult(command=c["command"], exit_code=c["exit_code"], passed=c["passed"],
-                                     output=c["output"], error=c["error"]) for c in data["checks"]))
+                                     output=c["output"], error=c["error"], preexisting=c.get("preexisting", False),
+                                     new_failures=tuple(c.get("new_failures", ())),
+                                     old_failures=tuple(c.get("old_failures", ())),
+                                     baseline_note=c.get("baseline_note", "")) for c in data["checks"]))
         summary = report.summary()
         for item in summary["checks"]:
             item.pop("duration")
@@ -168,3 +180,25 @@ def test_go_reads_ariarc_acceptance_like_python(tmp_path, monkeypatch, rc):
 def test_go_strips_jsonc_comments_like_python():
     texts = ['{"a": 1} // c', '{"u": "https://x.io/a//b", "v": "a://b"} // tail', "/* a */{/* b\n*/}", "x//y\nz", "a///b\n"]
     assert go_acceptance({"jsonc": texts})["jsonc"] == [_strip_comments(t) for t in texts]
+
+
+PYTEST_AFTER = ("FAILED tests/test_a.py::test_x - assert 1\nERROR tests/test_b.py\nFAILED tests/test_c.py::test_z\n"
+                "FAILED\ntests/test_d.py::test_w - spans a line\nERROR tests/数据.py::测试 - 失败\n")
+
+
+@pytest.mark.parametrize("before", [
+    None, [0, ""], [1, ""], [1, "FAILED tests/test_a.py::test_x - assert 1"], [2, PYTEST_AFTER], [1, "ERROR tests/数据.py::测试 - x"],
+])
+@pytest.mark.parametrize("after", [PYTEST_AFTER, "make: *** [all] Error 2", ""])
+@pytest.mark.parametrize("failed", [True, False])
+def test_go_compares_against_the_baseline_like_python(before, after, failed):
+    comparison = compare(after, failed, tuple(before) if before is not None else None)
+    got = go_acceptance({"compare": [{"after_output": after, "after_failed": failed, "before": before}]})["compare"][0]
+    assert got == {"preexisting": comparison.preexisting, "new_failures": list(comparison.new_failures),
+                   "old_failures": list(comparison.old_failures), "note": comparison.note}
+
+
+def test_go_keeps_pytest_collecting_like_python():
+    commands = ["python3 -m pytest -q", "pytest", "py.test tests", "/usr/bin/pytest -x", "pytest -q | tail -5",
+                "pytest --continue-on-collection-errors", "npm test", "mypytest", "pytest\tx", "echo $(pytest)"]
+    assert go_acceptance({"keep": commands})["keep"] == [_keep_collecting(c) for c in commands]

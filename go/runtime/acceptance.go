@@ -8,10 +8,9 @@ package main
 // output instead of ending the turn. It is bounded by acceptance_max_attempts
 // and runs commands through the same command policy as run_command.
 //
-// Not ported yet: the test baseline (runtime/baseline.py), which reruns a red
-// check on the code before the change so pre-existing failures are not the
-// model's to repair, and domain-pack commands. Without a baseline every
-// failure counts as introduced by the change.
+// A red check is rerun on the code before the change (baseline.go) so a
+// pre-existing failure is not sent back to be repaired. Domain-pack commands
+// are not ported yet.
 // tests/test_native_go_acceptance.py compares the rest with Python.
 
 import (
@@ -81,6 +80,12 @@ type checkResult struct {
 	Output   string
 	Duration float64
 	Error    string
+	// From the test baseline when the check failed: whether every failure
+	// was already there before the change, and which test ids are which.
+	Preexisting  bool
+	NewFailures  []string
+	OldFailures  []string
+	BaselineNote string
 }
 
 func (c checkResult) anchors() []string {
@@ -91,8 +96,15 @@ func (c checkResult) anchors() []string {
 }
 
 func (c checkResult) summary() map[string]any {
-	return map[string]any{"command": c.Command, "exit_code": c.ExitCode, "passed": c.Passed,
+	data := map[string]any{"command": c.Command, "exit_code": c.ExitCode, "passed": c.Passed,
 		"duration": float64(int64(c.Duration*1000+0.5)) / 1000, "error": c.Error}
+	if !c.Passed && (c.BaselineNote != "" || len(c.NewFailures) > 0 || len(c.OldFailures) > 0) {
+		data["preexisting"] = c.Preexisting
+		data["new_failures"] = anySlice(orEmpty(c.NewFailures))
+		data["old_failures"] = anySlice(orEmpty(c.OldFailures))
+		data["baseline"] = c.BaselineNote
+	}
+	return data
 }
 
 type acceptanceReport struct {
@@ -129,8 +141,23 @@ func (r acceptanceReport) failures() []checkResult {
 }
 
 // regressed: a check failed that was not already failing before the change.
-// Without the baseline every failure is the change's.
-func (r acceptanceReport) regressed() bool { return len(r.failures()) > 0 }
+// Without a baseline every failure is the change's.
+func (r acceptanceReport) regressed() bool {
+	for _, c := range r.failures() {
+		if !c.Preexisting {
+			return true
+		}
+	}
+	return false
+}
+
+func backticked(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = "`" + item + "`"
+	}
+	return strings.Join(quoted, ", ")
+}
 
 func (r acceptanceReport) headline() string {
 	if !r.ran() {
@@ -144,6 +171,9 @@ func (r acceptanceReport) headline() string {
 		return "验收通过 (" + strings.Join(names, ", ") + ")"
 	}
 	first := r.failures()[0]
+	if !r.regressed() {
+		return fmt.Sprintf("验收未通过，但失败在改动前就已存在：`%s` exit %d", first.Command, first.ExitCode)
+	}
 	return fmt.Sprintf("验收失败：`%s` exit %d", first.Command, first.ExitCode)
 }
 
@@ -156,7 +186,16 @@ func (r acceptanceReport) repairDirective() string {
 		"",
 	}
 	for _, c := range r.failures() {
+		if c.Preexisting {
+			continue
+		}
 		blocks = append(blocks, fmt.Sprintf("### `%s` → exit %d", c.Command, c.ExitCode))
+		if len(c.NewFailures) > 0 {
+			blocks = append(blocks, "本次改动新引入的失败："+backticked(c.NewFailures))
+		}
+		if len(c.OldFailures) > 0 {
+			blocks = append(blocks, "以下失败在改动前就存在，与本任务无关，不要修改："+backticked(c.OldFailures))
+		}
 		if c.Error != "" {
 			blocks = append(blocks, "（执行错误："+c.Error+"）")
 		}
@@ -164,11 +203,7 @@ func (r acceptanceReport) repairDirective() string {
 			blocks = append(blocks, "```\n"+body+"\n```")
 		}
 		if anchors := c.anchors(); len(anchors) > 0 {
-			quoted := make([]string, len(anchors))
-			for i, a := range anchors {
-				quoted[i] = "`" + a + "`"
-			}
-			blocks = append(blocks, "定位："+strings.Join(quoted, ", "))
+			blocks = append(blocks, "定位："+backticked(anchors))
 		}
 		blocks = append(blocks, "")
 	}
@@ -580,6 +615,9 @@ type acceptanceGate struct {
 	reports     []acceptanceReport
 	pending     []string
 	allPaths    []string
+	// baseline reruns a red check on the code before the change, so a
+	// pre-existing failure is not sent back to be repaired; nil when off.
+	baseline *testBaseline
 }
 
 // newAcceptanceGate is runtime_bridge.build_acceptance_gate: on unless
@@ -636,6 +674,16 @@ func (g *acceptanceGate) run(ctx context.Context, runner checkRunner) *acceptanc
 			break
 		}
 	}
+	if g.baseline != nil {
+		for i, check := range checks {
+			if check.Passed {
+				continue
+			}
+			comparison := compareBaseline(check.Output, true, g.baseline.result(ctx, check.Command))
+			checks[i].Preexisting, checks[i].NewFailures = comparison.Preexisting, comparison.NewFailures
+			checks[i].OldFailures, checks[i].BaselineNote = comparison.OldFailures, comparison.Note
+		}
+	}
 	report := acceptanceReport{Attempt: g.attempts, Checks: checks, Reason: reason, Paths: paths,
 		AttemptsRemaining: max(0, g.maxAttempts-g.attempts)}
 	g.reports = append(g.reports, report)
@@ -684,13 +732,23 @@ func acceptanceCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 			Reason            string `json:"reason"`
 			Paths             []string
 			Checks            []struct {
-				Command  string `json:"command"`
-				ExitCode int    `json:"exit_code"`
-				Passed   bool   `json:"passed"`
-				Output   string `json:"output"`
-				Error    string `json:"error"`
+				Command     string   `json:"command"`
+				ExitCode    int      `json:"exit_code"`
+				Passed      bool     `json:"passed"`
+				Output      string   `json:"output"`
+				Error       string   `json:"error"`
+				Preexisting bool     `json:"preexisting"`
+				NewFailures []string `json:"new_failures"`
+				OldFailures []string `json:"old_failures"`
+				Note        string   `json:"baseline_note"`
 			} `json:"checks"`
 		} `json:"reports"`
+		Compare []struct {
+			After  string `json:"after_output"`
+			Failed bool   `json:"after_failed"`
+			Before *[]any `json:"before"`
+		} `json:"compare"`
+		Keep   []string `json:"keep"`
 		Texts  []string `json:"texts"`
 		Ariarc *string  `json:"ariarc"`
 		JSONC  []string `json:"jsonc"`
@@ -713,7 +771,8 @@ func acceptanceCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 	for _, r := range request.Reports {
 		report := acceptanceReport{Attempt: r.Attempt, AttemptsRemaining: r.AttemptsRemaining, Reason: r.Reason, Paths: r.Paths}
 		for _, c := range r.Checks {
-			report.Checks = append(report.Checks, checkResult{Command: c.Command, ExitCode: c.ExitCode, Passed: c.Passed, Output: c.Output, Error: c.Error})
+			report.Checks = append(report.Checks, checkResult{Command: c.Command, ExitCode: c.ExitCode, Passed: c.Passed, Output: c.Output, Error: c.Error,
+				Preexisting: c.Preexisting, NewFailures: c.NewFailures, OldFailures: c.OldFailures, BaselineNote: c.Note})
 		}
 		summary := report.summary()
 		for _, c := range asSlice(summary["checks"]) {
@@ -727,6 +786,22 @@ func acceptanceCommand(stdin io.Reader, stdout, stderr io.Writer) int {
 		texts = append(texts, map[string]any{"trim": trimOutput(t), "anchors": anySlice(orEmpty(failureAnchors(t)))})
 	}
 	out["texts"] = texts
+	comparisons := []any{}
+	for _, c := range request.Compare {
+		var before *baselineRun
+		if c.Before != nil {
+			code, _ := pyInt((*c.Before)[0])
+			output, _ := (*c.Before)[1].(string)
+			before = &baselineRun{code: code, output: output}
+		}
+		comparisons = append(comparisons, compareBaseline(c.After, c.Failed, before))
+	}
+	out["compare"] = comparisons
+	kept := []any{}
+	for _, command := range request.Keep {
+		kept = append(kept, keepCollecting(command))
+	}
+	out["keep"] = kept
 	if request.Ariarc != nil {
 		out["ariarc"] = declaredAcceptanceCommands(config{}, *request.Ariarc)
 	}
