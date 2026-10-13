@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.141.0] — 2026-10-13
+
+- fix(ui): refine robot, multiline input and conversation output (#184)
+
 ## [0.140.0] — 2026-10-11
 
 - fix(native): preserve formal command routing and bundled worker through symlinks (#183)
