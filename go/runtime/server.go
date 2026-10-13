@@ -229,23 +229,35 @@ func (s *server) approve(ctx context.Context, name string, params map[string]any
 	if !known {
 		return false, "unknown tool", nil
 	}
+	// What the call touches decides how it is approved (safety/risk.py). L4
+	// is asked about every time: a standing "allow" was given for something
+	// milder. Under approval_mode=risk, calls at or below auto_approve_level
+	// run without a prompt and say so. An explicit "ask" policy always asks.
+	assessment := AssessTool(name, params, s.scope.workspace)
+	requirement := approvalRequirement(assessment, s.cfg.text("approval_mode", "manual"), s.cfg["auto_approve_level"])
 	if policy != "ask" {
-		if policy == "allow" || s.opts.skipPermissions || s.grants[grant] {
+		standing := policy == "allow" || s.opts.skipPermissions || s.grants[grant] || contains(s.opts.allowedTools, name)
+		if standing && requirement != "always" {
 			return true, "", nil
-		}
-		for _, allowed := range s.opts.allowedTools {
-			if allowed == name {
-				return true, "", nil
-			}
 		}
 		if !d.mutate {
 			return true, "", nil
 		}
+		if requirement == "auto" {
+			summary := assessment.Summary
+			if summary == "" {
+				summary = name
+			}
+			return true, fmt.Sprintf("auto-approved · L%d %s · %s", assessment.Level, assessment.Name, summary), nil
+		}
 	}
 	if s.opts.noninteractive {
+		if requirement == "always" {
+			return false, fmt.Sprintf("L%d %s actions always need interactive approval: %s", assessment.Level, assessment.Name, strings.Join(assessment.Reasons, "; ")), nil
+		}
 		return false, "approval required; use chat or grant this tool explicitly before starting", nil
 	}
-	contextText := "Tool: " + name
+	contextText := strings.Join(riskCard(assessment), "\n") + "\n\nTool: " + name
 	if name == "run_command" {
 		contextText += "\nCommand: " + str(params, "command", "") + "\nWorking directory: " + str(params, "cwd", s.scope.workspace)
 	}

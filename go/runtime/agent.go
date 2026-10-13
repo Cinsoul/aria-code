@@ -156,6 +156,7 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 			hooks.emit("tool.started", map[string]any{"tool": call.Name, "params": eventParams(call.Args)})
 			started := time.Now()
 			result := toolResult{}
+			approval := ""
 			d, known := definitionFor(call.Name)
 			verdict := ContractVerdict{Allowed: true}
 			if contract != nil && known && !greeting {
@@ -187,6 +188,7 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 					result = failed(fmt.Errorf("user declined: %s", reason))
 					break
 				}
+				approval = reason
 				result = commandTool(ctx, spec)
 			case d.mutate:
 				// A mutation invalidates all batch read evidence, even if denied.
@@ -204,6 +206,7 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 					result = failed(fmt.Errorf("user declined: %s", reason))
 					break
 				}
+				approval = reason
 				if hooks.backup != nil {
 					if err := hooks.backup(change); err != nil {
 						result = failed(err)
@@ -223,6 +226,7 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 					result = failed(fmt.Errorf("access declined: %s", reason))
 					break
 				}
+				approval = reason
 				keyBytes, _ := json.Marshal(call.Args)
 				key := call.Name + string(keyBytes)
 				if old, ok := reads[key]; ok {
@@ -256,6 +260,9 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 			}
 			if result.Reused {
 				fields["reused"] = true
+			}
+			if approval != "" {
+				fields["approval"] = approval
 			}
 			if items, ok := result.Data["items"].([]map[string]any); ok {
 				fields["item_count"] = len(items)

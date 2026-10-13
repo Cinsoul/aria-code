@@ -48,6 +48,9 @@ pub struct Action {
     pub reused: bool,
     pub cancelled: bool,
     pub error: String,
+    /// How the host approved the call when it did not ask, e.g.
+    /// "auto-approved · L1 low · Edit files" under approval_mode=risk.
+    pub approval: String,
 }
 #[derive(Debug)]
 pub struct Dialog {
@@ -304,6 +307,7 @@ impl App {
                     reused: false,
                     cancelled: false,
                     error: String::new(),
+                    approval: String::new(),
                 });
             }
             "tool.completed" => {
@@ -338,6 +342,7 @@ impl App {
                         reused: false,
                         cancelled: false,
                         error: String::new(),
+                        approval: String::new(),
                     });
                     self.entries.len() - 1
                 };
@@ -352,6 +357,11 @@ impl App {
                     .filter(|s| s.is_finite() && *s >= 0.0);
                 action.reused = v["reused"].as_bool().unwrap_or(false);
                 action.error = limited(text("error"));
+                action.approval = safe(text("approval"))
+                    .replace(['\n', '\t'], " ")
+                    .chars()
+                    .take(200)
+                    .collect();
                 if !text("output").is_empty() {
                     let output = format!(
                         "\n{}\n{}",
@@ -737,6 +747,18 @@ mod tests {
         assert!(a.approval_context.is_empty());
         assert!(a.dialog.is_none());
     }
+    #[test]
+    fn auto_approval_is_shown_on_the_action() {
+        let mut a = app();
+        a.editor.insert("Edit a.txt");
+        a.submit();
+        a.event(json!({"protocol":1,"type":"tool.started","turn_id":"turn-1","tool":"write_file","params":{"path":"a.txt"}})).unwrap();
+        a.event(json!({"protocol":1,"type":"tool.completed","turn_id":"turn-1","tool":"write_file","success":true,
+            "approval":"auto-approved · L1 low · Edit files\u{1b}[2J"})).unwrap();
+        let action = a.entries.back().unwrap().action.as_ref().unwrap();
+        assert_eq!(action.approval, "auto-approved · L1 low · Edit files[2J");
+    }
+
     #[test]
     fn command_exit_and_output_are_kept_even_when_invocation_succeeded() {
         let mut a = app();
