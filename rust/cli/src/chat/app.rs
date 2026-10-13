@@ -1,7 +1,9 @@
 //! UI state/reducer. Protocol events cannot create host approval grants.
 use super::editor::Editor;
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 
 const MAX_TEXT: usize = 262_144;
 const MAX_TRANSCRIPT: usize = 4 * 1024 * 1024;
@@ -32,12 +34,28 @@ pub struct Entry {
     pub role: String,
     pub text: String,
     pub detail: bool,
+    pub action: Option<Action>,
+}
+#[derive(Debug)]
+pub struct Action {
+    pub tool: String,
+    pub target: String,
+    pub done: bool,
+    pub success: bool,
+    pub count: Option<u64>,
+    pub exit_code: Option<i64>,
+    pub elapsed: Option<f64>,
+    pub reused: bool,
+    pub cancelled: bool,
+    pub error: String,
 }
 #[derive(Debug)]
 pub struct Dialog {
     pub id: String,
     pub title: String,
     pub context: String,
+    pub context_scroll: u16,
+    pub context_max_scroll: Cell<u16>,
     pub choices: Vec<(String, String)>,
     pub selected: usize,
     pub secret: bool,
@@ -69,9 +87,29 @@ pub struct App {
     pub scroll: usize,
     pub next_turn: u64,
     pub approval_context: String,
+    pub lang: String,
+    pub theme: String,
+    pub home_workspace: bool,
+    pub started: Option<Instant>,
+    pub elapsed: Option<Duration>,
+    pub viewport_top: Cell<Option<usize>>,
+    pub viewport_scroll: Cell<usize>,
 }
 
 impl App {
+    pub fn tr<'a>(&self, en: &'a str, zh: &'a str) -> &'a str {
+        if self.lang.starts_with("zh") {
+            zh
+        } else {
+            en
+        }
+    }
+    fn current_start(&self) -> usize {
+        self.entries
+            .iter()
+            .rposition(|e| e.role == "user")
+            .map_or(0, |i| i + 1)
+    }
     pub fn add(&mut self, role: &str, text: &str, detail: bool) {
         if text.is_empty() {
             return;
@@ -80,6 +118,7 @@ impl App {
             role: role.into(),
             text: limited(text),
             detail,
+            action: None,
         });
         self.trim();
     }
@@ -91,25 +130,6 @@ impl App {
         }
     }
     fn delta(&mut self, role: &str, text: &str) {
-        if role == "assistant" {
-            let start = self
-                .entries
-                .iter()
-                .rposition(|e| e.role == "user")
-                .map_or(0, |i| i + 1);
-            if let Some(entry) = self
-                .entries
-                .iter_mut()
-                .skip(start)
-                .find(|e| e.role == "assistant")
-            {
-                if entry.text.len() < MAX_TEXT {
-                    entry.text = limited(&(entry.text.clone() + text));
-                }
-                self.trim();
-                return;
-            }
-        }
         if self
             .entries
             .back()
@@ -156,7 +176,20 @@ impl App {
                 self.workspace = safe(text("workspace"));
                 self.permission = safe(text("permission"));
                 self.network = v["network"].as_bool().unwrap_or(false);
-                self.robot = super::robot::Robot::from_event(&v["robot"]);
+                self.lang = safe(text("ui_lang"));
+                self.theme = super::theme::resolve(text("ui_theme"));
+                self.home_workspace = v["home_workspace"].as_bool().unwrap_or(false);
+                let mut robot = v["robot"].clone();
+                if v["robot_design"] == "cream-block-v2"
+                    && robot.as_array().is_some_and(|rows| !rows.is_empty())
+                {
+                    // Python retains legacy spans for older frontends. The
+                    // current frontend owns the same artwork for both workers.
+                    robot = json!({"design": "cream-block-v2", "theme": self.theme});
+                } else if robot["design"] == "cream-block-v2" {
+                    robot["theme"] = self.theme.clone().into();
+                }
+                self.robot = super::robot::Robot::from_event(&robot);
                 self.commands = v["commands"]
                     .as_array()
                     .ok_or("Missing command list")?
@@ -173,6 +206,8 @@ impl App {
                     self.approval_context.clear();
                     self.entries.clear();
                     self.scroll = 0;
+                    self.viewport_top.set(None);
+                    self.viewport_scroll.set(0);
                     if let Some(messages) = v["messages"].as_array() {
                         for m in messages.iter().rev().take(40).rev() {
                             self.add(
@@ -182,38 +217,66 @@ impl App {
                             );
                         }
                     }
-                    self.status = "Ready".into();
+                    self.status = self.tr("Ready", "就绪").into();
                 }
                 self.ready = true;
             }
-            "turn.started" => self.status = "Thinking · Esc cancels".into(),
+            "turn.started" => self.status = self.tr("Working", "正在处理").into(),
             "answer.delta" => {
-                self.status = "Responding · Esc cancels".into();
+                self.status = self.tr("Responding", "正在回复").into();
                 self.delta("assistant", text("text"));
             }
             "answer.replace" => {
-                if let Some(entry) = self
+                let start = self.current_start();
+                let last = self
                     .entries
-                    .iter_mut()
-                    .rev()
-                    .find(|e| e.role == "assistant")
-                {
-                    // Only replace an answer from THIS turn (after the last user).
-                    entry.text = limited(text("text"));
-                    self.trim();
+                    .iter()
+                    .enumerate()
+                    .skip(start)
+                    .filter(|(_, e)| e.role == "assistant")
+                    .map(|(i, _)| i)
+                    .next_back();
+                // The runtime's authoritative answer concatenates streamed rounds.
+                // Keep narration before tools and the final segment after tools.
+                if let Some(last) = last.filter(|i| *i + 1 == self.entries.len()) {
+                    let prefix: String = self
+                        .entries
+                        .iter()
+                        .skip(start)
+                        .take(last - start)
+                        .filter(|e| e.role == "assistant")
+                        .map(|e| e.text.as_str())
+                        .collect();
+                    if let Some(tail) = text("text").strip_prefix(&prefix) {
+                        self.entries[last].text = limited(tail);
+                    } else {
+                        for i in (start..self.entries.len()).rev() {
+                            if self.entries[i].role == "assistant" {
+                                self.entries.remove(i);
+                            }
+                        }
+                        self.add("assistant", text("text"), false);
+                    }
                 } else {
+                    for i in (start..self.entries.len()).rev() {
+                        if self.entries[i].role == "assistant" {
+                            self.entries.remove(i);
+                        }
+                    }
                     self.add("assistant", text("text"), false);
                 }
+                self.trim();
             }
             "output.delta" => self.delta("output", text("text")),
             "tool.started" => {
-                self.status = format!("Running {} · Esc cancels", safe(text("tool")));
+                self.status = format!("{} {}", self.tr("Running", "正在执行"), safe(text("tool")));
                 let params = &v["params"];
-                self.approval_context = format!("Tool: {}", safe(text("tool")));
+                self.approval_context =
+                    format!("{}: {}", self.tr("Tool", "工具"), safe(text("tool")));
                 for (key, label) in [
-                    ("path", "File"),
-                    ("command", "Command"),
-                    ("directory", "Directory"),
+                    ("path", self.tr("File", "文件")),
+                    ("command", self.tr("Command", "命令")),
+                    ("directory", self.tr("Directory", "目录")),
                 ] {
                     if let Some(target) = params[key].as_str() {
                         let target: String = safe(target).chars().take(600).collect();
@@ -221,31 +284,83 @@ impl App {
                             .push_str(&format!("\n{label}: {target}"));
                     }
                 }
+                let target = ["path", "directory", "command", "pattern", "query"]
+                    .iter()
+                    .find_map(|key| params[*key].as_str())
+                    .unwrap_or("");
                 self.add(
                     "action",
-                    &format!(
-                        "{}\n{}",
-                        text("tool"),
-                        serde_json::to_string_pretty(&v["params"]).unwrap_or_default()
-                    ),
-                    true,
+                    &serde_json::to_string_pretty(params).unwrap_or_default(),
+                    false,
                 );
+                self.entries.back_mut().unwrap().action = Some(Action {
+                    tool: safe(text("tool")),
+                    target: safe(target).replace('\n', " ").chars().take(600).collect(),
+                    done: false,
+                    success: false,
+                    count: None,
+                    exit_code: None,
+                    elapsed: None,
+                    reused: false,
+                    cancelled: false,
+                    error: String::new(),
+                });
             }
             "tool.completed" => {
                 self.approval_context.clear();
                 let ok = v["success"]
                     .as_bool()
                     .ok_or("Tool result requires success")?;
-                self.add(
-                    "action",
-                    &format!(
-                        "{} {} {}",
-                        if ok { "✓" } else { "✗" },
-                        text("tool"),
-                        text("error")
-                    ),
-                    false,
-                );
+                let start = self.current_start();
+                let index = self
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .skip(start)
+                    .find(|(_, e)| {
+                        e.action
+                            .as_ref()
+                            .is_some_and(|a| !a.done && a.tool == text("tool"))
+                    })
+                    .map(|(i, _)| i);
+                let index = if let Some(index) = index {
+                    index
+                } else {
+                    self.add("action", "{}", false);
+                    self.entries.back_mut().unwrap().action = Some(Action {
+                        tool: safe(text("tool")),
+                        target: safe(text("path")),
+                        done: false,
+                        success: false,
+                        count: None,
+                        exit_code: None,
+                        elapsed: None,
+                        reused: false,
+                        cancelled: false,
+                        error: String::new(),
+                    });
+                    self.entries.len() - 1
+                };
+                let action = self.entries[index].action.as_mut().unwrap();
+                action.done = true;
+                action.success = ok;
+                action.count = v["item_count"].as_u64();
+                action.exit_code = v["exit_code"].as_i64();
+                action.success = ok && action.exit_code.is_none_or(|code| code == 0);
+                action.elapsed = v["elapsed_s"]
+                    .as_f64()
+                    .filter(|s| s.is_finite() && *s >= 0.0);
+                action.reused = v["reused"].as_bool().unwrap_or(false);
+                action.error = limited(text("error"));
+                if !text("output").is_empty() {
+                    let output = format!(
+                        "\n{}\n{}",
+                        self.tr("Actual output:", "实际输出:"),
+                        limited(text("output"))
+                    );
+                    self.entries[index].text.push_str(&output);
+                }
+                self.status = self.tr("Working", "正在处理").into();
             }
             "turn.status" => {
                 self.status = safe(&format!("{}: {}", text("state"), text("message")));
@@ -284,17 +399,22 @@ impl App {
                         text("prompt")
                     }),
                     context: if kind == "approval.requested" {
-                        self.approval_context.clone()
+                        v["context"]
+                            .as_str()
+                            .map(safe)
+                            .unwrap_or_else(|| self.approval_context.clone())
                     } else {
                         String::new()
                     },
                     selected: selected.min(choices.len().saturating_sub(1)),
+                    context_scroll: 0,
+                    context_max_scroll: Cell::new(0),
                     choices,
                     editor: Editor::default(),
                     secret: v["secret"].as_bool().unwrap_or(false),
                     shortcuts: v["shortcuts"].clone(),
                 });
-                self.status = "Waiting for your response".into();
+                self.status = self.tr("Waiting for your response", "等待你的选择").into();
             }
             "dialog.closed" => {
                 if self
@@ -307,7 +427,25 @@ impl App {
             }
             "turn.completed" => {
                 self.approval_context.clear();
-                self.status = safe(text("status"));
+                self.elapsed = self.started.take().map(|start| start.elapsed());
+                for entry in self
+                    .entries
+                    .iter_mut()
+                    .filter(|e| e.action.as_ref().is_some_and(|a| !a.done))
+                {
+                    let action = entry.action.as_mut().unwrap();
+                    action.done = true;
+                    action.cancelled = text("status") == "cancelled";
+                    if !action.cancelled {
+                        action.error = "No completion result was received".into();
+                    }
+                }
+                self.status = match text("status") {
+                    "ok" | "completed" => self.tr("Completed", "已完成").into(),
+                    "cancelled" => self.tr("Cancelled", "已取消").into(),
+                    "failed" => self.tr("Failed", "失败").into(),
+                    other => safe(other),
+                };
                 if !text("error").is_empty() {
                     self.add("error", text("error"), false);
                 }
@@ -363,19 +501,15 @@ impl App {
         self.next_turn += 1;
         let id = format!("turn-{}", self.next_turn);
         self.add("user", &text, false);
-        // A placeholder prevents replacing an assistant message from a prior turn.
-        self.entries.push_back(Entry {
-            role: "assistant".into(),
-            text: String::new(),
-            detail: false,
-        });
         self.turn = Some(id.clone());
-        self.status = "Submitting…".into();
+        self.started = Some(Instant::now());
+        self.elapsed = None;
+        self.status = self.tr("Submitting…", "正在提交…").into();
         Some(json!({"type":"turn.submit","protocol":1,"turn_id":id,"text":text}))
     }
     pub fn cancel(&mut self) -> Option<Value> {
-        self.turn.as_ref().map(|id| {
-            self.status = "Cancelling…".into();
+        self.turn.clone().map(|id| {
+            self.status = self.tr("Cancelling…", "正在取消…").into();
             json!({"type":"turn.cancel","protocol":1,"turn_id":id})
         })
     }
@@ -390,7 +524,7 @@ impl App {
         let request = json!({"type":"dialog.respond","protocol":1,"turn_id":self.turn,
                             "request_id":d.id,"choice":fields.get("choice"),"text":fields.get("text")});
         self.dialog = None;
-        self.status = "Continuing…".into();
+        self.status = self.tr("Continuing…", "正在继续…").into();
         Some(request)
     }
     pub fn complete(&mut self) {
@@ -426,6 +560,36 @@ mod tests {
             ..App::default()
         }
     }
+    #[test]
+    fn both_runtime_packets_draw_the_same_mascot_and_respect_hidden_banners() {
+        let legacy = json!([
+            [{"text": "▗▛▀▀▀▀▀▜▖"}], [{"text": "▌▌▗▖ ▂ ▐▐"}],
+            [{"text": "▐▙▄▄▄▄▄▟▌"}], [{"text": "▝▀▀▀▀▀▀▀▘"}]
+        ]);
+        let packet = |robot: Value, design: &str| {
+            json!({
+                "protocol": 1, "type": "session.ready", "session_id": "robot-test",
+                "commands": [], "ui_theme": "light", "robot": robot, "robot_design": design
+            })
+        };
+        let mut python = app();
+        python
+            .event(packet(legacy.clone(), "cream-block-v2"))
+            .unwrap();
+        let mut go = app();
+        go.event(packet(json!({"design": "cream-block-v2"}), ""))
+            .unwrap();
+        assert_eq!(python.robot.0, go.robot.0);
+        assert_eq!(python.robot.0.len(), 6);
+        python.event(packet(json!([]), "cream-block-v2")).unwrap();
+        assert!(python.robot.0.is_empty());
+        go.event(packet(json!([]), "")).unwrap();
+        assert!(go.robot.0.is_empty());
+        // A legacy worker without the optional field remains supported.
+        python.event(packet(legacy, "")).unwrap();
+        assert_eq!(python.robot.0.len(), 4);
+    }
+
     #[test]
     fn stale_events_and_approvals_are_rejected() {
         let mut a = app();
@@ -464,6 +628,67 @@ mod tests {
         assert_eq!(req["text"], "SECRET");
         assert!(!format!("{:?}", a.entries).contains("SECRET"));
         assert_eq!(a.editor.text(), "");
+    }
+    #[test]
+    fn streamed_narration_tools_and_final_answer_keep_event_order() {
+        let mut a = app();
+        a.add("assistant", "older answer", false);
+        a.editor.insert("Read README.md");
+        a.submit();
+        a.event(json!({"protocol":1,"type":"answer.delta","turn_id":"turn-1","text":"Reading.\n"}))
+            .unwrap();
+        a.event(json!({"protocol":1,"type":"tool.started","turn_id":"turn-1","tool":"read_file","params":{"path":"README.md"}})).unwrap();
+        a.event(json!({"protocol":1,"type":"tool.completed","turn_id":"turn-1","tool":"read_file","success":true})).unwrap();
+        a.event(
+            json!({"protocol":1,"type":"answer.delta","turn_id":"turn-1","text":"The result."}),
+        )
+        .unwrap();
+        a.event(json!({"protocol":1,"type":"answer.replace","turn_id":"turn-1","text":"Reading.\nThe result."})).unwrap();
+        assert_eq!(
+            a.entries
+                .iter()
+                .map(|e| e.role.as_str())
+                .collect::<Vec<_>>(),
+            vec!["assistant", "user", "assistant", "action", "assistant"]
+        );
+        assert_eq!(a.entries.back().unwrap().text, "The result.");
+        assert_eq!(a.entries.front().unwrap().text, "older answer");
+    }
+    #[test]
+    fn parallel_targets_finish_in_place_and_authoritative_answer_follows_tools() {
+        let mut a = app();
+        a.editor.insert("Read two files");
+        a.submit();
+        for path in ["one.rs", "two.rs"] {
+            a.event(json!({"protocol":1,"type":"tool.started","turn_id":"turn-1","tool":"read_file","params":{"path":path}})).unwrap();
+        }
+        for ok in [true, false] {
+            a.event(json!({"protocol":1,"type":"tool.completed","turn_id":"turn-1","tool":"read_file","success":ok,"error":if ok {""} else {"not found"}})).unwrap();
+        }
+        a.event(json!({"protocol":1,"type":"answer.replace","turn_id":"turn-1","text":"Only one exists."})).unwrap();
+        assert_eq!(a.entries.len(), 4);
+        assert_eq!(a.entries[1].action.as_ref().unwrap().target, "one.rs");
+        assert!(a.entries[1].action.as_ref().unwrap().success);
+        assert_eq!(a.entries[2].action.as_ref().unwrap().target, "two.rs");
+        assert!(!a.entries[2].action.as_ref().unwrap().success);
+        assert_eq!(a.entries[3].text, "Only one exists.");
+    }
+    #[test]
+    fn approval_uses_actual_operation_context_and_cancel_settles_pending_actions() {
+        let mut a = app();
+        a.editor.insert("Write two files");
+        a.submit();
+        a.approval_context = "File: two.rs".into();
+        a.event(json!({"protocol":1,"type":"approval.requested","turn_id":"turn-1","request_id":"approve","title":"Approve","choices":[["Yes", ""]],"context":"File: one.rs"})).unwrap();
+        assert_eq!(a.dialog.as_ref().unwrap().context, "File: one.rs");
+        a.event(json!({"protocol":1,"type":"tool.started","turn_id":"turn-1","tool":"read_file","params":{"path":"one.rs"}})).unwrap();
+        a.event(
+            json!({"protocol":1,"type":"turn.completed","turn_id":"turn-1","status":"cancelled"}),
+        )
+        .unwrap();
+        assert!(a.entries.back().unwrap().action.as_ref().unwrap().cancelled);
+        assert!(a.started.is_none() && a.elapsed.is_some());
+        assert_eq!(a.status, "Cancelled");
     }
     #[test]
     fn approvals_keep_the_target_without_reusing_completed_tool_context() {
@@ -511,6 +736,29 @@ mod tests {
         .unwrap();
         assert!(a.approval_context.is_empty());
         assert!(a.dialog.is_none());
+    }
+    #[test]
+    fn command_exit_and_output_are_kept_even_when_invocation_succeeded() {
+        let mut a = app();
+        a.editor.insert("Run tests");
+        a.submit();
+        a.event(
+            json!({"protocol":1,"type":"tool.started","turn_id":"turn-1",
+            "tool":"run_command","params":{"command":"cargo test"}}),
+        )
+        .unwrap();
+        a.event(
+            json!({"protocol":1,"type":"tool.completed","turn_id":"turn-1",
+            "tool":"run_command","success":true,"exit_code":7,
+            "output":"stderr:\nassertion failed\u{1b}"}),
+        )
+        .unwrap();
+        let row = a.entries.back().unwrap();
+        let action = row.action.as_ref().unwrap();
+        assert_eq!(action.exit_code, Some(7));
+        assert!(!action.success);
+        assert!(row.text.contains("assertion failed"));
+        assert!(!row.text.contains('\u{1b}'));
     }
     #[test]
     fn update_notice_does_not_change_the_active_turn_or_permissions() {
