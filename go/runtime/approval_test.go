@@ -102,3 +102,34 @@ func TestRiskCardMatchesTheApprovalCard(t *testing.T) {
 		t.Fatalf("%q", card)
 	}
 }
+
+func TestConfigSetsTheExecutionProtocolSettings(t *testing.T) {
+	s := approvalServer(t, config{}, appOptions{})
+	ctx := context.Background()
+	for command, want := range map[string]string{
+		"/config set approval_mode=risk":    "approval_mode=risk",
+		"/config set auto_approve_level=2":  "auto_approve_level=2",
+		"/config set review_gate=on":        "review_gate=true",
+		"/config set delivery_report=false": "delivery_report=false",
+	} {
+		if got, err := s.command(ctx, "turn", command); err != nil || got != want {
+			t.Errorf("%s: %q %v", command, got, err)
+		}
+	}
+	for _, bad := range []string{"/config set approval_mode=auto", "/config set auto_approve_level=3", "/config set review_gate=maybe", "/config set secret=1"} {
+		if _, err := s.command(ctx, "turn", bad); err == nil {
+			t.Errorf("%s was accepted", bad)
+		}
+	}
+	saved, err := loadConfig(s.opts.root)
+	if err != nil || saved["approval_mode"] != "risk" || saved["auto_approve_level"] != 2.0 || saved["review_gate"] != true || saved["delivery_report"] != false {
+		t.Fatal(saved, err)
+	}
+	if newReviewGate(s.cfg) == nil || approvalRequirement(AssessCommand("npm install"), s.cfg.text("approval_mode", ""), s.cfg["auto_approve_level"]) != "auto" {
+		t.Fatal("the settings take effect in this session")
+	}
+	listing, _ := s.command(ctx, "turn", "/config")
+	if !strings.Contains(listing, "approval_mode=risk\nauto_approve_level=2\nreview_gate=true\ndelivery_report=false") {
+		t.Fatal(listing)
+	}
+}

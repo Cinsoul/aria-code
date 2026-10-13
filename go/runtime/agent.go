@@ -105,6 +105,13 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 	if contract != nil {
 		request = contract.PromptBlock() + "\n\n" + prompt
 	}
+	if hooks.evidence != nil && !greeting {
+		hooks.evidence.goal = prompt
+		hooks.evidence.gate = newReviewGate(c)
+		if contract != nil {
+			hooks.evidence.contract = contract.Render()
+		}
+	}
 	contents = append(contents, genai.NewContentFromText(request, genai.RoleUser))
 	var answer strings.Builder
 	budget := c.number("max_tool_rounds", 20)
@@ -137,6 +144,14 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 		if len(calls) == 0 {
 			if strings.TrimSpace(answer.String()) == "" {
 				return contents, "", errors.New("model returned no visible response")
+			}
+			// The model says it is done: with review_gate on, an independent
+			// reviewer reads the change first, and blocking findings go back
+			// to the builder once (runtime/review.py).
+			if directive := hooks.evidence.review(ctx, p, hooks.emit); directive != "" {
+				contents = append(contents, genai.NewContentFromText(directive, genai.RoleUser))
+				answer.Reset()
+				continue
 			}
 			return contents, answer.String(), nil
 		}

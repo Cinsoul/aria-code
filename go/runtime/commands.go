@@ -66,7 +66,13 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 		return "Model: " + model, nil
 	case "/config":
 		if len(fields) == 1 {
-			return fmt.Sprintf("ui_lang=%s\nmodel=%s\nui_theme=%s", s.cfg.text("ui_lang", "en"), s.cfg.text("model", "gemini-3.5-flash"), s.cfg.text("ui_theme", "dark")), nil
+			autoLevel, ok := pyInt(s.cfg["auto_approve_level"])
+			if !ok {
+				autoLevel = 1
+			}
+			return fmt.Sprintf("ui_lang=%s\nmodel=%s\nui_theme=%s\napproval_mode=%s\nauto_approve_level=%d\nreview_gate=%t\ndelivery_report=%t",
+				s.cfg.text("ui_lang", "en"), s.cfg.text("model", "gemini-3.5-flash"), s.cfg.text("ui_theme", "dark"),
+				s.cfg.text("approval_mode", "manual"), autoLevel, s.cfg.boolean("review_gate", false), s.cfg.boolean("delivery_report", true)), nil
 		}
 		if len(fields) != 3 || fields[1] != "set" {
 			return "", errors.New("usage: /config set key=value")
@@ -75,6 +81,7 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 		if !ok {
 			return "", errors.New("setting requires key=value")
 		}
+		var stored any = value
 		switch key {
 		case "ui_lang":
 			if value != "zh" && value != "en" {
@@ -84,14 +91,33 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 			if value != "dark" && value != "light" {
 				return "", errors.New("ui_theme must be dark or light")
 			}
+		// The same values and messages as the Python /config (model_cmds.py).
+		case "approval_mode":
+			if value != "manual" && value != "risk" {
+				return "", errors.New("approval_mode must be one of: manual | risk (risk: auto-approve actions at or below auto_approve_level)")
+			}
+		case "auto_approve_level":
+			if value != "0" && value != "1" && value != "2" {
+				return "", errors.New("auto_approve_level must be 0, 1 or 2 (L3 and L4 always ask)")
+			}
+			stored = int(value[0] - '0')
+		case "review_gate", "delivery_report":
+			switch strings.ToLower(value) {
+			case "true", "1", "yes", "on":
+				stored = true
+			case "false", "0", "no", "off":
+				stored = false
+			default:
+				return "", fmt.Errorf("%s must be: true | false", key)
+			}
 		default:
-			return "", errors.New("unknown native display setting")
+			return "", errors.New("unknown native setting")
 		}
-		if err := s.saveSetting(key, value); err != nil {
+		if err := s.saveSetting(key, stored); err != nil {
 			return "", err
 		}
-		s.cfg[key] = value
-		return key + "=" + value, nil
+		s.cfg[key] = stored
+		return fmt.Sprintf("%s=%v", key, stored), nil
 	default:
 		return "", fmt.Errorf("unknown command: %s; use /help", fields[0])
 	}
