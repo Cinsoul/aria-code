@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.144.0] — 2026-10-13
+
+- Merge pull request #189 from Cinsoul/diag/go-runtime-ci
+
 ## [0.143.0] — 2026-10-13
 
 - Merge pull request #186 from Cinsoul/fix/go-lf-line-endings
