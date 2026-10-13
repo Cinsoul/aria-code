@@ -322,6 +322,7 @@ func (s *server) runTurn(ctx context.Context, turn, text string) {
 	}
 	var answer string
 	var err error
+	var evidence *turnEvidence
 	if strings.HasPrefix(strings.TrimSpace(text), "!") {
 		answer, err = s.userCommand(ctx, turn, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(text), "!")))
 		s.contents = settlePending(s.contents)
@@ -336,8 +337,9 @@ func (s *server) runTurn(ctx context.Context, turn, text string) {
 			if err := s.emit(kind, turn, fields); err != nil {
 				cancel()
 			}
-		}, approve: s.approve, backup: s.backup}
+		}, approve: s.approve, backup: s.backup, evidence: newTurnEvidence(s.scope.workspace)}
 		s.contents, answer, err = nativeTurn(ctx, s.provider, s.scope, s.cfg, s.contents, text, hooks)
+		evidence = hooks.evidence
 	}
 	if answer != "" {
 		if err := s.emit("answer.replace", turn, map[string]any{"text": capText(answer, 65536)}); err != nil {
@@ -364,6 +366,26 @@ func (s *server) runTurn(ctx context.Context, turn, text string) {
 	fields := map[string]any{"status": outcome, "error": "", "session_id": s.snap.ID}
 	if err != nil {
 		fields["error"] = err.Error()
+	}
+	// A turn that changed files, ran checks or had calls refused ends with a
+	// report written from that evidence (runtime/delivery.py). Headless
+	// results always carry it; delivery_report=false hides it in the chat.
+	if evidence != nil {
+		stop := "completed"
+		switch {
+		case outcome == "cancelled":
+			stop = "cancelled"
+		case err != nil && strings.Contains(err.Error(), "tool round limit reached"):
+			stop = "max_rounds"
+		case err != nil:
+			stop = "error"
+		}
+		if report := evidence.report(stop); report.worthShowing() {
+			delivery := report.asDict()
+			delivery["text"] = report.Render("", s.scope.workspace)
+			delivery["show"] = s.cfg.boolean("delivery_report", true)
+			fields["delivery"] = delivery
+		}
 	}
 	s.mu.Lock()
 	// Release completion and the final snapshot as one state transition.

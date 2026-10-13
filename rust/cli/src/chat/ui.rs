@@ -269,6 +269,8 @@ pub fn draw(frame: &mut Frame, app: &App) {
         }
         if entry.role == "assistant" {
             lines.extend(markdown::render(&entry.text, p, parts[1].width));
+        } else if entry.role == "delivery" {
+            lines.extend(delivery_lines(&entry.text, p));
         } else {
             lines.extend(entry.text.lines().map(|s| Line::raw(s.to_owned())));
         }
@@ -514,6 +516,47 @@ pub fn draw(frame: &mut Frame, app: &App) {
             inside,
         );
     }
+}
+
+/// The delivery report, coloured as the Python REPL prints it: the status by
+/// outcome, headings dim, ✓ green, ✗ red, × and ⚠ highlighted.
+fn delivery_lines(text: &str, p: Palette) -> Vec<Line<'static>> {
+    const HEADINGS: [&str; 8] = [
+        "Changed",
+        "Verified",
+        "Behaviour",
+        "Review",
+        "Risk",
+        "Contract",
+        "Checkpoint",
+        "Next",
+    ];
+    text.lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let trimmed = line.trim();
+            let style = if index == 0 {
+                Style::new()
+                    .fg(if trimmed == "DONE" {
+                        p.success
+                    } else {
+                        p.accent
+                    })
+                    .add_modifier(Modifier::BOLD)
+            } else if HEADINGS.contains(&trimmed) {
+                Style::new().fg(p.muted)
+            } else if trimmed.starts_with('✓') {
+                Style::new().fg(p.success)
+            } else if trimmed.starts_with('✗') {
+                Style::new().fg(p.error)
+            } else if trimmed.starts_with('×') || trimmed.starts_with('⚠') {
+                Style::new().fg(p.accent)
+            } else {
+                Style::new()
+            };
+            Line::styled(line.to_owned(), style)
+        })
+        .collect()
 }
 
 #[cfg(test)]

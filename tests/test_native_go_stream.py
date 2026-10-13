@@ -119,6 +119,14 @@ def test_native_stream_refuses_unapproved_write_then_accepts_explicit_grant(stre
     assert process.returncode == 0, process.stderr
     assert (project / "note.txt").read_text(encoding="utf-8") == "Actual SDK native write.\n"
     assert events[-1]["success"] is True
+    # The headless result ends with the delivery report, written from what ran.
+    delivery = events[-1]["delivery"]
+    assert delivery["status"] == "done"
+    [changed] = delivery["changed"]
+    assert os.path.samefile(changed.pop("path"), project / "note.txt")
+    assert changed == dict(added=1, removed=0, created=True, symbols=[], tested_by=[])
+    assert delivery["text"].startswith("DONE\n\nChanged\n  A note.txt  +1\n")
+    assert "Review the changes — no check ran" in delivery["text"]
 
 
 def test_native_stream_greeting_has_no_tools_and_prompt_is_literal(stream):
