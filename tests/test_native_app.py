@@ -389,7 +389,13 @@ def test_real_terminal_paste_approval_resize_cancel_and_restore(application, ent
     def wait(text):
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
-            if text in display():
+            if text() if callable(text) else text in display():
+                # The cursor suffix can arrive after the last text in a frame.
+                if select.select([master], [], [], 0.03)[0]:
+                    chunk = os.read(master, 65_536)
+                    raw.extend(chunk)
+                    stream.feed(decoder.decode(chunk))
+                    continue
                 return
             if select.select([master], [], [], 0.1)[0]:
                 chunk = os.read(master, 65_536)
@@ -399,11 +405,19 @@ def test_real_terminal_paste_approval_resize_cancel_and_restore(application, ent
         raise AssertionError((text, display()))
     try:
         wait("Ready")
-        wait("▗▛▀▀▀▀▀▜▖")
-        wait("▌▌▗▖ ▂ ▐▐")
-        assert screen.buffer[1][2].fg == "fffdf5"
-        assert screen.buffer[1][2].bg == "0e0e0e"
-        assert screen.buffer[1][5].fg == "f9b467"
+        wait("▄▄▄▄▄▄▄▄▄▄")
+        # Coloured blank cells form the square eye and the solid feet. Text
+        # matching alone cannot verify the actual terminal artwork.
+        for col in (4, 5):
+            assert screen.buffer[2][col].bg == "fffdf5"
+        for col in (8, 9):
+            assert screen.buffer[2][col].data == "▄"
+            assert screen.buffer[2][col].fg == "f9b467"
+            assert screen.buffer[2][col].bg == "0e0e0e"
+        for col in (2, 5, 8, 11):
+            assert screen.buffer[5][col].bg == "cfc4b7"
+        assert screen.buffer[5][3].data == "▌"
+        assert screen.buffer[5][10].data == "▐"
         os.write(master, b"\x1b[200~Remember apricot\n\x1b[201~")
         wait("Remember apricot")
         os.write(master, b"\r")
@@ -427,7 +441,8 @@ def test_real_terminal_paste_approval_resize_cancel_and_restore(application, ent
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 12, 40, 0, 0))
         screen.resize(12, 40)
         p.send_signal(__import__("signal").SIGWINCH)
-        wait("Ask Aria")
+        wait(lambda: screen.buffer[10][0].data == "╰" and screen.cursor.y == 9)
+        assert "Describe a task" in display()
         os.write(master, b"\x04")
         # A terminal emulator continues reading while the application exits.
         # Drain the resize/restore frames so a full PTY output buffer cannot
