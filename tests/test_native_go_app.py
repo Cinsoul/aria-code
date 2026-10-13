@@ -26,7 +26,7 @@ def test_native_app_does_not_touch_state_before_the_host_barrier(tmp_path):
     original = json.dumps(dict(local_provider="google", model="gemini-3.5-flash"))
     cfg.write_text(original, encoding="utf-8")
     env = dict(os.environ, ARIA_HOME=str(state))
-    process = subprocess.Popen([program, "app"], cwd=project, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process = subprocess.Popen([program, "app"], cwd=project, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
     events = queue.Queue()
     def read():
         for line in process.stdout:
@@ -54,7 +54,7 @@ def test_unsupported_native_provider_preserves_existing_user_state(tmp_path):
     cfg = tmp_path / "config.json"
     original = json.dumps(dict(local_provider="ollama", last_session_id="previous"))
     cfg.write_text(original, encoding="utf-8")
-    process = subprocess.run([binary(), "app"], input="\n", env=dict(os.environ, ARIA_HOME=str(tmp_path)), capture_output=True, text=True, timeout=5)
+    process = subprocess.run([binary(), "app"], input="\n", env=dict(os.environ, ARIA_HOME=str(tmp_path)), capture_output=True, text=True, encoding="utf-8", timeout=5)
     assert process.returncode != 0
     assert cfg.read_text(encoding="utf-8") == original
     assert not (tmp_path / "sessions").exists()

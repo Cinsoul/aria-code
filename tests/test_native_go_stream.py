@@ -82,7 +82,7 @@ def stream(tmp_path):
             call_env = env
             data = "\n"
         process = subprocess.run(command, cwd=project, env=call_env, input=data,
-                                 capture_output=True, text=True, timeout=10)
+                                 capture_output=True, text=True, encoding="utf-8", timeout=10)
         events = [json.loads(line) for line in process.stdout.splitlines()]
         assert events[0]["type"] == "turn.started"
         assert events[-1]["type"] == "turn.completed"

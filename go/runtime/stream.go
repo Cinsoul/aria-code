@@ -20,6 +20,12 @@ func hostBarrier(ctx context.Context, in io.Reader) error {
 	if err != nil {
 		return err
 	}
+	// A host writing a text-mode pipe on Windows acknowledges with "\r\n".
+	if byte[0] == '\r' {
+		if _, err := io.ReadFull(in, byte[:]); err != nil {
+			return err
+		}
+	}
 	if byte[0] != '\n' {
 		return errors.New("native start requires host containment acknowledgement")
 	}

@@ -30,7 +30,7 @@ def native_dataset(root, suites, out, share):
     binary = os.environ.get("ARIA_GO_RUNTIME_BINARY")
     if not binary:
         pytest.skip("Native Go runtime is built in the native-runtime CI job")
-    return subprocess.run([binary, "training", "dataset", str(root / "traj"), "--suites", str(suites), "--out", str(out), "--validation-share", str(share)], text=True, capture_output=True, timeout=10)
+    return subprocess.run([binary, "training", "dataset", str(root / "traj"), "--suites", str(suites), "--out", str(out), "--validation-share", str(share)], text=True, encoding="utf-8", capture_output=True, timeout=10)
 
 
 @pytest.mark.parametrize("share", (0.0, 0.2, 0.5, 1.0))
