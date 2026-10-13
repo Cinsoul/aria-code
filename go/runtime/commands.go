@@ -51,7 +51,11 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 		name := providerName(s.cfg)
 		if len(fields) == 1 {
 			if name == "google" {
-				return fmt.Sprintf("google / %s\nUse /model <Google model name>.", s.cfg.text("model", "gemini-3.5-flash")), nil
+				text := fmt.Sprintf("google / %s\nUse /model <Google model name>.", s.cfg.text("model", "gemini-3.5-flash"))
+				if tuned := tunedModelNames(s.cfg); len(tuned) > 0 {
+					text += "\nTuned models: " + strings.Join(tuned, ", ")
+				}
+				return text, nil
 			}
 			return fmt.Sprintf("%s / %s\nUse /model <model name served by %s>.", name, s.cfg.text("model", ""), name), nil
 		}
@@ -61,8 +65,9 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 		model := fields[1]
 		if name == "google" {
 			model = strings.TrimPrefix(model, "google/")
-			if !strings.HasPrefix(model, "gemini-") {
-				return "", errors.New("unknown Google model name")
+			_, alias := mappingHas(s.cfg["tuned_models"], model)
+			if !strings.HasPrefix(model, "gemini-") && !alias && !tunedEndpointName.MatchString(model) {
+				return "", errors.New("unknown Google model name; use a gemini- model, a name from tuned_models or projects/…/endpoints/…")
 			}
 		}
 		next := config{}
@@ -146,4 +151,10 @@ func (s *server) saveSetting(key string, value any) error {
 	}
 	cfg[key] = value
 	return atomicJSON(filepath.Join(s.opts.root, "config.json"), cfg)
+}
+
+func mappingHas(value any, key string) (any, bool) {
+	m, _ := asMapping(value)
+	item, ok := m[key]
+	return item, ok
 }
