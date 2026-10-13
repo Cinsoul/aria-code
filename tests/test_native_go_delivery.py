@@ -91,7 +91,7 @@ def go_report(root, scenario):
         "acceptance": scenario.get("acceptance"), "contract": scenario.get("contract"), "review": scenario.get("review"),
         "stop_reason": scenario.get("stop_reason", "completed"), "rewind_hint": scenario.get("rewind_hint", ""),
     }
-    result = subprocess.run([binary(), "delivery"], input=json.dumps(request), capture_output=True, text=True, timeout=10)
+    result = subprocess.run([binary(), "delivery"], input=json.dumps(request), capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 

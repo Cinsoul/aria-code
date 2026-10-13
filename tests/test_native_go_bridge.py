@@ -25,7 +25,7 @@ def bridge(tmp_path, monkeypatch):
         if approved:
             args += ["--approve-tool", approved]
         result = subprocess.run(args, input="\n" + json.dumps(request) + "\n", env=env,
-                                capture_output=True, text=True, timeout=5)
+                                capture_output=True, text=True, encoding="utf-8", timeout=5)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout) if result.stdout else None
     return project, state, call
@@ -93,6 +93,6 @@ def test_actual_rust_tool_routes_to_go_without_python(bridge):
     (project / "note.txt").write_text("native process boundary evidence", encoding="utf-8")
     env = dict(os.environ, ARIA_RUNTIME=os.environ["ARIA_GO_RUNTIME_BINARY"], ARIA_PYTHON="missing-python-for-this-test")
     result = subprocess.run([native, "-C", str(project), "tool", "read_file", json.dumps(dict(path="note.txt"))],
-                            env=env, capture_output=True, text=True, timeout=5)
+                            env=env, capture_output=True, text=True, encoding="utf-8", timeout=5)
     assert result.returncode == 0, result.stderr
     assert "native process boundary evidence" in json.loads(result.stdout)["result"]["data"]["content"]

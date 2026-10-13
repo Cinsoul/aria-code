@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -146,5 +147,22 @@ func TestNativeTurnRefusesContractViolationsBeforeApproval(t *testing.T) {
 	}
 	if text, err := os.ReadFile(filepath.Join(root, "src", "notes.md")); err != nil || string(text) != "inside" {
 		t.Fatal("the allowed write did not run", err)
+	}
+}
+
+func TestRootedPathsStayOnTheirDrive(t *testing.T) {
+	if got := joinPath(filepath.FromSlash("/work/space"), "src/a.py"); got != filepath.FromSlash("/work/space/src/a.py") {
+		t.Fatal(got)
+	}
+	if runtime.GOOS == "windows" {
+		if got := joinPath(`C:\work\space`, "/etc/hosts"); got != `C:/etc/hosts` {
+			t.Fatal(got)
+		}
+		if insideRoot("/etc/hosts", t.TempDir()) {
+			t.Fatal("a drive-rooted path is outside the workspace")
+		}
+	}
+	if insideRoot(filepath.FromSlash("/etc/hosts"), t.TempDir()) {
+		t.Fatal("/etc/hosts is outside the workspace")
 	}
 }

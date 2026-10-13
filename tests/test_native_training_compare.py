@@ -28,6 +28,6 @@ def test_native_training_statistics_match_existing_reports(tmp_path, seed):
         path = tmp_path / (name + ".json")
         path.write_text(json.dumps(dict(results=results)), encoding="utf-8")
         paths.append(path)
-    process = subprocess.run([binary, "training", "compare", "--baseline", str(paths[0]), "--candidate", str(paths[1])], capture_output=True, text=True, timeout=10)
+    process = subprocess.run([binary, "training", "compare", "--baseline", str(paths[0]), "--candidate", str(paths[1])], capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert process.returncode == 0, process.stderr
     same_result(json.loads(process.stdout), compare(paths[:1], paths[1:]))

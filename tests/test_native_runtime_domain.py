@@ -78,6 +78,6 @@ def test_native_backtest_matches_existing_business_results(tmp_path, name, case)
         pytest.skip("Native Go runtime is built by the native-runtime CI job")
     source = tmp_path / "bars.json"
     source.write_text(json.dumps(case), encoding="utf-8")
-    process = subprocess.run([binary, "backtest", "--input", str(source)], capture_output=True, text=True, timeout=10)
+    process = subprocess.run([binary, "backtest", "--input", str(source)], capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert process.returncode == 0, (name, process.stderr)
     same_result(json.loads(process.stdout), expected(case))

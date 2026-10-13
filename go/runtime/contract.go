@@ -358,10 +358,7 @@ func (c *ChangeContract) withGoal(goal string) *ChangeContract {
 }
 
 func (c *ChangeContract) relative(path string) (string, bool) {
-	candidate := expandUser(path)
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(c.Root, candidate)
-	}
+	candidate := joinPath(c.Root, expandUser(path))
 	rel, err := filepath.Rel(resolveLoose(c.Root), resolveLoose(candidate))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false

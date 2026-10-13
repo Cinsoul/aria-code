@@ -16,7 +16,7 @@ def binary():
 
 
 def go_assess(requests):
-    result = subprocess.run([binary(), "risk"], input=json.dumps(requests), capture_output=True, text=True, timeout=10)
+    result = subprocess.run([binary(), "risk"], input=json.dumps(requests), capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -127,7 +127,7 @@ def test_go_risk_never_rates_a_unicode_boundary_lower():
 
 
 def test_go_risk_rejects_input_that_is_not_a_request_list():
-    result = subprocess.run([binary(), "risk"], input="{}", capture_output=True, text=True, timeout=10)
+    result = subprocess.run([binary(), "risk"], input="{}", capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert result.returncode == 2
     assert "JSON array" in result.stderr
 

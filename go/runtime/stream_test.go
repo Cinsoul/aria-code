@@ -159,3 +159,11 @@ func TestNativeHeadlessFailureAndBrokenOutputCannotReportSuccess(t *testing.T) {
 		}
 	}
 }
+
+func TestHostBarrierAcceptsOnlyANewline(t *testing.T) {
+	for input, ok := range map[string]bool{"\n": true, "\r\n": true, "\r": false, "\rx": false, "x\n": false, "": false} {
+		if err := hostBarrier(context.Background(), strings.NewReader(input)); (err == nil) != ok {
+			t.Errorf("%q: %v", input, err)
+		}
+	}
+}
