@@ -18,6 +18,7 @@ import json
 import os
 import shlex
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
@@ -27,6 +28,15 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
+
+
+class LocalServer(ThreadingHTTPServer):
+    """A loopback server that skips HTTPServer's reverse lookup of its own
+    address, which can stall past the test timeout on macOS runners."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
 
 if os.environ.get("GITHUB_ACTIONS"):
     import fastapi  # noqa: F401  — CI must run these, not skip them
@@ -80,7 +90,7 @@ class FakeFeishu:
             def log_message(self, *args):
                 pass
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = LocalServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 

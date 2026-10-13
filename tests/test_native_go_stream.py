@@ -2,10 +2,20 @@
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import socketserver
 import subprocess
 import threading
 
 import pytest
+
+
+class LocalServer(ThreadingHTTPServer):
+    """A loopback server that skips HTTPServer's reverse lookup of its own
+    address, which can stall past the test timeout on macOS runners."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
 
 
 @pytest.fixture
@@ -52,7 +62,7 @@ def stream(tmp_path):
             self.wfile.write(("data: " + json.dumps(record) + "\n\n").encode())
             self.wfile.flush()
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = LocalServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     env = dict(os.environ, ARIA_HOME=str(state), ARIA_PYTHON="missing-python-for-this-test",
