@@ -434,7 +434,7 @@ func (c *ChangeContract) Check(tool string, params map[string]any) ContractVerdi
 func (c *ChangeContract) Render() string {
 	lines := []string{"CHANGE CONTRACT"}
 	if reason := c.loadError(); reason != "" {
-		lines = append(lines, "", fmt.Sprintf("⚠ %s could not be read: %s", filepath.ToSlash(policyFile), reason),
+		lines = append(lines, "", fmt.Sprintf("⚠ %s could not be read: %s", policyFile, reason),
 			"  Nothing may be changed until it is fixed; reading and verifying still work.")
 	}
 	if c.Goal != "" {
