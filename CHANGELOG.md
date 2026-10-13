@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.142.0] — 2026-10-13
+
+- Merge pull request #185 from Cinsoul/fix/conversation-ui
+
 ## [0.141.0] — 2026-10-13
 
 - fix(ui): refine robot, multiline input and conversation output (#184)
