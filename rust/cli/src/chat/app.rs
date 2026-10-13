@@ -456,6 +456,13 @@ impl App {
                     "failed" => self.tr("Failed", "失败").into(),
                     other => safe(other),
                 };
+                // The runtime's delivery report, written from what the turn
+                // did; delivery_report=false hides it here.
+                if let Some(report) = v["delivery"]["text"].as_str() {
+                    if v["delivery"]["show"].as_bool().unwrap_or(true) {
+                        self.add("delivery", &limited(report), false);
+                    }
+                }
                 if !text("error").is_empty() {
                     self.add("error", text("error"), false);
                 }
@@ -757,6 +764,33 @@ mod tests {
             "approval":"auto-approved · L1 low · Edit files\u{1b}[2J"})).unwrap();
         let action = a.entries.back().unwrap().action.as_ref().unwrap();
         assert_eq!(action.approval, "auto-approved · L1 low · Edit files[2J");
+    }
+
+    #[test]
+    fn delivery_report_follows_the_answer_unless_hidden() {
+        let mut a = app();
+        a.editor.insert("Fix it");
+        a.submit();
+        a.event(json!({"protocol":1,"type":"answer.replace","turn_id":"turn-1","text":"Fixed."}))
+            .unwrap();
+        a.event(
+            json!({"protocol":1,"type":"turn.completed","turn_id":"turn-1","status":"ok",
+            "delivery":{"text":"DONE\n\nChanged\n  M a.py  +1 -0","show":true}}),
+        )
+        .unwrap();
+        let last = a.entries.back().unwrap();
+        assert_eq!(
+            (last.role.as_str(), last.text.as_str()),
+            ("delivery", "DONE\n\nChanged\n  M a.py  +1 -0")
+        );
+        a.editor.insert("Again");
+        a.submit();
+        a.event(
+            json!({"protocol":1,"type":"turn.completed","turn_id":"turn-2","status":"ok",
+            "delivery":{"text":"DONE","show":false}}),
+        )
+        .unwrap();
+        assert_ne!(a.entries.back().unwrap().role, "delivery");
     }
 
     #[test]

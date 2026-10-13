@@ -92,6 +92,17 @@ func hasDefaultCredentials() bool {
 	}
 	return false
 }
+
+// readOnlySQLiteURI opens path read-only without a journal. A Windows path
+// needs a leading slash — file:///C:/… — or "C:" is read as the URI's host.
+func readOnlySQLiteURI(path string) string {
+	slashed := filepath.ToSlash(path)
+	if !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	return (&url.URL{Scheme: "file", Path: slashed}).String() + "?mode=ro&immutable=1"
+}
+
 func nativeCloudCredentials(ctx context.Context, identity cloudIdentity) (*auth.Credentials, error) {
 	options := &credentials.DetectOptions{Scopes: []string{cloudScope}, Client: &http.Client{Timeout: 20 * time.Second, Transport: nativeTransport()}}
 	if identity.credentialFile != "" {
@@ -105,8 +116,7 @@ func nativeCloudCredentials(ctx context.Context, identity cloudIdentity) (*auth.
 	if _, err := os.Stat(path); err != nil {
 		return nil, errors.New("Google Cloud login credentials are unavailable")
 	}
-	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String() + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", uri)
+	db, err := sql.Open("sqlite", readOnlySQLiteURI(path))
 	if err != nil {
 		return nil, errors.New("Google Cloud credential store cannot be opened")
 	}
@@ -165,8 +175,7 @@ func (p *cloudTokenProvider) cached(ctx context.Context) *auth.Token {
 	if _, err := os.Stat(path); err != nil {
 		return nil
 	}
-	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String() + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", uri)
+	db, err := sql.Open("sqlite", readOnlySQLiteURI(path))
 	if err != nil {
 		return nil
 	}

@@ -79,6 +79,8 @@ type agentHooks struct {
 	emit    func(string, map[string]any)
 	approve func(context.Context, string, map[string]any, fileChange) (bool, string, error)
 	backup  func(fileChange) error
+	// evidence, when set, records what the turn did for its delivery report.
+	evidence *turnEvidence
 }
 
 func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, contents []*genai.Content, prompt string, hooks agentHooks) ([]*genai.Content, string, error) {
@@ -217,6 +219,9 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 					return partialContents(), answer.String(), ctx.Err()
 				}
 				result = applyChange(s, change)
+				if result.Success {
+					hooks.evidence.applied(call.Name, call.Args, change)
+				}
 			default:
 				allowed, reason, err := hooks.approve(ctx, call.Name, call.Args, fileChange{})
 				if err != nil {
@@ -247,6 +252,7 @@ func nativeTurn(ctx context.Context, p modelProvider, s *scope, c config, conten
 					reads[key] = result
 				}
 			}
+			hooks.evidence.finished(call.Name, call.Args, result)
 			fields := map[string]any{"tool": call.Name, "success": result.Success, "elapsed_s": time.Since(started).Seconds()}
 			if code, ok := result.Data["exit_code"].(int); ok {
 				fields["exit_code"] = code

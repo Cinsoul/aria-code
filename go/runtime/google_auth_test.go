@@ -87,3 +87,14 @@ func TestAnUnavailableActiveAccountDoesNotFallBackToAnotherAccount(t *testing.T)
 		t.Fatal("active configuration traversed directories")
 	}
 }
+
+func TestReadOnlySQLiteURIKeepsWindowsDrivesOutOfTheHost(t *testing.T) {
+	for path, want := range map[string]string{
+		"/home/u/.config/gcloud/credentials.db":          "file:///home/u/.config/gcloud/credentials.db?mode=ro&immutable=1",
+		"C:/Users/run ner/AppData/gcloud/credentials.db": "file:///C:/Users/run%20ner/AppData/gcloud/credentials.db?mode=ro&immutable=1",
+	} {
+		if got := readOnlySQLiteURI(path); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+}
