@@ -353,6 +353,13 @@ func modelProviderFor(c config) (modelProvider, error) {
 		return nil, err
 	}
 	if spec == nil {
+		tuned, err := resolveTunedModel(c)
+		if err != nil {
+			return nil, err
+		}
+		if tuned != nil {
+			return &googleProvider{cfg: c, model: tuned.resource, tuned: tuned}, nil
+		}
 		return googleModelProvider(c), nil
 	}
 	model := c.text("model", "")

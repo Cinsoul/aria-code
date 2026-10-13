@@ -50,6 +50,28 @@
    - 平均耗时增加不超过 25%。
 8. **锁定测试集，只跑一次。** 用 `hard` 套件比较基线和候选模型，结论记录在发布说明里。不通过就回到第 2 步，并且这次查看也要记录下来。
 
+## 3a. 在 Aria 里使用微调后的模型
+
+微调完成后，模型部署在一个 Vertex 端点上，按端点的资源名调用
+（`tuning_job.tuned_model.endpoint`）。在 `config.json` 里给它起个短名字，选中即可：
+
+```json
+{
+  "tuned_models": {"aria-v1": "projects/123456789012/locations/us-central1/endpoints/987654321"},
+  "model": "aria-v1"
+}
+```
+
+或在会话里 `/model aria-v1`（也可以直接写完整的端点名）。原生运行时对这样的模型：
+
+- 一律走 Vertex 的 Gen AI SDK 路线（Chat Completions 没有记录对微调端点的支持），
+  用 `gcloud auth login` 或应用默认凭据，不能用 Gemini API key；
+- 用端点自己的项目和区域（包括 `us`/`eu` 多区域），与 `gcp_location`、
+  `GOOGLE_CLOUD_LOCATION` 给基座模型设的区域无关——区域不一致会得到 404；
+- 和基座模型一样经过合同、审批、验收、复核和交付报告。
+
+比较微调模型与基座模型时（第 6 步），Evals 两边用同一套配置，只换 `model`。
+
 ## 4. 私有保留集（孪生题）
 
 - **放在哪里**：`artheras/aria-evals-holdout`，结构与 `evals/` 相同（`suites/*.yaml`、`fixtures/`），每道题用 `twin_of` 写明对应的公开题。公开仓库里不出现保留集的任何内容。

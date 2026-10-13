@@ -23,6 +23,8 @@ type modelProvider interface {
 	Generate(context.Context, []*genai.Content, string, []*genai.Tool, func(string)) (*genai.Content, error)
 }
 type googleProvider struct {
+	// tuned is Aria's own model, a tuned Vertex endpoint; nil for base models.
+	tuned  *tunedModel
 	cfg    config
 	model  string
 	mu     sync.Mutex
@@ -71,9 +73,22 @@ func (p *googleProvider) getClient(ctx context.Context) (*genai.Client, error) {
 	if p.client != nil {
 		return p.client, nil
 	}
-	options, err := googleHTTPOptions(ctx, p.cfg)
+	cfg := p.cfg
+	if p.tuned != nil {
+		cfg = config{}
+		for key, value := range p.cfg {
+			cfg[key] = value
+		}
+		cfg["use_vertexai"] = true
+	}
+	options, err := googleHTTPOptions(ctx, cfg)
 	if err != nil {
 		return nil, p.safeError(err)
+	}
+	if p.tuned != nil {
+		if err := p.tuned.forTuned(options); err != nil {
+			return nil, err
+		}
 	}
 	client, err := genai.NewClient(ctx, options)
 	if err != nil {
