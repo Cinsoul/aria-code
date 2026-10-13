@@ -27,6 +27,9 @@ type openAIProvider struct {
 	mu       sync.Mutex
 	client   *http.Client
 	endpoint string
+	// declared is a user-declared provider (provider_declared.go); nil for
+	// Vertex's Chat Completions route.
+	declared *declaredProvider
 }
 
 var errNoVisibleCompletion = errors.New("model returned no visible response or tool call")
@@ -53,6 +56,12 @@ func (p *openAIProvider) connection(ctx context.Context) (*http.Client, string, 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.client != nil {
+		return p.client, p.endpoint, nil
+	}
+	if d := p.declared; d != nil {
+		transport := nativeTransport()
+		transport.ResponseHeaderTimeout = d.Timeout
+		p.client, p.endpoint = &http.Client{Transport: transport}, d.endpoint()
 		return p.client, p.endpoint, nil
 	}
 	options, err := googleHTTPOptions(ctx, p.cfg)
@@ -361,16 +370,21 @@ func parseCompletions(r io.Reader, streaming bool, emit func(string)) (*genai.Co
 }
 
 func (p *openAIProvider) Generate(ctx context.Context, contents []*genai.Content, system string, tools []*genai.Tool, emit func(string)) (*genai.Content, error) {
+	safe := (&googleProvider{cfg: p.cfg}).safeError
+	label := "Google Chat Completions"
+	if p.declared != nil {
+		safe, label = p.declared.redact, p.declared.Name
+	}
 	client, endpoint, err := p.connection(ctx)
 	if err != nil {
-		return nil, (&googleProvider{cfg: p.cfg}).safeError(err)
+		return nil, safe(err)
 	}
 	messages, err := openAIMessages(contents, system)
 	if err != nil {
 		return nil, err
 	}
 	model := p.model
-	if !strings.Contains(model, "/") {
+	if p.declared == nil && !strings.Contains(model, "/") {
 		model = "google/" + model
 	}
 	maxTokens := p.cfg.number("max_output_tokens", 32768)
@@ -396,24 +410,40 @@ func (p *openAIProvider) Generate(ctx context.Context, contents []*genai.Content
 	if err != nil {
 		return nil, err
 	}
+	reauthorized := false
 	for attempt := 0; attempt < 4; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
+		if p.declared != nil {
+			headers, err := p.declared.headers(ctx, reauthorized)
+			if err != nil {
+				return nil, safe(err)
+			}
+			req.Header = headers
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "text/event-stream")
 		response, err := client.Do(req)
 		if err != nil {
-			return nil, (&googleProvider{cfg: p.cfg}).safeError(err)
+			return nil, safe(err)
 		}
 		var content *genai.Content
 		retry := false
 		visible := false
+		if response.StatusCode == http.StatusUnauthorized && p.declared != nil && p.declared.Auth != nil && !reauthorized {
+			// A command-issued token may have expired: fetch a new one once.
+			io.Copy(io.Discard, io.LimitReader(response.Body, 65536))
+			response.Body.Close()
+			reauthorized = true
+			attempt--
+			continue
+		}
 		if response.StatusCode != http.StatusOK {
 			// Do not expose reflected bodies or credentials in public events.
 			io.Copy(io.Discard, io.LimitReader(response.Body, 65536))
-			err = fmt.Errorf("Google Chat Completions returned HTTP %d", response.StatusCode)
+			err = fmt.Errorf("%s returned HTTP %d", label, response.StatusCode)
 			retry = response.StatusCode == 429 || response.StatusCode == 500 || response.StatusCode == 503 || response.StatusCode == 504
 		} else {
 			streaming := !strings.Contains(response.Header.Get("Content-Type"), "application/json")
@@ -426,7 +456,7 @@ func (p *openAIProvider) Generate(ctx context.Context, contents []*genai.Content
 		}
 		// Transport/protocol errors and partial output are never replayed.
 		if visible || (content != nil && len(content.Parts) > 0) || !retry || attempt == 3 {
-			return content, (&googleProvider{cfg: p.cfg}).safeError(err)
+			return content, safe(err)
 		}
 		if err := waitModelRetry(ctx, attempt); err != nil {
 			return content, err

@@ -111,6 +111,40 @@ model_providers:
 `available=False` 时会给出具体缺哪个环境变量，以及你在
 `env_key_instructions` 里写的获取说明。
 
+## 原生运行时（Rust/Go）
+
+原生运行时内置的只有 Google（Gemini / Vertex AI）。其余模型一律通过用户自己声明的
+OpenAI 兼容端点接入——自建 vLLM、Ollama 的 `/v1`、LiteLLM、OpenRouter、公司网关——
+运行时不再内置各家协议，和 Claude Code（经网关）、Codex（`model_providers`）的做法一致。
+
+```yaml
+# ~/.aria/providers.yaml（或 $ARIA_HOME/providers.json、~/.aria/providers.json）
+model_providers:
+  mycorp:
+    base_url: https://llm.internal.example.com/v1
+    env_key: MYCORP_LLM_TOKEN            # 只写变量名
+    model: qwen-72b
+    query_params: {api-version: "2025-04-01"}   # 例如 Azure
+  vertex-gateway:                        # 令牌来自命令，按 refresh_interval_ms 刷新
+    base_url: https://gateway.example.com/v1
+    auth: {command: gcloud, args: [auth, print-access-token]}
+```
+
+然后 `/config` 里设 `local_provider: mycorp`（`/model <名字>` 切换该端点提供的模型）。
+
+与上文 Python 行为的差别：
+
+- **只读用户级文件。** 项目里的 `./.aria.json`、`./.aria.yaml` 不能声明 provider：
+  克隆下来的仓库不应该能把对话和凭据发到它指定的服务器。
+- **凭据只来自环境变量（`env_key`）或命令（`auth.command`）。** 命令只能打印令牌本身；
+  缓存 `refresh_interval_ms`（默认 5 分钟，0 = 只在 401 后刷新），服务器返回 401 时重取一次。
+  `env_key` 与 `auth` 二选一。
+- **拒绝的条目：** 文件里写明文密钥、缺 `base_url`、`base_url` 不是 http(s)、
+  使用内置 Google 的名字（`google`、`gemini`、`vertexai`…）。其余条目照常可用。
+- **排查：** `aria-runtime providers` 列出读到的文件、可用的 provider（不含密钥，只显示
+  是否已设置）以及每个被跳过条目的原因。未声明的 `local_provider` 在会话开始前就报错，
+  并指出该写在哪个文件里。
+
 ## 与 codex 的对应关系
 
 本设计对标 codex 的 `model_providers`（`~/.codex/config.toml`）。字段语义一致：

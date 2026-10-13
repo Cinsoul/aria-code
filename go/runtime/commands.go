@@ -48,21 +48,37 @@ func (s *server) command(ctx context.Context, turn, text string) (string, error)
 		}
 		return "Google credentials configured. Network and model availability are verified by a model request; no generation was performed by this check.", nil
 	case "/model":
+		name := providerName(s.cfg)
 		if len(fields) == 1 {
-			return fmt.Sprintf("google / %s\nUse /model <Google model name>.", s.cfg.text("model", "gemini-3.5-flash")), nil
+			if name == "google" {
+				return fmt.Sprintf("google / %s\nUse /model <Google model name>.", s.cfg.text("model", "gemini-3.5-flash")), nil
+			}
+			return fmt.Sprintf("%s / %s\nUse /model <model name served by %s>.", name, s.cfg.text("model", ""), name), nil
 		}
 		if len(fields) != 2 {
 			return "", errors.New("usage: /model <model name>")
 		}
-		model := strings.TrimPrefix(fields[1], "google/")
-		if !strings.HasPrefix(model, "gemini-") {
-			return "", errors.New("unknown Google model name")
+		model := fields[1]
+		if name == "google" {
+			model = strings.TrimPrefix(model, "google/")
+			if !strings.HasPrefix(model, "gemini-") {
+				return "", errors.New("unknown Google model name")
+			}
+		}
+		next := config{}
+		for key, value := range s.cfg {
+			next[key] = value
+		}
+		next["model"] = model
+		provider, err := modelProviderFor(next)
+		if err != nil {
+			return "", err
 		}
 		if err := s.saveSetting("model", model); err != nil {
 			return "", err
 		}
 		s.cfg["model"] = model
-		s.provider = googleModelProvider(s.cfg)
+		s.provider = provider
 		return "Model: " + model, nil
 	case "/config":
 		if len(fields) == 1 {

@@ -77,11 +77,14 @@ func newServer(options appOptions, out io.Writer) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !supportedGoogleProvider(cfg.text("local_provider", "google")) {
-		return nil, errors.New("configured provider requires its native adapter; existing application remains available")
-	}
 	if options.model != "" {
 		cfg["model"] = strings.TrimPrefix(options.model, "google/")
+	}
+	// Google is built in; any other provider must be declared by the user
+	// (provider_declared.go). Checked before any state is touched.
+	provider, err := modelProviderFor(cfg)
+	if err != nil {
+		return nil, err
 	}
 	scope, err := newScope(options.workspace, options.readRoots, options.writeRoots, !remoteScope())
 	if err != nil {
@@ -106,7 +109,7 @@ func newServer(options appOptions, out io.Writer) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.provider = googleModelProvider(cfg)
+	s.provider = provider
 	if err := saveSession(options.root, s.snap); err != nil {
 		return nil, err
 	}
@@ -150,7 +153,7 @@ func (s *server) state(kind string) error {
 	if s.scope.readOnly {
 		permission = "read-only"
 	}
-	fields := map[string]any{"session_id": s.snap.ID, "model": s.cfg.text("model", "gemini-3.5-flash"), "provider": "google", "version": version, "workspace": s.scope.workspace, "permission": permission, "network": s.cfg.boolean("network_enabled", true), "ui_lang": s.cfg.text("ui_lang", "en"), "ui_theme": "dark", "messages": displayMessages(s.snap.Messages), "commands": nativeCommands()}
+	fields := map[string]any{"session_id": s.snap.ID, "model": s.cfg.text("model", "gemini-3.5-flash"), "provider": providerName(s.cfg), "version": version, "workspace": s.scope.workspace, "permission": permission, "network": s.cfg.boolean("network_enabled", true), "ui_lang": s.cfg.text("ui_lang", "en"), "ui_theme": "dark", "messages": displayMessages(s.snap.Messages), "commands": nativeCommands()}
 	theme := strings.ToLower(os.Getenv("ARIA_THEME"))
 	if theme != "light" && theme != "dark" {
 		theme = s.cfg.text("ui_theme", "auto")
