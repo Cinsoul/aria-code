@@ -31,7 +31,7 @@ on:
       - '.github/scripts/annotate-failure.sh'
       - '.gitattributes'
   push:
-    branches: [main, 'diag/**']
+    branches: [main]
     paths:
       - 'go/runtime/**'
       - 'rust/**'
