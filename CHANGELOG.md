@@ -4,6 +4,10 @@ All notable changes to Aria Code are documented here.
 
 ---
 
+## [0.146.0] — 2026-10-13
+
+- Merge pull request #191 from Cinsoul/diag/go-runtime-ci
+
 ## [0.145.0] — 2026-10-13
 
 - Merge pull request #190 from Cinsoul/feat/go-delivery-report
