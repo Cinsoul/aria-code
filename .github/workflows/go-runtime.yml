@@ -24,8 +24,10 @@ on:
       - 'src/aria_code/training/**'
       - 'src/aria_code/domain/backtest_engine.py'
       - '.github/workflows/go-runtime.yml'
+      - '.github/scripts/annotate-failure.sh'
+      - '.gitattributes'
   push:
-    branches: [main]
+    branches: [main, 'diag/**']
     paths:
       - 'go/runtime/**'
       - 'rust/**'
@@ -48,6 +50,8 @@ on:
       - 'src/aria_code/training/**'
       - 'src/aria_code/domain/backtest_engine.py'
       - '.github/workflows/go-runtime.yml'
+      - '.github/scripts/annotate-failure.sh'
+      - '.gitattributes'
   workflow_dispatch:
 
 permissions:
@@ -81,9 +85,13 @@ jobs:
       - name: Format, vet and race tests
         working-directory: go/runtime
         run: |
-          test -z "$(gofmt -l .)"
-          go vet ./...
-          go test -race -count=1 ./...
+          log="$RUNNER_TEMP/go-checks.log"
+          annotate() { "$GITHUB_WORKSPACE/.github/scripts/annotate-failure.sh" "$1" "$log"; exit 1; }
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted" > "$log"; annotate "gofmt"; fi
+          go vet ./... > "$log" 2>&1 || annotate "go vet"
+          set -o pipefail
+          go test -race -count=1 ./... 2>&1 | tee "$log" || { grep -E -e '--- FAIL|^FAIL|_test\.go:[0-9]+|panic:|race detected' "$log" > "$log.failures"; mv "$log.failures" "$log"; annotate "go test"; }
       - name: Build the runtime without a Python worker
         working-directory: go/runtime
         run: |
@@ -95,4 +103,6 @@ jobs:
           ARIA_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/aria-native${{ matrix.os == 'windows-latest' && '.exe' || '' }}
         run: |
           python -m pip install pytest pytest-timeout PyYAML
-          python -m pytest tests/test_native_runtime_domain.py tests/test_native_training_compare.py tests/test_native_training_dataset.py tests/test_native_go_app.py tests/test_native_go_bridge.py tests/test_native_go_stream.py tests/test_native_go_risk.py tests/test_native_go_contract.py -q --timeout=15
+          set -o pipefail
+          python -m pytest tests/test_native_runtime_domain.py tests/test_native_training_compare.py tests/test_native_training_dataset.py tests/test_native_go_app.py tests/test_native_go_bridge.py tests/test_native_go_stream.py tests/test_native_go_risk.py tests/test_native_go_contract.py -q --timeout=15 --tb=short -rf 2>&1 | tee "$RUNNER_TEMP/pytest.log" \
+            || { .github/scripts/annotate-failure.sh pytest "$RUNNER_TEMP/pytest.log" 120; exit 1; }
