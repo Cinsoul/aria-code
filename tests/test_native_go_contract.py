@@ -87,7 +87,7 @@ GOALS = ["fix the auth refresh bug", "  spread\n over   lines  ", "长" * 250, "
 
 def go_contract(root, goal):
     request = {"root": str(root), "goal": goal, "calls": [{"tool": t, "params": p} for t, p in CALLS]}
-    result = subprocess.run([binary(), "contract"], input=json.dumps(request), capture_output=True, text=True, timeout=10)
+    result = subprocess.run([binary(), "contract"], input=json.dumps(request), capture_output=True, text=True, encoding="utf-8", timeout=10)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
